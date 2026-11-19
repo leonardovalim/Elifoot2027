@@ -44,7 +44,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; }
 h4 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 14px 0 6px; color: var(--tomato-dk); }
 
 /* ---------- moldura pixel (cantos recortados) ---------- */
-.window, .btn, .hud, .dock-btn, .offer, .challenge, .sport, .chip, select, input, .paused-badge, .toast, .badge.lg {
+.window, .btn, .hud, .dock-btn, .offer, .challenge, .sport, .chip, select, input, .paused-badge, .toast {
   --b: var(--ink);
   box-shadow:
     0 calc(-1 * var(--px)) 0 0 var(--b),
@@ -103,13 +103,8 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .pad { padding: 0 12px 12px; }
 
 /* ---------- escudo ---------- */
-.badge {
-  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  min-width: 30px; height: 20px; padding: 0 3px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-  border: 2px solid var(--ink);
-}
-.badge.sm { min-width: 26px; height: 16px; font-size: 9px; border-width: 1px; }
-.badge.lg { min-width: 46px; height: 46px; font-size: 14px; border: 0; margin: var(--px); clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%); box-shadow: none; }
+.badge { display: inline-block; flex-shrink: 0; vertical-align: middle; image-rendering: pixelated; }
+.badge.lg { margin: 2px; filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.25)); }
 .clubname { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ---------- barras ---------- */
@@ -362,7 +357,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
   .dock-btn .ico { font-size: 20px; }
   .score { font-size: 30px; min-width: 100px; padding: 4px 10px; }
   .team b { font-size: 13px; }
-  .badge.lg { min-width: 36px; height: 36px; font-size: 11px; }
+  .badge.lg { width: 30px; height: 42px; }
   .scene-status { left: 6px; right: 6px; bottom: 6px; font-size: 10px; }
   .scene-status b { font-size: 11px; }
   .side { display: flex; }
@@ -386,7 +381,6 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .window-title { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
 .score, .big-pos { font-weight: 900; }
 .countdown, .hud-money b, .hud-date b, .create-head h2 { font-weight: 800; }
-.badge { font-weight: 900; }
 .grid-table td, .kv dd, .hud-money b { font-variant-numeric: tabular-nums; }
 
 .sub-row > select, .sub-row > .btn, .match .chips > * { height: 38px; display: inline-flex; align-items: center; }
