@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { OBJECTIVE_LABEL, netWorth } from '../../core/entrepreneur';
 import { divisionStandings } from '../../core/season';
 import {
@@ -8,14 +8,17 @@ import {
   financialState,
   marketListings,
   myClubId,
+  isNewSigning,
   sellPlayer,
   type Career,
+  type Listing,
 } from '../../game/career';
 import { ATTR_SHORT } from '../../sports/football/development';
 import { football } from '../../sports/football/engine';
 import { playerValue } from '../../sports/football/generate';
-import { FORMATIONS, overall, pickLineup, starters } from '../../sports/football/lineup';
-import type { AttrKey, Formation, Player, Style } from '../../sports/football/types';
+import { FORMATIONS, applyMove, overall, pickLineup, planMove, statusOf, type SquadStatus } from '../../sports/football/lineup';
+import type { AttrKey, Club, Formation, Player, Style } from '../../sports/football/types';
+import { track } from '../analytics';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -29,14 +32,31 @@ const ATTR_GROUPS: { label: string; keys: AttrKey[] }[] = [
 
 // ---------------------------------------------------------------- Elenco + tática
 
+/** No celular o cartão fica acima da lista: ao selecionar, rola até ele. */
+function useRevealOnMobile(dep: string | null) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (dep && window.matchMedia?.('(max-width: 760px)').matches) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [dep]);
+  return ref;
+}
+
+const STATUS_LABEL: Record<SquadStatus, string> = { xi: 'Titular', bench: 'Banco', out: 'Fora' };
+
 export function SquadPanel({ career, act }: { career: Career; act: Act }) {
   const club = career.clubs[myClubId(career)]!;
   const [sel, setSel] = useState<string | null>(null);
   const lineup = pickLineup(club);
-  const xi = new Set(starters(lineup).map((p) => p.id));
-  const bench = new Set(lineup.bench.map((p) => p.id));
+  const status = statusOf(club);
+  const slot = new Map<string, Player['position']>();
+  lineup.DF.forEach((p) => slot.set(p.id, 'DF'));
+  lineup.MF.forEach((p) => slot.set(p.id, 'MF'));
+  lineup.FW.forEach((p) => slot.set(p.id, 'FW'));
+  slot.set(lineup.GK.id, 'GK');
   const players = [...club.players].sort((a, b) => POS_ORDER[a.position] - POS_ORDER[b.position] || overall(b) - overall(a));
   const selected = club.players.find((p) => p.id === sel);
+  const cardRef = useRevealOnMobile(sel);
+  const move = (id: string, to: SquadStatus) => act((c) => { applyMove(c.clubs[myClubId(c)]!, id, to); track('lineup_changed', { to }); });
 
   return (
     <div className="squad">
@@ -56,46 +76,83 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
           Auxiliar faz substituições
         </label>
       </div>
-      <p className="legend-inline">★ titular · • banco</p>
+      <div className="lineup-mode">
+        {club.lineup
+          ? <><span>Escalação <b>sua</b> · suspensos e negociados são repostos pelo banco.</span><button className="btn sm ghost" onClick={() => act((c) => { delete c.clubs[myClubId(c)]!.lineup; })}>Auxiliar escala</button></>
+          : <span>Escalação do <b>auxiliar</b> (melhores em forma). Mude qualquer atleta para assumir.</span>}
+      </div>
       <div className="split">
         <div className="scroll">
           <table className="grid-table">
-            <thead><tr><th></th><th>Pos</th><th>Atleta</th><th>Id</th><th>Hab</th><th>Cond.</th><th>Jg</th><th>Gols</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Rel.</th><th>Pos</th><th>Atleta</th><th>Id</th><th>Hab</th><th>Cond.</th><th>Jg</th><th>Gols</th><th>Nota</th></tr></thead>
             <tbody>
-              {players.map((p) => (
-                <tr key={p.id} className={`${sel === p.id ? 'sel' : ''} ${xi.has(p.id) ? 'xi' : ''}`} onClick={() => setSel(p.id)}>
-                  <td>{xi.has(p.id) ? '★' : bench.has(p.id) ? '·' : ''}</td>
-                  <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
-                  <td className="name">
-                    {p.name}
-                    {p.suspended > 0 && <span className="tag bad">susp.</span>}
-                    {p.age <= 21 && p.potential - overall(p) >= 8 && <span className="tag good">joia</span>}
-                  </td>
-                  <td>{p.age}</td>
-                  <td><b>{overall(p)}</b></td>
-                  <td className="cond"><Bar value={p.condition} /></td>
-                  <td>{p.stats.apps}</td>
-                  <td>{p.stats.goals}</td>
-                  <td>{p.stats.apps ? (p.stats.ratingSum / p.stats.apps).toFixed(1) : '–'}</td>
-                </tr>
-              ))}
+              {players.map((p) => {
+                const st = status[p.id]!;
+                const playsAt = slot.get(p.id);
+                return (
+                  <tr key={p.id} className={`${sel === p.id ? 'sel' : ''} ${st}`} onClick={() => setSel(p.id)}>
+                    <td><span className={`st ${st}`}>{st === 'xi' ? 'TIT' : st === 'bench' ? 'RES' : '–'}</span></td>
+                    <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
+                    <td className="name">
+                      {p.name}
+                      {isNewSigning(p, career.date) && <span className="tag new">novo</span>}
+                      {p.suspended > 0 && <span className="tag bad">susp.</span>}
+                      {playsAt && playsAt !== p.position && <span className="tag warn">de {POS_LABEL[playsAt]}</span>}
+                      {p.age <= 21 && p.potential - overall(p) >= 8 && <span className="tag good">joia</span>}
+                    </td>
+                    <td>{p.age}</td>
+                    <td><b>{overall(p)}</b></td>
+                    <td className="cond"><Bar value={p.condition} /></td>
+                    <td>{p.stats.apps}</td>
+                    <td>{p.stats.goals}</td>
+                    <td>{p.stats.apps ? (p.stats.ratingSum / p.stats.apps).toFixed(1) : '–'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <aside className="card">
-          {selected ? <PlayerCard p={selected} onSell={() => {
-            if (confirm(`Vender ${selected.name} por ~${money(Math.round(playerValue(selected) * 0.85))}?`)) { act((c) => sellPlayer(c, selected.id)); setSel(null); }
-          }} /> : <p className="hint">Selecione um atleta.</p>}
+        <aside className="card" ref={cardRef}>
+          {selected ? (
+            <>
+              <LineupActions club={club} p={selected} current={status[selected.id]!} onMove={move} />
+              <PlayerCard p={selected} isNew={isNewSigning(selected, career.date)} onSell={() => {
+                if (confirm(`Vender ${selected.name} por ~${money(Math.round(playerValue(selected) * 0.85))}?`)) { act((c) => sellPlayer(c, selected.id)); setSel(null); }
+              }} />
+            </>
+          ) : <p className="hint">Selecione um atleta para ver atributos e mudar a escalação.</p>}
         </aside>
       </div>
     </div>
   );
 }
 
-function PlayerCard({ p, onSell }: { p: Player; onSell?: () => void }) {
+function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; current: SquadStatus; onMove: (id: string, to: SquadStatus) => void }) {
+  const options = (['xi', 'bench', 'out'] as SquadStatus[]).filter((s) => s !== current);
+  return (
+    <div className="lineup-actions">
+      <span className="attr-title">{STATUS_LABEL[current]}</span>
+      {options.map((to) => {
+        const plan = planMove(club, p.id, to);
+        const label = to === 'xi' ? 'Escalar como titular' : to === 'bench' ? 'Mandar para o banco' : 'Tirar da relação';
+        const swap = plan?.swapWith
+          ? to === 'xi' ? `sai ${plan.swapWith.name}` : current === 'xi' ? `entra ${plan.swapWith.name}` : `sai do banco ${plan.swapWith.name}`
+          : '';
+        return (
+          <button key={to} className={`btn sm ${to === 'xi' ? 'primary' : ''}`} disabled={!plan} onClick={() => onMove(p.id, to)}>
+            {label}{swap && <span className="swap">{swap}</span>}
+          </button>
+        );
+      })}
+      {p.suspended > 0 && <span className="hint">Suspenso no próximo jogo.</span>}
+    </div>
+  );
+}
+
+function PlayerCard({ p, onSell, isNew }: { p: Player; onSell?: () => void; isNew?: boolean }) {
   return (
     <div className="player-card">
-      <h3>{p.name}</h3>
+      <h3>{p.name}{isNew && <span className="tag new">novo</span>}</h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
       {ATTR_GROUPS.map((g) => (
         <div key={g.label} className="attr-group">
@@ -119,13 +176,27 @@ function PlayerCard({ p, onSell }: { p: Player; onSell?: () => void }) {
 
 // ---------------------------------------------------------------- Mercado
 
+const ORDINAL = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º', '9º', '10º'];
+
 export function MarketPanel({ career, act }: { career: Career; act: Act }) {
   const [pos, setPos] = useState<'ALL' | Player['position']>('ALL');
+  const [sel, setSel] = useState<string | null>(null);
+  const [bought, setBought] = useState<string | null>(null);
   const club = career.clubs[myClubId(career)]!;
   const monthKey = career.date.slice(0, 7);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const listings = useMemo(() => marketListings(career, 60), [monthKey, career.clubs[myClubId(career)]!.players.length]);
   const shown = listings.filter((l) => pos === 'ALL' || l.player.position === pos).filter((l) => career.clubs[l.clubId]?.players.some((p) => p.id === l.player.id));
+  const bestMine = (position: Player['position']) => Math.max(0, ...club.players.filter((p) => p.position === position).map(overall));
+  const selected = shown.find((l) => l.player.id === sel);
+  const cardRef = useRevealOnMobile(sel);
+
+  const buy = (l: Listing) => act((c) => {
+    const err = buyPlayer(c, l.player.id, l.clubId);
+    if (!err) { setBought(l.player.name); setSel(null); track('player_bought', { position: l.player.position, overall: overall(l.player), price: l.price }); }
+    return err;
+  });
+
   return (
     <div>
       <div className="toolbar">
@@ -136,25 +207,89 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
         </div>
         <span className="hint">Caixa {money(club.budget)} · elenco {club.players.length}/28</span>
       </div>
-      <div className="scroll tall">
-        <table className="grid-table">
-          <thead><tr><th>Pos</th><th>Atleta</th><th>Id</th><th>Hab</th><th>Clube</th><th>Salário</th><th>Preço</th><th></th></tr></thead>
-          <tbody>
-            {shown.map((l) => (
-              <tr key={l.player.id}>
-                <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
-                <td className="name">{l.player.name}</td>
-                <td>{l.player.age}</td>
-                <td><b>{overall(l.player)}</b></td>
-                <td className="hint">{career.clubs[l.clubId]?.name}</td>
-                <td>{moneyShort(l.player.wage)}</td>
-                <td>{moneyShort(l.price)}</td>
-                <td><button className="btn sm" disabled={club.budget < l.price} onClick={() => act((c) => buyPlayer(c, l.player.id, l.clubId))}>Contratar</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="split market-split">
+        <div className="scroll tall">
+          <table className="grid-table">
+            <thead><tr><th>Pos</th><th>Atleta</th><th>Id</th><th>Hab</th><th title="Diferença para o seu melhor atleta da posição">vs. seu</th><th>Clube</th><th>Salário</th><th>Preço</th></tr></thead>
+            <tbody>
+              {shown.map((l) => {
+                const d = overall(l.player) - bestMine(l.player.position);
+                return (
+                  <tr key={l.player.id} className={sel === l.player.id ? 'sel' : ''} onClick={() => { setSel(l.player.id); setBought(null); }}>
+                    <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
+                    <td className="name">{l.player.name}</td>
+                    <td>{l.player.age}</td>
+                    <td><b>{overall(l.player)}</b></td>
+                    <td className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{d > 0 ? `+${d}` : d}</td>
+                    <td className="hint">{career.clubs[l.clubId]?.name}</td>
+                    <td>{moneyShort(l.player.wage)}</td>
+                    <td className={club.budget < l.price ? 'neg' : ''}>{moneyShort(l.price)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <aside className="card" ref={cardRef}>
+          {selected
+            ? <CompareCard key={selected.player.id} listing={selected} club={club} career={career} onBuy={() => buy(selected)} />
+            : bought
+              ? <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <span className="tag new">novo</span>.</p>
+              : <p className="hint">Selecione um atleta para ver os atributos lado a lado com os seus.</p>}
+        </aside>
       </div>
+    </div>
+  );
+}
+
+function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; club: Club; career: Career; onBuy: () => void }) {
+  const p = l.player;
+  const mine = club.players.filter((x) => x.position === p.position).sort((a, b) => overall(b) - overall(a));
+  const [otherId, setOtherId] = useState<string>('');
+  const other = mine.find((x) => x.id === otherId) ?? mine[0];
+  const rank = mine.filter((x) => overall(x) > overall(p)).length;
+  const keys: AttrKey[] = [...ATTR_GROUPS.flatMap((g) => g.keys), ...(p.position === 'GK' ? (['goalkeeping'] as AttrKey[]) : [])];
+  const wagesNow = club.players.reduce((a, x) => a + x.wage, 0);
+  const cantPay = club.budget < l.price;
+  const full = club.players.length >= 28;
+
+  return (
+    <div className="player-card compare-card">
+      <h3>{p.name}</h3>
+      <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · {career.clubs[l.clubId]?.name} · potencial ~{p.potential}</p>
+      <p className="verdict">
+        Hab <b>{overall(p)}</b> · seria o <b>{ORDINAL[rank] ?? `${rank + 1}º`}</b> {POS_LABEL[p.position]} do elenco
+        {rank === 0 && mine.length > 0 && <span className="tag good">titular</span>}
+      </p>
+      {mine.length > 0 && other && (
+        <label className="vs">Comparar com
+          <select value={other.id} onChange={(e) => setOtherId(e.target.value)}>
+            {mine.map((x) => <option key={x.id} value={x.id}>{x.name} ({overall(x)})</option>)}
+          </select>
+        </label>
+      )}
+      <div className="cmp head"><span /><span>{p.name.split(' ')[0]}</span><b /><span>{other ? other.name.split(' ')[0] : '—'}</span></div>
+      {keys.map((k) => {
+        const a = p.attrs[k], b = other?.attrs[k] ?? 0, d = a - b;
+        return (
+          <div key={k} className="cmp">
+            <span>{ATTR_SHORT[k]}</span>
+            <Bar value={a} max={99} tone="accent" />
+            <b>{a}</b>
+            <span className="hint">{other ? b : ''}</span>
+            <span className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{other ? (d > 0 ? `+${d}` : d === 0 ? '=' : d) : ''}</span>
+          </div>
+        );
+      })}
+      <dl className="kv">
+        <dt>Preço</dt><dd className={cantPay ? 'neg' : ''}>{money(l.price)}</dd>
+        <dt>Salário</dt><dd>{money(p.wage)}/mês {other && <span className="hint">(seu: {money(other.wage)})</span>}</dd>
+        <dt>Folha</dt><dd>{money(wagesNow)} → {money(wagesNow + p.wage)}</dd>
+        <dt>Contrato</dt><dd>até {p.contractUntil}</dd>
+      </dl>
+      <button className="btn primary" disabled={cantPay || full} onClick={onBuy}>
+        {full ? 'Elenco cheio (28)' : cantPay ? 'Caixa insuficiente' : `Contratar por ${moneyShort(l.price)}`}
+      </button>
     </div>
   );
 }

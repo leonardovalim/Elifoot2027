@@ -536,7 +536,7 @@ export function marketListings(c: Career, limit = 50): Listing[] {
   const me = myClubId(c);
   for (const club of Object.values(c.clubs)) {
     if (club.id === me) continue;
-    for (const p of club.players) all.push({ player: p, clubId: club.id, price: Math.round(playerValue(p) * 1.25 / 1000) * 1000 });
+    for (const p of club.players) all.push({ player: p, clubId: club.id, price: askingPrice(p) });
   }
   return rng.shuffle(all).slice(0, limit).sort((a, b) => overall(b.player) - overall(a.player));
 }
@@ -549,16 +549,26 @@ export function buyPlayer(c: Career, playerId: string, fromClubId: string): stri
   if (me.players.length >= 28) return 'Elenco cheio (máx. 28).';
   if (seller.players.filter((x) => x.position === p.position).length <= (p.position === 'GK' ? 1 : 3))
     return `${seller.name} não libera: está sem reposição nessa posição.`;
-  const price = Math.round(playerValue(p) * 1.25 / 1000) * 1000;
+  const price = askingPrice(p);
   if (me.budget < price) return 'Caixa insuficiente.';
   me.budget -= price;
   seller.budget += price;
   c.ledger.purchases += price;
   seller.players = seller.players.filter((x) => x.id !== playerId);
+  p.joinedOn = c.date;
   me.players.push(p);
   push(c, 'money', `Contratado: ${p.name} (${seller.name}) por ${fmtMoney(price)}.`);
   return null;
 }
+
+/** Contratado há menos de 30 dias: aparece com o selo "novo" no elenco. */
+export function isNewSigning(p: Player, today: IsoDate): boolean {
+  if (!p.joinedOn) return false;
+  return (Date.parse(today) - Date.parse(p.joinedOn)) / 86400000 < 30;
+}
+
+/** Preço pedido no mercado (o mesmo cobrado em buyPlayer). */
+export const askingPrice = (p: Player) => Math.round(playerValue(p) * 1.25 / 1000) * 1000;
 
 export function sellPlayer(c: Career, playerId: string): string | null {
   const me = c.clubs[myClubId(c)]!;
@@ -576,6 +586,7 @@ export function sellPlayer(c: Career, playerId: string): string | null {
   buyer.budget -= price;
   c.ledger.sales += price;
   me.players = me.players.filter((x) => x.id !== playerId);
+  p.joinedOn = c.date;
   buyer.players.push(p);
   push(c, 'money', `Vendido: ${p.name} para o ${buyer.name} por ${fmtMoney(price)}.`);
   return null;

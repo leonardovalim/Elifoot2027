@@ -43,6 +43,8 @@ export interface Player {
   contractUntil: number;
   suspended: number;
   stats: SeasonStats;
+  /** Data de chegada ao clube atual (contratações) — mostra o selo "novo". */
+  joinedOn?: string;
 }
 
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2' | '5-3-2' | '4-5-1' | '3-4-3' | '5-4-1';
@@ -69,6 +71,8 @@ export interface Club {
   /** Nível do centro de treinamento 1–5: acelera evolução. */
   trainingCenter: number;
   titles: { year: number; competition: string }[];
+  /** Escalação escolhida pelo jogador (ids). Ausente = auxiliar escala automaticamente. */
+  lineup?: { xi: string[]; bench: string[] };
 }
 
 export type Side = 'home' | 'away';
