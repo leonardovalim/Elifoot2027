@@ -121,9 +121,28 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .fill.accent { background: var(--mustard); }
 
 /* ---------- tela título ---------- */
-.title-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; padding: 16px; text-align: center; color: var(--paper); }
+.title-screen { position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 16px; text-align: center; color: var(--paper); overflow: hidden; }
+.intro-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; image-rendering: crisp-edges; z-index: 0; }
+.title-screen::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse 60% 45% at 50% 42%, rgba(14,17,38,0.72) 0%, rgba(14,17,38,0.35) 55%, transparent 100%); opacity: 0; transition: opacity 0.6s; }
+.title-screen.revealed::after { opacity: 1; }
+.title-screen .logo, .title-screen .menu { position: relative; z-index: 2; opacity: 0; pointer-events: none; }
+.title-screen .foot { position: absolute; bottom: 12px; z-index: 2; opacity: 0; margin: 0; color: rgba(246,236,214,0.75); text-shadow: 1px 1px 0 var(--ink); }
+.title-screen.revealed .logo { animation: logo-drop 0.7s cubic-bezier(.2,1.6,.4,1) forwards; pointer-events: auto; }
+.title-screen.revealed .menu { animation: fade-up 0.5s 0.45s ease-out forwards; pointer-events: auto; }
+.title-screen.revealed .foot { animation: fade-up 0.5s 0.7s ease-out forwards; }
+.skip-hint { position: absolute; bottom: 16px; z-index: 2; margin: 0; font-size: 13px; color: rgba(246,236,214,0.6); letter-spacing: 1px; text-transform: uppercase; animation: blink 1.4s steps(2, start) infinite; }
+@media (orientation: portrait) {
+  .title-screen { background: linear-gradient(#070816, #0e1126 42%); justify-content: flex-start; padding-top: 10vh; }
+  .intro-canvas { top: auto; height: 58%; object-position: 86% 100%; }
+}
+@keyframes logo-drop { 0% { opacity: 0; transform: translateY(-60px) scale(1.15); } 70% { opacity: 1; transform: translateY(6px) scale(0.98); } 100% { opacity: 1; transform: none; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) {
+  .title-screen.revealed .logo, .title-screen.revealed .menu, .title-screen.revealed .foot { animation: none; opacity: 1; }
+}
 .logo h1 { font-size: clamp(38px, 8.5vw, 72px); line-height: 0.95; letter-spacing: 4px; color: var(--mustard); text-shadow: 4px 4px 0 var(--tomato-dk), 8px 8px 0 var(--ink); }
-.logo p { margin-top: 18px; color: var(--paper-2); font-size: 18px; }
+.logo p { margin-top: 18px; color: var(--paper-3); font-size: 19px; font-weight: 700; text-shadow: 2px 2px 0 var(--ink); }
 .trophy { font-size: 48px; display: block; margin-bottom: 8px; filter: drop-shadow(3px 3px 0 var(--ink)); }
 .title-screen .menu { display: flex; flex-direction: column; gap: 10px; }
 .foot { position: absolute; bottom: 12px; color: var(--paper-2); }
@@ -187,6 +206,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .hud-club span, .hud .lbl, .hud-date span { font-size: 13px; color: var(--muted); }
 .hud-kicker { color: var(--tomato-dk) !important; font-size: 10px !important; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
 .hud-date b { font-size: 16px; }
+.hud-money, .hud-rep { display: flex; flex-direction: column; gap: 1px; }
 .hud-money b { font-size: 18px; color: var(--good); }
 .hud-money b.neg { color: var(--bad); }
 .hud-resources { flex: 2 1 380px; flex-direction: row !important; align-items: center; gap: 16px; }

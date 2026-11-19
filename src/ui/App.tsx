@@ -13,9 +13,18 @@ import {
 import { Game } from './Game';
 import { clearCareer, loadCareer, saveCareer } from './storage';
 import { track } from './analytics';
+import { IntroScene } from './scene/IntroScene';
 import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
+
+const INTRO_KEY = 'mestres-do-esporte.intro-seen';
+function hasSeenIntro(): boolean {
+  try { return sessionStorage.getItem(INTRO_KEY) === '1'; } catch { return false; }
+}
+function markIntroSeen() {
+  try { sessionStorage.setItem(INTRO_KEY, '1'); } catch { /* sem storage: a abertura repete */ }
+}
 
 type Screen = 'title' | 'create' | 'game';
 
@@ -33,6 +42,8 @@ const VOTE_LABEL = ['', 'Pouco', 'Talvez', 'Gostaria', 'Muito', 'Quero já!'];
 export function App() {
   const [career, setCareer] = useState<Career | null>(() => loadCareer());
   const [screen, setScreen] = useState<Screen>('title');
+  const [introSeen] = useState(hasSeenIntro);
+  const [revealed, setRevealed] = useState(false);
   useEffect(() => { track('$pageview', { screen }); }, [screen]);
   useEffect(() => { track('app_opened', { has_save: !!career }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -60,9 +71,10 @@ export function App() {
   }
 
   return (
-    <div className="title-screen">
+    <div className={`title-screen ${revealed ? 'revealed' : ''}`}>
+      <IntroScene skip={introSeen} onReveal={() => { setRevealed(true); markIntroSeen(); }} />
+      {!revealed && <p className="skip-hint">toque para pular</p>}
       <div className="logo">
-        <span className="trophy">🏆</span>
         <h1>MESTRES<br />DO ESPORTE</h1>
         <p>Construa seu legado.</p>
       </div>
