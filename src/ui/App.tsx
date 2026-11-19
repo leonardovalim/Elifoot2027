@@ -56,8 +56,8 @@ export function App() {
     <div className="title-screen">
       <div className="logo">
         <span className="trophy">🏆</span>
-        <h1>UNIVERSO<br />ESPORTIVO</h1>
-        <p>Escolha seu desafio. Construa seu negócio. Faça história no esporte.</p>
+        <h1>MESTRES<br />DO ESPORTE</h1>
+        <p>Construa seu legado.</p>
       </div>
       <div className="menu">
         {career && <button className="btn primary big" onClick={() => setScreen('game')}>Continuar carreira</button>}

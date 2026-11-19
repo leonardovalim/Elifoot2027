@@ -1,10 +1,10 @@
-# Universo Esportivo
+# Mestres do Esporte
 
-> **Escolha seu desafio. Construa seu negócio. Faça história no esporte.**
+> **Construa seu legado.**
 
 ![Centro de treinamento em pixel art](docs/img/ct.png)
 
-Universo Esportivo é um jogo de **gerenciamento e empreendedorismo esportivo**. Você não é só o técnico: é um empreendedor que constrói uma carreira. Começa administrando a organização de outra pessoa, ganha reputação, recebe propostas e, com o tempo, poderá virar sócio, comprar clubes e montar um grupo esportivo, em várias modalidades.
+Mestres do Esporte é um jogo de **gerenciamento e empreendedorismo esportivo**. Você não é só o técnico: é um empreendedor que constrói uma carreira. Começa administrando a organização de outra pessoa, ganha reputação, recebe propostas e, com o tempo, poderá virar sócio, comprar clubes e montar um grupo esportivo, em várias modalidades.
 
 *"Comecei sem ninguém me conhecer. Construí minha reputação, enfrentei desafios, conquistei resultados e me tornei uma referência no esporte."*
 
@@ -104,4 +104,4 @@ Detalhes, métricas de balanceamento e backlog estão em [docs/DESIGN.md](docs/D
 
 ---
 
-<sub>"Universo Esportivo" é o nome de trabalho do produto (o repositório se chama Elifoot2027 por histórico). Antes de um lançamento público, verificar marca no INPI.</sub>
+<sub>"Mestres do Esporte" é o nome do produto (o repositório se chama Elifoot2027 por histórico; o GDD original usava o nome de trabalho "Universo Esportivo"). Antes de um lançamento público, verificar marca no INPI.</sub>

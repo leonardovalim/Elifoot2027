@@ -1,6 +1,6 @@
 # Design: decisões, métricas e backlog
 
-Fonte da visão: *Universo Esportivo: Visão do Produto v1.2 + GDD v0.3* (documento do produto). Este arquivo registra **como** o código implementa a visão e o que ainda falta.
+Produto: **Mestres do Esporte: Construa seu legado.** Fonte da visão: *Visão do Produto v1.2 + GDD v0.3* (escrito ainda com o nome de trabalho "Universo Esportivo"). Este arquivo registra **como** o código implementa a visão e o que ainda falta.
 
 ## Princípios técnicos
 
