@@ -76,7 +76,7 @@ export type Side = 'home' | 'away';
 export type MatchEvent =
   | { minute: number; type: 'goal'; side: Side; playerId: string; playerName: string; assistName?: string }
   | { minute: number; type: 'save'; side: Side; playerId: string; playerName: string; keeperName: string }
-  | { minute: number; type: 'post' | 'miss'; side: Side; playerId: string; playerName: string }
+  | { minute: number; type: 'post' | 'bar' | 'miss'; side: Side; playerId: string; playerName: string }
   | { minute: number; type: 'yellow' | 'red'; side: Side; playerId: string; playerName: string }
   | { minute: number; type: 'sub'; side: Side; playerId: string; playerName: string; inName: string; inId: string; reason: 'cansaço' | 'tática' }
   | { minute: number; type: 'tactic'; side: Side; text: string }

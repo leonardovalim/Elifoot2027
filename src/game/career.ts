@@ -9,7 +9,7 @@ import {
 import type { Result } from '../core/league';
 import { Rng } from '../core/rng';
 import { createSeason, divisionStandings, promoteAndRelegate, type Season } from '../core/season';
-import { applyMatch, dailyTraining, endOfSeason, type TrainingGain } from '../sports/football/development';
+import { ATTR_SHORT, applyMatch, dailyTraining, endOfSeason, type TrainingGain } from '../sports/football/development';
 import { createMatch, football, runToEnd, toOutcome, type FootballOutcome, type MatchState } from '../sports/football/engine';
 import { DIVISIONS, divisionLevel, generateWorld, playerValue } from '../sports/football/generate';
 import { overall, pickLineup, starters } from '../sports/football/lineup';
@@ -335,17 +335,22 @@ export function completeRound(c: Career, prep: PreparedRound, mine: FootballOutc
     { divisionIndex: prep.myDivision, home: prep.match.home.clubId, away: prep.match.away.clubId, outcome: mine },
   ];
   const byDiv: Result[][] = c.season.divisions.map(() => []);
+  const rng = new Rng(c.rngState);
+  let myGains: TrainingGain[] = [];
   for (const m of all) {
     const o = m.outcome;
     byDiv[m.divisionIndex]!.push({ home: m.home, away: m.away, homeScore: o.homeScore, awayScore: o.awayScore });
     const goals: Record<string, number> = {};
     for (const e of o.events) if (e.type === 'goal') goals[e.playerId] = (goals[e.playerId] ?? 0) + 1;
     const home = c.clubs[m.home]!, away = c.clubs[m.away]!;
-    applyMatch(home, o.played.home, o.ratings, o.conditionAfter, o.sentOff, goals);
-    applyMatch(away, o.played.away, o.ratings, o.conditionAfter, o.sentOff, goals);
+    const gh = applyMatch(home, o.played.home, o.ratings, o.conditionAfter, o.sentOff, goals, rng);
+    const ga = applyMatch(away, o.played.away, o.ratings, o.conditionAfter, o.sentOff, goals, rng);
+    if (home.id === me) myGains = gh;
+    if (away.id === me) myGains = ga;
     gate(c, home, away, m.divisionIndex, me);
   }
   c.season.divisions.forEach((d, i) => d.results.push(byDiv[i]!));
+  c.rngState = rng.snapshot;
 
   const record: RoundRecord = { round: prep.round + 1, date: c.date, matches: all };
   const myMatch = all.find((m) => m.home === me || m.away === me)!;
@@ -354,6 +359,7 @@ export function completeRound(c: Career, prep: PreparedRound, mine: FootballOutc
   const opp = c.clubs[myMatch.home === me ? myMatch.away : myMatch.home]!;
   const res = myGoals > theirGoals ? 'Vitória' : myGoals < theirGoals ? 'Derrota' : 'Empate';
   push(c, 'match', `${res} por ${myGoals} x ${theirGoals} contra o ${opp.name}.`);
+  for (const g of myGains) push(c, 'training', `${g.playerName} cresceu após grande atuação (+1 ${ATTR_SHORT[g.attr]}).`);
 
   c.season.round++;
   c.lastRound = record;

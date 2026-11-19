@@ -101,3 +101,32 @@ describe('balanceamento do motor de futebol', () => {
     expect(out.attacking!.goals).toBeGreaterThan(out.defensive!.goals + 0.4);
   });
 });
+
+describe('sabor Elifoot 98', () => {
+  it('mando de campo forte (mandante 43–49%) e zebras frequentes (fraco vence fora ≥ 12%)', () => {
+    const rng = new Rng(31);
+    let home = 0, upset = 0;
+    for (let i = 0; i < N; i++) {
+      const a = generateClub(rng, 'A', 65, ['#000', '#fff']), b = generateClub(rng, 'B', 65, ['#000', '#fff']);
+      const o = simulateFootballMatch(a, b, rng);
+      if (o.homeScore > o.awayScore) home++;
+      const s = generateClub(rng, 'S', 75, ['#000', '#fff']), w = generateClub(rng, 'W', 60, ['#000', '#fff']);
+      const z = simulateFootballMatch(s, w, rng);
+      if (z.awayScore > z.homeScore) upset++;
+    }
+    console.log('mandante', home / N, 'zebra', upset / N);
+    expect(home / N).toBeGreaterThan(0.43);
+    expect(home / N).toBeLessThan(0.49);
+    expect(upset / N).toBeGreaterThanOrEqual(0.12);
+  });
+
+  it('os 5 desfechos aparecem: gol, defesa, poste, barra e fora', () => {
+    const rng = new Rng(5);
+    const seen = new Set<string>();
+    for (let i = 0; i < 300; i++) {
+      const o = simulateFootballMatch(generateClub(rng, 'A', 65, ['#000', '#fff']), generateClub(rng, 'B', 65, ['#000', '#fff']), rng);
+      o.events.forEach((e) => seen.add(e.type));
+    }
+    for (const t of ['goal', 'save', 'post', 'bar', 'miss']) expect(seen.has(t)).toBe(true);
+  });
+});

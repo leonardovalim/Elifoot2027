@@ -53,15 +53,32 @@ A cada minuto:
 | Evolução ±1 por rodada (volátil) | Treino diário com ganhos raros, guiado por idade, potencial e nível do CT |
 | Sem cansaço | Condição física dentro e entre partidas, e rodízio de elenco |
 
+### Calibração "com sabor de Elifoot" (a partir da engenharia reversa)
+
+O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da tabela de desfechos (as imagens do repositório mostram só os textos "GOLO", "Defendeu" e "Ao poste"). Por isso só usamos como meta de calibração o que está escrito; nenhum código foi portado.
+
+| Documentado no Elifoot 98 | No Mestres do Esporte |
+|---|---|
+| Chance do mandante `Random(6000)` × visitante `Random(7000)` | `homeChanceBoost = 7000/6000` multiplica a probabilidade de chance do mandante |
+| "Lance de sorte" independente da força: `Random(180)` em casa (0,55%/min), `Random(270)` fora (0,37%/min) | `luckyHome = 1/180`, `luckyAway = 1/270`: finalização extra que ignora a força, a fonte das zebras |
+| 5 desfechos: gol, defesa, poste, barra e fora | Os 5 existem, com narração própria (poste 1,8%, barra 1,2% e defesa 35% dos chutes que não viram gol) |
+| Evolução ±1 pela avaliação da partida | Nota ≥ 7,3 → 50% de chance de +1 num atributo da posição, com notícia; nota ≤ 5 → 15% de chance de −1 |
+| Goleiro evolui mais devagar (sorteio extra de 50%) | Goleiro evolui na metade do ritmo (treino e atuação) |
+| Jogador só evolui dentro de ±5 do nível do time | Acima de nível do time + 5, o ritmo cai para 40% (fator suave, não trava) |
+| Mitos confirmados: agressividade não desarma, torcida é só financeira, não existe moral | Mantidos: agressividade só afeta cartões, e o público só afeta a bilheteria |
+| Bônus de +3 por titular da mesma nacionalidade | **Não adotado**: o mundo é fictício e o bônus era arbitrário |
+| Sem posse de bola → 5-0-5 dominante | **Corrigido**: a posse vem do meio-campo |
+
 ### Métricas atuais (times equivalentes, 2.000 jogos)
 
-| Métrica | Valor | Referência real |
+| Métrica | Valor | Referência |
 |---|---|---|
-| Gols/jogo | ~2,6 | 2,5–2,8 |
-| Vitória mandante / empate | ~42% / ~26% | 43–46% / 25–28% |
+| Gols/jogo | ~2,8 | futebol real 2,5–2,8; o Elifoot era goleador |
+| Vitória mandante / empate | ~44% / ~24% | Elifoot: "mando de campo gigante" |
+| Zebra (time 15 pts mais fraco vence fora) | ~16% | lances de sorte do Elifoot |
 | Amarelos / vermelhos por jogo | ~3,1 / ~0,13 | 3–4 / 0,1–0,2 |
 | Spread de pts/jogo entre formações | < 0,35 | sem dominante |
-| Estilos (pts/jogo) | 1,36–1,38 | troca, não dominância |
+| Nível médio por divisão em 5 temporadas | +2 a +3 | sem inflação (`tests/drift.test.ts`) |
 
 ## Economia
 

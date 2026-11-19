@@ -14,6 +14,7 @@ const T = {
   ],
   save: ['{p} bate firme e {k} faz defesaça!', 'Chute de {p}, {k} espalma!', '{p} finaliza no canto, mas {k} segura.'],
   post: ['Na trave! {p} quase marca!', 'Bola no poste! Que chance de {p}!'],
+  bar: ['No travessão! {p} acerta a barra!', 'Uhhh! {p} carimba o travessão!'],
   miss: ['{p} chuta para fora.', '{p} isola a bola.'],
   yellow: ['Cartão amarelo para {p}.', '{p} é advertido com o amarelo.'],
   red: ['EXPULSO! {p} recebe o vermelho!', 'Vermelho para {p}! Time com um a menos.'],

@@ -17,8 +17,18 @@ import type { Club, Formation, MatchEvent, Player, Position, Side, Style, TeamSt
 export const TUNING = {
   attackPerMinute: 0.5,
   shotFactor: 0.62,
-  conversion: 0.215,
-  homeBoost: 1.1,
+  conversion: 0.205,
+  /** Mando de campo na criação de chances: 7000/6000, como no Elifoot 98. */
+  homeChanceBoost: 7000 / 6000,
+  /** Mando de campo na posse (leve). */
+  homePossessionBoost: 1.04,
+  /** Lances de sorte por minuto (Elifoot 98: 1/180 em casa, 1/270 fora). */
+  luckyHome: 1 / 180,
+  luckyAway: 1 / 270,
+  /** Desfechos de finalização que não são gol: trave, travessão, defesa (resto: fora). */
+  postShare: 0.018,
+  barShare: 0.012,
+  saveShare: 0.35,
   possessionExponent: 1.1,
   yellowPerMinute: 0.0035,
   directRedPerMinute: 0.000025,
@@ -232,9 +242,8 @@ export function stepMinute(m: MatchState, rng: Rng) {
   const hp = sectorPower(m.home);
   const ap = sectorPower(m.away);
   const power = { home: hp, away: ap };
-  const hb = TUNING.homeBoost;
   const e = TUNING.possessionExponent;
-  const hm = hp.midfield * hb;
+  const hm = hp.midfield * TUNING.homePossessionBoost;
   const possession = hm ** e / (hm ** e + ap.midfield ** e);
   const attacking: Side = rng.chance(possession) ? 'home' : 'away';
   m[attacking].stats.possessionMinutes++;
@@ -270,56 +279,66 @@ export function stepMinute(m: MatchState, rng: Rng) {
   }
 
   if (rng.chance(TUNING.attackPerMinute)) {
-    const att = m[attacking];
     const defSide = other(attacking);
-    const def = m[defSide];
-    const attackPower = power[attacking].attack * (attacking === 'home' ? hb : 1);
+    const attackPower = power[attacking].attack;
     const ratio = attackPower / (attackPower + power[defSide].defense);
-    const styleMult = STYLE[att.style].own * STYLE[def.style].conceded;
-    if (rng.chance(Math.min(0.95, TUNING.shotFactor * ratio * styleMult))) {
-      const shooters = [...att.FW, ...att.MF, ...att.DF];
-      if (shooters.length > 0) {
-        const shooter = rng.weighted(shooters, (p) => {
-          const w = att.FW.includes(p) ? 3 : att.MF.includes(p) ? 1.4 : 0.35;
-          return w * p.attrs.finishing;
-        });
-        const finishing = shooter.attrs.finishing * conditionFactor(att.condition[shooter.id]!);
-        const gk = power[defSide].keeper;
-        const pGoal = TUNING.conversion * (2 * finishing) / (finishing + gk);
-        att.stats.shots++;
-        const roll = rng.next();
-        if (roll < pGoal) {
-          att.stats.onTarget++;
-          att.goals++;
-          const mates = shooters.filter((p) => p.id !== shooter.id);
-          const assist = mates.length > 0 && rng.chance(0.7) ? rng.weighted(mates, (p) => p.attrs.passing * (att.MF.includes(p) ? 1.5 : 1)) : undefined;
-          bump(att, shooter.id, 1);
-          if (assist) bump(att, assist.id, 0.5);
-          bump(def, def.GK.id, -0.4);
-          def.DF.forEach((p) => bump(def, p.id, -0.15));
-          m.events.push({ minute, type: 'goal', side: attacking, playerId: shooter.id, playerName: shooter.name, assistName: assist?.name });
-        } else if (roll < pGoal + 0.03) {
-          bump(att, shooter.id, 0.1);
-          m.events.push({ minute, type: 'post', side: attacking, playerId: shooter.id, playerName: shooter.name });
-        } else if (roll < pGoal + 0.38) {
-          att.stats.onTarget++;
-          bump(att, shooter.id, 0.15);
-          bump(def, def.GK.id, 0.3);
-          if (rng.chance(0.35)) att.stats.corners++;
-          m.events.push({ minute, type: 'save', side: attacking, playerId: shooter.id, playerName: shooter.name, keeperName: def.GK.name });
-        } else {
-          bump(att, shooter.id, -0.05);
-          if (rng.chance(0.25)) att.stats.corners++;
-          m.events.push({ minute, type: 'miss', side: attacking, playerId: shooter.id, playerName: shooter.name });
-        }
-      }
-    } else if (def.DF.length > 0) {
-      bump(def, rng.pick(def.DF).id, 0.04);
-    }
+    const home = attacking === 'home' ? TUNING.homeChanceBoost : 1;
+    const styleMult = STYLE[m[attacking].style].own * STYLE[m[defSide].style].conceded * home;
+    if (rng.chance(Math.min(0.95, TUNING.shotFactor * ratio * styleMult))) shoot(m, attacking, power[defSide].keeper, minute, rng);
+    else if (m[defSide].DF.length > 0) bump(m[defSide], rng.pick(m[defSide].DF).id, 0.04);
   }
+
+  // "lance de sorte" (Elifoot 98: Random(180) em casa, Random(270) fora):
+  // uma finalização que independe da força dos times — fonte das zebras.
+  if (rng.chance(TUNING.luckyHome)) shoot(m, 'home', power.away.keeper, minute, rng);
+  if (rng.chance(TUNING.luckyAway)) shoot(m, 'away', power.home.keeper, minute, rng);
 
   if (minute === m.firstHalfEnd) m.events.push({ minute, type: 'half' });
   if (minute >= m.total) finish(m);
+}
+
+/** Resolve uma finalização: gol, defesa, poste, barra ou fora (os 5 desfechos do Elifoot 98). */
+function shoot(m: MatchState, attacking: Side, keeper: number, minute: number, rng: Rng) {
+  const att = m[attacking];
+  const def = m[other(attacking)];
+  const shooters = [...att.FW, ...att.MF, ...att.DF];
+  if (shooters.length === 0) return;
+  const shooter = rng.weighted(shooters, (p) => {
+    const w = att.FW.includes(p) ? 3 : att.MF.includes(p) ? 1.4 : 0.35;
+    return w * p.attrs.finishing;
+  });
+  const finishing = shooter.attrs.finishing * conditionFactor(att.condition[shooter.id]!);
+  const pGoal = TUNING.conversion * (2 * finishing) / (finishing + keeper);
+  att.stats.shots++;
+  const roll = rng.next();
+  const T = TUNING;
+  if (roll < pGoal) {
+    att.stats.onTarget++;
+    att.goals++;
+    const mates = shooters.filter((p) => p.id !== shooter.id);
+    const assist = mates.length > 0 && rng.chance(0.7) ? rng.weighted(mates, (p) => p.attrs.passing * (att.MF.includes(p) ? 1.5 : 1)) : undefined;
+    bump(att, shooter.id, 1);
+    if (assist) bump(att, assist.id, 0.5);
+    bump(def, def.GK.id, -0.4);
+    def.DF.forEach((p) => bump(def, p.id, -0.15));
+    m.events.push({ minute, type: 'goal', side: attacking, playerId: shooter.id, playerName: shooter.name, assistName: assist?.name });
+  } else if (roll < pGoal + T.postShare) {
+    bump(att, shooter.id, 0.1);
+    m.events.push({ minute, type: 'post', side: attacking, playerId: shooter.id, playerName: shooter.name });
+  } else if (roll < pGoal + T.postShare + T.barShare) {
+    bump(att, shooter.id, 0.1);
+    m.events.push({ minute, type: 'bar', side: attacking, playerId: shooter.id, playerName: shooter.name });
+  } else if (roll < pGoal + T.postShare + T.barShare + T.saveShare) {
+    att.stats.onTarget++;
+    bump(att, shooter.id, 0.15);
+    bump(def, def.GK.id, 0.3);
+    if (rng.chance(0.35)) att.stats.corners++;
+    m.events.push({ minute, type: 'save', side: attacking, playerId: shooter.id, playerName: shooter.name, keeperName: def.GK.name });
+  } else {
+    bump(att, shooter.id, -0.05);
+    if (rng.chance(0.25)) att.stats.corners++;
+    m.events.push({ minute, type: 'miss', side: attacking, playerId: shooter.id, playerName: shooter.name });
+  }
 }
 
 function finish(m: MatchState) {
