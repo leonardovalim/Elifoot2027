@@ -453,3 +453,36 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .compare-card .btn.primary { width: 100%; margin-top: 4px; }
 .ok-msg { font-size: 14px; }
 @media (max-width: 760px) { .market-split .card, .squad .split .card { order: -1; } }
+
+/* ---------- identidade dos times na partida ---------- */
+.dual .l { background: var(--l, var(--tomato)); }
+.dual .r { background: var(--r, var(--night-2)); }
+.side-tag { display: inline-block; flex: none; min-width: 38px; text-align: center; font-size: 11px; font-weight: 800; letter-spacing: .5px; padding: 1px 5px; box-shadow: 0 0 0 2px var(--ink); align-self: center; }
+.team { border-bottom: 4px solid var(--side, transparent); padding-bottom: 6px; }
+.team-id { display: flex; align-items: center; gap: 6px; margin: 3px 0 2px; }
+.team.right .team-id { justify-content: flex-end; }
+.you { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--good); }
+.ev { align-items: baseline; padding-left: 6px; box-shadow: inset 4px 0 var(--side, transparent); }
+.ev .side-tag { align-self: baseline; }
+.ev.mine { background: rgba(58, 154, 75, 0.08); }
+.ev .txt { min-width: 0; }
+.list .side-tag { margin-right: 4px; }
+
+/* ---------- telas grandes: a partida usa o espaço disponível ---------- */
+.overlay .window.match-window { max-width: min(1440px, 96vw); }
+.match-window .match .feed { height: max(420px, calc(100vh - 340px)); }
+@media (min-width: 1500px) {
+  .match-window .live-grid { grid-template-columns: minmax(0, 1.6fr) minmax(360px, 1fr); }
+  .match-window .ev { font-size: 16px; padding: 7px 6px; }
+}
+@media (max-width: 900px) { .match-window .match .feed { height: 300px; } }
+
+/* ---------- monitores grandes: escala a interface em vez de sobrar tela vazia ---------- */
+:root { --z: 1; }
+@media (min-width: 1680px) and (min-height: 900px) { :root { --z: 1.2; } }
+@media (min-width: 2200px) and (min-height: 1150px) { :root { --z: 1.4; } }
+.game { zoom: var(--z); }
+.game { min-height: calc(100vh / var(--z)); }
+.overlay .window.match-window { max-width: min(1440px, calc(96vw / var(--z))); }
+.match-window .match .feed { height: max(360px, calc(100vh / var(--z) - 400px)); }
+@media (max-width: 900px) { .match-window .match .feed { height: 300px; } }

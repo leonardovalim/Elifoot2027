@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { formatDate } from '../../core/calendar';
 import type { Rng } from '../../core/rng';
 import { clubStrength, lastAttendance, liveRng, myClubId, type Career, type PreparedRound } from '../../game/career';
@@ -7,7 +7,7 @@ import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
 import { track } from '../analytics';
-import { Badge, Bar, POS_LABEL, STYLE_LABEL } from '../util';
+import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
 
 interface Props {
   career: Career;
@@ -50,6 +50,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
 
   const home = career.clubs[m.home.clubId]!;
   const away = career.clubs[m.away.clubId]!;
+  const colors = matchColors(home, away);
+  const barColors = { '--l': colors.home.bg, '--r': colors.away.bg } as CSSProperties;
 
   const simulateToEnd = () => {
     while (!m.finished) stepMinute(m, rng.current!);
@@ -62,11 +64,11 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       <div className="match">
         <p className="kicker">Rodada {p.round + 1} · {formatDate(career.date)} · {home.stadiumName}</p>
         <div className="scoreboard">
-          <TeamHead club={home} sub={`${m.home.formation} · ${STYLE_LABEL[m.home.style]}`} />
+          <TeamHead club={home} color={colors.home} mine={side === 'home'} sub={`${m.home.formation} · ${STYLE_LABEL[m.home.style]}`} />
           <div className="score idle">×</div>
-          <TeamHead club={away} sub={`${m.away.formation} · ${STYLE_LABEL[m.away.style]}`} right />
+          <TeamHead club={away} color={colors.away} mine={side === 'away'} sub={`${m.away.formation} · ${STYLE_LABEL[m.away.style]}`} right />
         </div>
-        <div className="compare">
+        <div className="compare" style={barColors}>
           <Compare label="Força do time" a={clubStrength(home)} b={clubStrength(away)} />
           <Compare label="Condição média" a={avgCond(m.home)} b={avgCond(m.away)} />
         </div>
@@ -89,20 +91,20 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       <div className="match">
         <p className="kicker">Fim de jogo</p>
         <div className="scoreboard">
-          <TeamHead club={home} />
+          <TeamHead club={home} color={colors.home} mine={side === 'home'} />
           <div className="score">{o.homeScore} × {o.awayScore}</div>
-          <TeamHead club={away} right />
+          <TeamHead club={away} color={colors.away} mine={side === 'away'} right />
         </div>
         <div className="two-col">
           <section>
             <h4>Gols</h4>
             <ul className="list">
               {o.events.filter((e) => e.type === 'goal').map((e, i) => (
-                <li key={i}>⚽ {e.minute}' <b>{'playerName' in e ? e.playerName : ''}</b> <span className="hint">({m[e.type === 'goal' ? e.side : 'home'].short})</span></li>
+                <li key={i}>⚽ {e.minute}' {e.type === 'goal' && <SideTag color={colors[e.side]} label={m[e.side].short} />} <b>{'playerName' in e ? e.playerName : ''}</b></li>
               ))}
               {o.homeScore + o.awayScore === 0 && <li className="hint">Sem gols.</li>}
             </ul>
-            <StatsBars a={o.stats.home} b={o.stats.away} possession={o.possession} />
+            <StatsBars style={barColors} a={o.stats.home} b={o.stats.away} possession={o.possession} />
           </section>
           <section>
             {motm && (
@@ -136,9 +138,9 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   return (
     <div className="match live">
       <div className="scoreboard">
-        <TeamHead club={home} />
+        <TeamHead club={home} color={colors.home} mine={side === 'home'} />
         <div className="score">{m.home.goals} × {m.away.goals}<span className="clock">{minuteLabel}'</span></div>
-        <TeamHead club={away} right />
+        <TeamHead club={away} color={colors.away} mine={side === 'away'} right />
       </div>
       <div className="controls">
         <button className="btn" onClick={() => setRunning(!running)}>{running ? '⏸ Pausar' : '▶ Continuar'}</button>
@@ -148,15 +150,19 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       <div className="live-grid">
         <section className="feed">
           {feed.length === 0 && <p className="hint">Bola rolando.</p>}
-          {feed.map((e, i) => (
-            <div key={i} className={`ev ${e.type} ${'side' in e && e.side === side ? 'mine' : ''}`}>
-              <span className="min">{e.minute}'</span>
-              <span>{narrate(e)}</span>
-            </div>
-          ))}
+          {feed.map((e, i) => {
+            const s = 'side' in e ? e.side : null;
+            return (
+              <div key={i} className={`ev ${e.type} ${s === side ? 'mine' : ''}`} style={s ? ({ '--side': colors[s].bg } as CSSProperties) : undefined}>
+                <span className="min">{e.minute}'</span>
+                {s ? <SideTag color={colors[s]} label={m[s].short} /> : null}
+                <span className="txt">{narrate(e)}</span>
+              </div>
+            );
+          })}
         </section>
         <section>
-          <StatsBars a={m.home.stats} b={m.away.stats} possession={possessionOf(m.home.stats, m.away.stats)} />
+          <StatsBars style={barColors} a={m.home.stats} b={m.away.stats} possession={possessionOf(m.home.stats, m.away.stats)} />
           <h4>Intervenções</h4>
           <div className="chips">
             {(Object.keys(STYLE_LABEL) as Style[]).map((s) => (
@@ -181,7 +187,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
               if (!err) { setSubOut(''); setSubIn(''); tick(); } else alert(err);
             }}>Trocar ({mine.subsLeft})</button>
           </div>
-          <h4>Condição física</h4>
+          <h4>Condição física · {m[side].short}</h4>
           <div className="cond-list">
             {onPitch.map((x) => (
               <div key={x.id} className="attr"><span className={`pos ${x.position}`}>{POS_LABEL[x.position]}</span><span className="nm">{x.name}</span><Bar value={mine.condition[x.id]!} /></div>
@@ -199,13 +205,22 @@ const avgCond = (s: SideState) => {
 };
 const possessionOf = (a: TeamStats, b: TeamStats) => (a.possessionMinutes + b.possessionMinutes ? a.possessionMinutes / (a.possessionMinutes + b.possessionMinutes) : 0.5);
 
-function TeamHead({ club, sub, right }: { club: Career['clubs'][string]; sub?: string; right?: boolean }) {
+function TeamHead({ club, sub, right, color, mine }: { club: Career['clubs'][string]; sub?: string; right?: boolean; color: SideColor; mine: boolean }) {
   return (
-    <div className={`team ${right ? 'right' : ''}`}>
+    <div className={`team ${right ? 'right' : ''}`} style={{ '--side': color.bg } as CSSProperties}>
       <Badge club={club} size="lg" />
-      <div><b>{club.name}</b>{sub && <span className="hint">{sub}</span>}</div>
+      <div>
+        <b>{club.name}</b>
+        <span className="team-id"><SideTag color={color} label={club.short} />{mine && <span className="you">seu time</span>}</span>
+        {sub && <span className="hint">{sub}</span>}
+      </div>
     </div>
   );
+}
+
+/** Etiqueta com a cor do lado na partida: identifica o time de cada lance. */
+function SideTag({ color, label }: { color: SideColor; label: string }) {
+  return <span className="side-tag" style={{ background: color.bg, color: color.fg }}>{label}</span>;
 }
 
 function Compare({ label, a, b }: { label: string; a: number; b: number }) {
@@ -220,7 +235,7 @@ function Compare({ label, a, b }: { label: string; a: number; b: number }) {
   );
 }
 
-function StatsBars({ a, b, possession }: { a: TeamStats; b: TeamStats; possession: number }) {
+function StatsBars({ a, b, possession, style }: { a: TeamStats; b: TeamStats; possession: number; style?: CSSProperties }) {
   const rows: [string, number, number][] = [
     ['Posse', Math.round(possession * 100), 100 - Math.round(possession * 100)],
     ['Finalizações', a.shots, b.shots],
@@ -229,7 +244,7 @@ function StatsBars({ a, b, possession }: { a: TeamStats; b: TeamStats; possessio
     ['Faltas', a.fouls, b.fouls],
   ];
   return (
-    <div className="stats">
+    <div className="stats" style={style}>
       {rows.map(([label, x, y]) => (
         <div key={label} className="compare-row">
           <b>{x}{label === 'Posse' ? '%' : ''}</b>
