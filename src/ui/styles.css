@@ -68,16 +68,24 @@ h4 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 14
   background: var(--paper-3); color: var(--text); border: 0; padding: 8px 14px; cursor: pointer; margin: var(--px);
   border-bottom: var(--px) solid var(--paper-2); font-weight: 600; white-space: nowrap;
 }
-.btn:hover:not(:disabled) { background: #fff; }
+.btn:hover:not(:disabled) { background: #fff; color: var(--text); }
 .btn:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 1px; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.primary { background: var(--mustard); border-bottom-color: var(--mustard-dk); }
 .btn.primary:hover:not(:disabled) { background: #ffc94a; }
 .btn.danger { background: var(--tomato); color: var(--paper-3); border-bottom-color: var(--tomato-dk); }
+.btn.danger:hover:not(:disabled) { background: #ef6a4f; color: var(--paper-3); }
 .btn.ghost { background: transparent; border-bottom-color: transparent; color: inherit; }
+.btn.ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); color: inherit; }
+.window-body .btn.ghost:hover:not(:disabled), .card .btn.ghost:hover:not(:disabled) { background: var(--paper-2); }
 .btn.sm { padding: 4px 10px; font-size: 14px; }
 .btn.big { padding: 14px 28px; font-size: 20px; }
 .btn.on { background: var(--mustard); border-bottom-color: var(--mustard-dk); }
+.btn.on:hover:not(:disabled) { background: #ffc94a; color: var(--text); }
+.chip:hover:not(.on) { background: #fff; }
+.chip.on:hover { background: var(--ink); color: var(--paper-3); }
+.challenge:hover:not(.on) { background: #fff; }
+.challenge.on:hover { background: #ffc94a; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row.center, .center { justify-content: center; text-align: center; }
 
@@ -137,10 +145,16 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .challenge span { color: var(--muted); font-size: 14px; }
 .challenge.on { background: var(--mustard); }
 .challenge.on span { color: var(--ink); }
-.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); column-gap: 12px; row-gap: 0; }
 .offers.small { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin: 10px 0; }
-.offer { background: var(--paper-3); padding: 12px; margin: var(--px); display: flex; flex-direction: column; gap: 8px; }
-.offer-head { display: flex; gap: 8px; align-items: center; }
+.offer {
+  background: var(--paper-3); padding: 12px; margin: var(--px) var(--px) 18px;
+  display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 10px; align-content: start;
+}
+.offer > .btn { align-self: end; margin: var(--px); }
+.offer .objective { display: flex; align-items: center; }
+.offer-name { font-weight: 800; line-height: 1.25; }
+.offer-head { display: flex; gap: 10px; align-items: flex-start; }
 .offer-head div { display: flex; flex-direction: column; }
 .objective { background: var(--paper-2); padding: 6px 8px; font-weight: 600; margin: 0; }
 
@@ -323,3 +337,18 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .countdown, .hud-money b, .hud-date b, .create-head h2 { font-weight: 800; }
 .badge { font-weight: 900; }
 .grid-table td, .kv dd, .hud-money b { font-variant-numeric: tabular-nums; }
+
+.sub-row > select, .sub-row > .btn, .match .chips > * { height: 38px; display: inline-flex; align-items: center; }
+.toolbar select, .toolbar .check { min-height: 38px; }
+.sport { cursor: pointer; border: 0; font: inherit; color: inherit; }
+.sport.off:hover { opacity: 0.85; background: #fff; }
+.sport .voted { font-size: 11px; color: var(--mustard-dk); margin-left: 2px; letter-spacing: 1px; }
+.vote { display: flex; gap: 8px; justify-content: center; margin: 14px 0 6px; }
+.vote button { width: 46px; height: 46px; border: 0; background: var(--paper-3); cursor: pointer; font-size: 26px; line-height: 1; color: var(--paper-2); box-shadow: 0 0 0 3px var(--ink); }
+.vote button.on { color: var(--mustard); }
+.vote button:hover { background: #fff; }
+.vote-scale { display: flex; justify-content: space-between; width: 262px; margin: 0 auto; font-size: 13px; color: var(--muted); }
+.legend-inline { font-size: 13px; color: var(--muted); }
+.field-error { color: var(--bad); font-size: 14px; font-weight: 700; }
+input[aria-invalid="true"] { --b: var(--bad); }
+.nw { white-space: nowrap; }

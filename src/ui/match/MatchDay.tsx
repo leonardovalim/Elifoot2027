@@ -146,7 +146,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       </div>
       <div className="live-grid">
         <section className="feed">
-          {feed.length === 0 && <p className="hint">A bola vai rolar…</p>}
+          {feed.length === 0 && <p className="hint">Bola rolando.</p>}
           {feed.map((e, i) => (
             <div key={i} className={`ev ${e.type} ${'side' in e && e.side === side ? 'mine' : ''}`}>
               <span className="min">{e.minute}'</span>
@@ -156,7 +156,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         </section>
         <section>
           <StatsBars a={m.home.stats} b={m.away.stats} possession={possessionOf(m.home.stats, m.away.stats)} />
-          <h4>Intervenções {running && <span className="hint">(pause para decidir)</span>}</h4>
+          <h4>Intervenções</h4>
           <div className="chips">
             {(Object.keys(STYLE_LABEL) as Style[]).map((s) => (
               <button key={s} className={`chip ${mine.style === s ? 'on' : ''}`} onClick={() => { changeStyle(m, side, s); tick(); }}>{STYLE_LABEL[s]}</button>

@@ -53,10 +53,10 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
         </label>
         <label className="check">
           <input type="checkbox" checked={career.autoSubs} onChange={(e) => act((c) => { c.autoSubs = e.target.checked; })} />
-          Auxiliar troca cansados
+          Auxiliar faz substituições
         </label>
       </div>
-      <p className="hint">Titulares (★) são escolhidos pelo treinador: melhor da posição × condição física. Rodar o elenco evita queda de rendimento.</p>
+      <p className="legend-inline">★ titular · • banco</p>
       <div className="split">
         <div className="scroll">
           <table className="grid-table">
@@ -85,7 +85,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
         <aside className="card">
           {selected ? <PlayerCard p={selected} onSell={() => {
             if (confirm(`Vender ${selected.name} por ~${money(Math.round(playerValue(selected) * 0.85))}?`)) { act((c) => sellPlayer(c, selected.id)); setSel(null); }
-          }} /> : <p className="hint">Toque em um atleta para ver detalhes.</p>}
+          }} /> : <p className="hint">Selecione um atleta.</p>}
         </aside>
       </div>
     </div>
@@ -134,7 +134,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
             <button key={p} className={`chip ${pos === p ? 'on' : ''}`} onClick={() => setPos(p)}>{p === 'ALL' ? 'Todos' : POS_LABEL[p]}</button>
           ))}
         </div>
-        <span className="hint">Caixa {money(club.budget)} · elenco {club.players.length}/28 · lista renova todo mês</span>
+        <span className="hint">Caixa {money(club.budget)} · elenco {club.players.length}/28</span>
       </div>
       <div className="scroll tall">
         <table className="grid-table">
@@ -229,7 +229,7 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
             <button className="btn sm" onClick={() => act((c) => { c.clubs[myClubId(c)]!.ticketPrice += 1; })}>+</button>
           </dd>
         </dl>
-        <p className="hint">Ingresso caro rende mais por torcedor, mas esvazia o estádio.</p>
+
       </section>
       <section>
         <h4>Temporada {career.season.year}</h4>
@@ -261,19 +261,18 @@ export function CareerPanel({ career, onReset }: { career: Career; onReset: () =
     <div className="two-col">
       <section>
         <h4>{e.name}</h4>
-        <p className="hint">Empreendedor esportivo · Futebol</p>
+        <p className="hint">Futebol</p>
         <div className="meter"><span>Reputação</span><Bar value={e.reputation} tone="accent" /><b>{Math.round(e.reputation)}</b></div>
         <div className="meter"><span>Experiência</span><Bar value={e.experience} tone="accent" /><b>{Math.round(e.experience)}</b></div>
         <dl className="kv">
           <dt>Patrimônio</dt><dd>{money(worth)}</dd>
           {bond && club && <><dt>Vínculo</dt><dd>Contratado · {club.name}</dd><dt>Salário</dt><dd>{money(bond.monthlySalary)}/mês</dd><dt>Objetivo</dt><dd>{OBJECTIVE_LABEL[bond.objective]}</dd></>}
         </dl>
-        <p className="hint">Patrimônio pessoal é separado do caixa do clube. Sociedade e compra de organizações chegam numa próxima versão.</p>
         <button className="btn danger ghost" onClick={onReset}>Apagar save e recomeçar</button>
       </section>
       <section>
         <h4>Trajetória</h4>
-        {e.history.length === 0 ? <p className="hint">Primeira temporada em andamento.</p> : (
+        {e.history.length === 0 ? <p className="hint">Nenhuma temporada concluída.</p> : (
           <ul className="list">
             {e.history.map((h, i) => (
               <li key={i}>{h.year} · {h.orgName} · {h.position}º na Div {h.division} · <span className={h.achieved ? 'ok' : 'neg'}>{h.achieved ? 'objetivo cumprido' : 'objetivo não cumprido'}</span></li>

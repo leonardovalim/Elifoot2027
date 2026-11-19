@@ -123,7 +123,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     return (
       <div className="game">
         <Modal title="Você está sem clube">
-          <p>Sua passagem terminou. Estas organizações querem conversar com você:</p>
+          <h4>Propostas recebidas</h4>
           <OfferList career={c} onAccept={(o) => { acceptOffer(ref.current, o); save(); force(); }} />
           <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
         </Modal>
@@ -183,7 +183,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             paused={!running}
           />
           {!running && !blocking && (
-            <button className="paused-badge" onClick={() => setSpeed(resumeSpeed.current || 1)}>⏸ PAUSADO · toque para continuar</button>
+            <button className="paused-badge" onClick={() => setSpeed(resumeSpeed.current || 1)}>⏸ Pausado · continuar ▶</button>
           )}
         </div>
 
@@ -203,7 +203,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
                   <p className="countdown">{daysTo <= 0 ? 'É HOJE!' : daysTo === 1 ? 'Amanhã' : `em ${daysTo} dias`}</p>
                 </>
               ) : <p className="hint">Sem jogos agendados.</p>}
-              <label className="check"><input type="checkbox" checked={autoSim} onChange={(e) => setAutoSim(e.target.checked)} /> Simular meus jogos sem assistir</label>
+              <label className="check"><input type="checkbox" checked={autoSim} onChange={(e) => setAutoSim(e.target.checked)} /> Simular jogos automaticamente</label>
             </div>
           </section>
           <section className="window">
@@ -257,14 +257,15 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           <SummaryView s={summary} />
           {c.unemployed ? (
             <>
-              <p>A diretoria decidiu não renovar. Propostas recebidas:</p>
+              <p>A diretoria decidiu não renovar.</p>
+              <h4>Propostas recebidas</h4>
               <OfferList career={c} onAccept={(o) => { acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
             </>
           ) : (
             <>
               {c.offers.length > 0 && (
                 <>
-                  <p>Seu trabalho chamou atenção. Propostas recebidas (opcional):</p>
+                  <h4>Propostas recebidas</h4>
                   <OfferList career={c} onAccept={(o) => { acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
                 </>
               )}
@@ -313,9 +314,10 @@ function OfferList({ career, onAccept }: { career: Career; onAccept: (o: Career[
         const club = career.clubs[o.clubId]!;
         return (
           <div key={o.clubId} className="offer">
-            <div className="offer-head"><Badge club={club} /><div><b>{club.name}</b><span className="hint">Div. {divisionOf(career, club.id) + 1} · reputação {club.reputation}</span></div></div>
-            <p className="hint">🎯 {OBJECTIVE_LABEL[o.objective]} · {money(o.monthlySalary)}/mês</p>
-            <button className="btn primary sm" onClick={() => onAccept(o)}>Aceitar</button>
+            <div className="offer-head"><Badge club={club} /><div><span className="offer-name">{club.name}</span><span className="hint">Divisão {divisionOf(career, club.id) + 1}</span></div></div>
+            <dl className="kv"><dt>Reputação</dt><dd>{club.reputation}/100</dd><dt>Salário</dt><dd>{money(o.monthlySalary)}/mês</dd></dl>
+            <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
+            <button className="btn primary" onClick={() => onAccept(o)}>Aceitar</button>
           </div>
         );
       })}

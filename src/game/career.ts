@@ -1,4 +1,4 @@
-import { addDays, dayOf, monthOf, nextSunday, type IsoDate, type Phase } from '../core/calendar';
+import { addDays, dayOf, formatDate, monthOf, nextSunday, type IsoDate, type Phase } from '../core/calendar';
 import {
   OBJECTIVE_LABEL,
   objectiveAchieved,
@@ -241,7 +241,7 @@ export function advanceDay(c: Career): DayReport {
   if (dayOf(c.date) === 1) monthly(c);
   if (c.phase === 'pre-temporada' && c.date >= addDays(c.roundDates[0]!, -6)) {
     c.phase = 'temporada';
-    push(c, 'info', `Começa a temporada ${c.season.year}! Primeira rodada em ${c.roundDates[0]}.`);
+    push(c, 'info', `Começa a temporada ${c.season.year}! Primeira rodada: ${formatDate(c.roundDates[0]!)}.`);
   }
   if (c.phase === 'entressafra' && c.date >= `${c.season.year}-01-01`) {
     c.phase = 'pre-temporada';
@@ -270,7 +270,7 @@ function monthly(c: Career) {
       c.ledger.wages += wages;
       c.ledger.management += bond.monthlySalary;
       const st = financialState(club);
-      if (st === 'critica') push(c, 'bad', `Finanças em estado crítico: caixa ${fmtMoney(club.budget)}. Venda atletas ou reduza a folha.`);
+      if (st === 'critica') push(c, 'bad', `Finanças em estado crítico: caixa em ${fmtMoney(club.budget)}.`);
       else if (st === 'atencao') push(c, 'money', `Atenção: o caixa não cobre três meses de folha.`);
     }
   }
