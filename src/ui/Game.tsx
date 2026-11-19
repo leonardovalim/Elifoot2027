@@ -141,7 +141,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   return (
     <div className="game">
-      <header className="hud">
+      <header className="hud" aria-label="Resumo da carreira">
         <div className="hud-club">
           <Badge club={club} size="lg" />
           <div>
@@ -150,29 +150,33 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           </div>
         </div>
         <div className="hud-date">
+          <span className="hud-kicker">Agora</span>
           <b>{formatDate(c.date)}</b>
           <span>{PHASE_LABEL[c.phase]} {c.season.year}</span>
         </div>
-        <div className="hud-money">
-          <span className="lbl">Caixa do clube</span>
-          <b className={club.budget < 0 ? 'neg' : ''}>{moneyShort(club.budget)}</b>
-        </div>
-        <div className="hud-money">
-          <span className="lbl">Seu patrimônio</span>
-          <b>{moneyShort(c.entrepreneur.cash)}</b>
-        </div>
-        <div className="hud-rep">
-          <span className="lbl">Reputação</span>
-          <Bar value={c.entrepreneur.reputation} tone="accent" />
+        <div className="hud-resources" aria-label="Recursos da carreira">
+          <div className="hud-money">
+            <span className="lbl">Caixa do clube</span>
+            <b className={club.budget < 0 ? 'neg' : ''}>{moneyShort(club.budget)}</b>
+          </div>
+          <div className="hud-money">
+            <span className="lbl">Seu patrimônio</span>
+            <b>{moneyShort(c.entrepreneur.cash)}</b>
+          </div>
+          <div className="hud-rep">
+            <span className="lbl">Reputação</span>
+            <Bar value={c.entrepreneur.reputation} tone="accent" />
+          </div>
         </div>
         <div className="speed" role="group" aria-label="Velocidade do tempo">
+          <span className="speed-label">Tempo</span>
           {['⏸', '▶', '▶▶', '▶▶▶'].map((s, i) => (
-            <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} disabled={blocking && i > 0} onClick={() => { if (i === 0) pause(); else setSpeed(i); }} title={i === 0 ? 'Pausar (espaço)' : `Velocidade ${i}`}>{s}</button>
+            <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} aria-label={i === 0 ? 'Pausar' : `Velocidade ${i}`} aria-pressed={speed === i} disabled={blocking && i > 0} onClick={() => { if (i === 0) pause(); else setSpeed(i); }} title={i === 0 ? 'Pausar (espaço)' : `Velocidade ${i}`}>{s}</button>
           ))}
         </div>
       </header>
 
-      <main className="stage">
+      <main className="stage" aria-label="Visão geral da carreira">
         <div className="scene-wrap">
           <CtScene
             players={club.players.map((p) => ({ id: p.id, label: p.name }))}
@@ -188,7 +192,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
         </div>
 
         <aside className="side">
-          <section className="window">
+          <section className="window next-window">
             <header className="window-title"><span>Próximo jogo</span></header>
             <div className="window-body">
               {opp && nextFixture ? (
@@ -203,14 +207,18 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
                   <p className="countdown">{daysTo <= 0 ? 'É HOJE!' : daysTo === 1 ? 'Amanhã' : `em ${daysTo} dias`}</p>
                 </>
               ) : <p className="hint">Sem jogos agendados.</p>}
-              <label className="check"><input type="checkbox" checked={autoSim} onChange={(e) => setAutoSim(e.target.checked)} /> Simular jogos automaticamente</label>
+              <label className="check sim-toggle"><input type="checkbox" checked={autoSim} onChange={(e) => setAutoSim(e.target.checked)} /> Simular jogos automaticamente</label>
             </div>
           </section>
-          <section className="window">
+          <section className="window objective-window">
             <header className="window-title"><span>Objetivo</span></header>
             <div className="window-body">
               <p className="objective">🎯 {OBJECTIVE_LABEL[bond.objective]}</p>
-              <p className="hint">Rodada {Math.min(c.season.round, c.roundDates.length)}/{c.roundDates.length} · {table[pos - 1]?.points ?? 0} pts</p>
+              <div className="objective-meta">
+                <span className="hint">Rodada {Math.min(c.season.round, c.roundDates.length)}/{c.roundDates.length}</span>
+                <b>{table[pos - 1]?.points ?? 0} pts</b>
+              </div>
+              <Bar value={c.season.round} max={c.roundDates.length} tone="accent" />
             </div>
           </section>
           <section className="window news">
@@ -226,7 +234,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
       <nav className="dock">
         {MENUS.map((m) => (
-          <button key={m.id} className="dock-btn" onClick={() => { pause(); setMenu(m.id); }}>
+          <button key={m.id} className={`dock-btn ${menu === m.id ? 'active' : ''}`} aria-current={menu === m.id ? 'page' : undefined} onClick={() => { pause(); setMenu(m.id); }}>
             <span className="ico">{m.icon}</span>{m.label}
           </button>
         ))}
