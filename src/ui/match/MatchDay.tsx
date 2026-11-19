@@ -6,6 +6,7 @@ import { changeFormation, changeStyle, stepMinute, substitute, toOutcome, type F
 import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
+import { track } from '../analytics';
 import { Badge, Bar, POS_LABEL, STYLE_LABEL } from '../util';
 
 interface Props {
@@ -71,8 +72,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         </div>
         <p className="hint center">Público esperado: {lastAttendance(home, away).toLocaleString('pt-BR')} torcedores</p>
         <div className="row center">
-          <button className="btn primary" onClick={() => { setStage('live'); setRunning(true); }}>▶ Assistir (narrado)</button>
-          <button className="btn" onClick={simulateToEnd}>⏭ Simular resultado</button>
+          <button className="btn primary" onClick={() => { setStage('live'); setRunning(true); track('match_started', { mode: 'watch' }); }}>▶ Assistir (narrado)</button>
+          <button className="btn" onClick={() => { track('match_started', { mode: 'simulate' }); simulateToEnd(); }}>⏭ Simular resultado</button>
         </div>
       </div>
     );
@@ -159,9 +160,9 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
           <h4>Intervenções</h4>
           <div className="chips">
             {(Object.keys(STYLE_LABEL) as Style[]).map((s) => (
-              <button key={s} className={`chip ${mine.style === s ? 'on' : ''}`} onClick={() => { changeStyle(m, side, s); tick(); }}>{STYLE_LABEL[s]}</button>
+              <button key={s} className={`chip ${mine.style === s ? 'on' : ''}`} onClick={() => { if (mine.style !== s) track('match_intervention', { type: 'style', value: s, minute: m.minute }); changeStyle(m, side, s); tick(); }}>{STYLE_LABEL[s]}</button>
             ))}
-            <select value={mine.formation} onChange={(e) => { changeFormation(m, side, e.target.value as Formation); tick(); }}>
+            <select value={mine.formation} onChange={(e) => { track('match_intervention', { type: 'formation', value: e.target.value, minute: m.minute }); changeFormation(m, side, e.target.value as Formation); tick(); }}>
               {Object.keys(FORMATIONS).map((f) => <option key={f}>{f}</option>)}
             </select>
           </div>
@@ -176,6 +177,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             </select>
             <button className="btn sm" disabled={!subOut || !subIn || mine.subsLeft <= 0} onClick={() => {
               const err = substitute(m, side, subOut, subIn);
+              if (!err) track('match_intervention', { type: 'substitution', minute: m.minute });
               if (!err) { setSubOut(''); setSubIn(''); tick(); } else alert(err);
             }}>Trocar ({mine.subsLeft})</button>
           </div>

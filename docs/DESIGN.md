@@ -114,3 +114,22 @@ O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da 
 - Fase 1 continua 100% local (save no navegador). Próximo passo local: trocar o `localStorage` por IndexedDB, para ter vários saves e passar do limite de ~5 MB.
 - Para o online, a recomendação é **PocketBase**: um binário só, SQLite embutido, auth e realtime prontos, rodando numa VM pequena (Fly.io ou Railway). Alternativa serverless: **Turso** (SQLite/libSQL gerenciado) + funções na Vercel.
 - O motor determinístico roda no servidor (Node) para as rodadas agendadas, e o cliente só reproduz.
+
+## Analytics (PostHog)
+
+`src/ui/analytics.ts` envia eventos direto para a API de captura (sem SDK, para não pesar no bundle). O envio fica ativo só com `VITE_POSTHOG_KEY` configurada com a chave **pública** `phc_…` (variável de ambiente na Vercel). Chaves `phs_` e `phx_` são secretas e nunca entram no cliente. Todos os eventos levam `app = mestres-do-esporte` e `app_version`.
+
+| Evento | Propriedades | Pergunta que responde |
+|---|---|---|
+| `app_opened`, `$pageview` | `has_save`, `screen` | Quantos chegam e quantos voltam |
+| `career_created` | `challenge`, `division`, `objective`, `club_reputation` | Onboarding funciona? Qual desafio atrai? |
+| `match_started` | `mode` (watch / simulate) | Partida narrada engaja ou é pulada? |
+| `match_simulated` | `mode: auto` | Quem já joga no "piloto automático" |
+| `match_intervention` | `type`, `value`, `minute` | As intervenções são usadas? |
+| `match_finished` | `round`, `season`, `result`, `goals_for`, `goals_against`, `home` | Profundidade da sessão |
+| `season_completed` | `seasons_played`, `position`, `achieved`, `fired`, `promoted`… | Critério do MVP: 3 temporadas |
+| `offer_accepted` | `unemployed` | Mobilidade de carreira |
+| `time_speed`, `menu_opened` | `speed`, `menu` | Ritmo preferido e menus mais usados |
+| `sport_interest_opened`, `sport_interest` | `sport`, `stars` | Ordem do roadmap de modalidades |
+
+**Funil principal do MVP:** `app_opened → career_created → match_finished (1ª) → season_completed (1ª) → season_completed (3ª)`.
