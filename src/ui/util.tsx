@@ -21,6 +21,36 @@ export function Badge({ club, size = 'md' }: { club: Club; size?: 'sm' | 'md' | 
   );
 }
 
+// ---------------------------------------------------------------- cores de partida
+
+const rgb = (hex: string) => {
+  const h = hex.replace('#', '');
+  const f = h.length === 3 ? h.split('').map((x) => x + x).join('') : h;
+  return [0, 2, 4].map((i) => parseInt(f.slice(i, i + 2), 16)) as [number, number, number];
+};
+/** Distância perceptiva aproximada ("redmean") entre duas cores. */
+export function colorDistance(a: string, b: string) {
+  const [r1, g1, b1] = rgb(a), [r2, g2, b2] = rgb(b);
+  const rm = (r1 + r2) / 2, dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+  return Math.sqrt((2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db);
+}
+const luminance = (hex: string) => { const [r, g, b] = rgb(hex); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; };
+const textOn = (bg: string) => (luminance(bg) > 0.6 ? '#241a2e' : '#ffffff');
+
+export interface SideColor { bg: string; fg: string }
+
+/**
+ * Cor de cada lado na partida. O mandante usa a cor principal; o visitante troca para
+ * a secundária (ou para um neutro) quando as duas ficariam parecidas, como um uniforme reserva.
+ */
+export function matchColors(home: Club, away: Club): { home: SideColor; away: SideColor } {
+  const h = home.colors[0];
+  const MIN = 190;
+  const candidates = [away.colors[0], away.colors[1], '#1d2340', '#f6ecd6', '#2f5fbf', '#c8323c'];
+  const a = candidates.find((c) => colorDistance(c, h) >= MIN) ?? candidates[2]!;
+  return { home: { bg: h, fg: textOn(h) }, away: { bg: a, fg: textOn(a) } };
+}
+
 export function ClubName({ club }: { club: Club }) {
   return <span className="clubname"><Badge club={club} size="sm" />{club.name}</span>;
 }
@@ -31,10 +61,10 @@ export function Bar({ value, max = 100, tone }: { value: number; max?: number; t
   return <span className="bar"><span className={`fill ${t}`} style={{ width: `${pct}%` }} /></span>;
 }
 
-export function Modal({ title, onClose, children, wide }: { title: string; onClose?: () => void; children: ReactNode; wide?: boolean }) {
+export function Modal({ title, onClose, children, wide, className = '' }: { title: string; onClose?: () => void; children: ReactNode; wide?: boolean; className?: string }) {
   return (
     <div className="overlay" onClick={onClose}>
-      <div className={`window ${wide ? 'wide' : ''}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
+      <div className={`window ${wide ? 'wide' : ''} ${className}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
         <header className="window-title">
           <span>{title}</span>
           {onClose && <button className="x" onClick={onClose} aria-label="Fechar">✕</button>}

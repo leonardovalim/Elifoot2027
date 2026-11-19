@@ -129,6 +129,8 @@ O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da 
 | `match_finished` | `round`, `season`, `result`, `goals_for`, `goals_against`, `home` | Profundidade da sessão |
 | `season_completed` | `seasons_played`, `position`, `achieved`, `fired`, `promoted`… | Critério do MVP: 3 temporadas |
 | `offer_accepted` | `unemployed` | Mobilidade de carreira |
+| `lineup_changed` | `to` (xi/bench/out) | Quantos assumem a escalação em vez do auxiliar |
+| `player_bought` | `position`, `overall`, `price` | Uso do mercado depois da comparação |
 | `time_speed`, `menu_opened` | `speed`, `menu` | Ritmo preferido e menus mais usados |
 | `sport_interest_opened`, `sport_interest` | `sport`, `stars` | Ordem do roadmap de modalidades |
 

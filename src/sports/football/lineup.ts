@@ -41,24 +41,19 @@ export interface Lineup {
 
 export const available = (p: Player) => p.suspended <= 0;
 
-/**
- * Escalação automática: melhores disponíveis por posição, considerando a condição
- * física (rodar o elenco importa). Banco: 7 melhores restantes.
- */
-export function pickLineup(club: Club, formation: Formation = club.formation): Lineup {
-  const shape = FORMATIONS[formation];
-  const pool = club.players.filter(available);
-  const used = new Set<string>();
-  const score = (p: Player, pos: Position) => ratingAt(p, pos) * conditionFactor(p.condition);
+const BENCH_SIZE = 7;
+const score = (p: Player, pos: Position) => ratingAt(p, pos) * conditionFactor(p.condition);
 
+/** Distribui um grupo de atletas nas posições da formação (posição natural primeiro). */
+function assign(pool: Player[], formation: Formation, fallback: Player) {
+  const shape = FORMATIONS[formation];
+  const used = new Set<string>();
   const take = (pos: Position, count: number): Player[] => {
     const chosen: Player[] = [];
-    const candidates = (natural: boolean) =>
-      pool
-        .filter((p) => !used.has(p.id) && (natural ? p.position === pos : p.position !== 'GK'))
-        .sort((a, b) => score(b, pos) - score(a, pos));
-    for (const natural of [true, false]) {
-      for (const p of candidates(natural)) {
+    const passes: ((p: Player) => boolean)[] = [(p) => p.position === pos, (p) => p.position !== 'GK', () => true];
+    for (const ok of passes) {
+      const cands = pool.filter((p) => !used.has(p.id) && ok(p)).sort((a, b) => score(b, pos) - score(a, pos));
+      for (const p of cands) {
         if (chosen.length >= count) break;
         chosen.push(p);
         used.add(p.id);
@@ -66,17 +61,108 @@ export function pickLineup(club: Club, formation: Formation = club.formation): L
     }
     return chosen;
   };
+  const GK = take('GK', 1)[0] ?? fallback;
+  used.add(GK.id);
+  return { GK, DF: take('DF', shape.DF), MF: take('MF', shape.MF), FW: take('FW', shape.FW), used };
+}
 
-  const gk = take('GK', 1)[0] ?? pool.find((p) => !used.has(p.id)) ?? club.players[0]!;
-  used.add(gk.id);
-  const DF = take('DF', shape.DF);
-  const MF = take('MF', shape.MF);
-  const FW = take('FW', shape.FW);
-  const bench = pool
-    .filter((p) => !used.has(p.id))
-    .sort((a, b) => score(b, b.position) - score(a, a.position))
-    .slice(0, 7);
-  return { GK: gk, DF, MF, FW, bench };
+/**
+ * Escalação da partida. Sem escolha manual, o auxiliar escala os melhores disponíveis
+ * considerando a condição física (rodar o elenco importa). Com escolha manual, respeita
+ * os 11 e o banco definidos e só completa vagas de suspensos ou negociados.
+ */
+export function pickLineup(club: Club, formation: Formation = club.formation): Lineup {
+  const pool = club.players.filter(available);
+  const byId = new Map(pool.map((p) => [p.id, p]));
+  const best = (xs: Player[]) => [...xs].sort((a, b) => score(b, b.position) - score(a, a.position));
+
+  if (club.lineup) {
+    const xi = club.lineup.xi.map((id) => byId.get(id)).filter((p): p is Player => !!p).slice(0, 11);
+    const benchPick = club.lineup.bench.map((id) => byId.get(id)).filter((p): p is Player => !!p && !xi.includes(p));
+    if (xi.length < 11) {
+      // vaga aberta: entra primeiro alguém do banco escolhido, da mesma posição se possível
+      const auto = assign(pool, formation, club.players[0]!);
+      const autoXi = [auto.GK, ...auto.DF, ...auto.MF, ...auto.FW];
+      for (const p of [...best(benchPick), ...autoXi, ...best(pool)]) {
+        if (xi.length >= 11) break;
+        if (!xi.includes(p)) xi.push(p);
+      }
+    }
+    const a = assign(xi, formation, xi[0] ?? club.players[0]!);
+    // banco: só quem foi escolhido (quem o jogador tirou da relação não volta sozinho)
+    const bench = benchPick.filter((p) => !a.used.has(p.id));
+    return { GK: a.GK, DF: a.DF, MF: a.MF, FW: a.FW, bench: bench.slice(0, BENCH_SIZE) };
+  }
+
+  const a = assign(pool, formation, pool[0] ?? club.players[0]!);
+  const bench = best(pool.filter((p) => !a.used.has(p.id))).slice(0, BENCH_SIZE);
+  return { GK: a.GK, DF: a.DF, MF: a.MF, FW: a.FW, bench };
 }
 
 export const starters = (l: Lineup) => [l.GK, ...l.DF, ...l.MF, ...l.FW];
+
+// ---------------------------------------------------------------- escalação manual
+
+export type SquadStatus = 'xi' | 'bench' | 'out';
+
+export function statusOf(club: Club): Record<string, SquadStatus> {
+  const l = pickLineup(club);
+  const out: Record<string, SquadStatus> = {};
+  for (const p of club.players) out[p.id] = 'out';
+  for (const p of l.bench) out[p.id] = 'bench';
+  for (const p of starters(l)) out[p.id] = 'xi';
+  return out;
+}
+
+export interface MovePlan {
+  xi: string[];
+  bench: string[];
+  /** Quem troca de lugar com o atleta movido (para o rótulo do botão). */
+  swapWith?: Player;
+}
+
+/**
+ * Planeja mover um atleta para titular, banco ou fora da relação, sempre como troca:
+ * escalar alguém tira o titular mais fraco da mesma posição; tirar um titular põe o
+ * melhor reserva da mesma posição. Assim o time nunca fica com 10.
+ */
+export function planMove(club: Club, playerId: string, to: SquadStatus): MovePlan | null {
+  const l = pickLineup(club);
+  const xi = starters(l).map((p) => p.id);
+  const bench = l.bench.map((p) => p.id);
+  const get = (id: string) => club.players.find((p) => p.id === id)!;
+  const me = club.players.find((p) => p.id === playerId);
+  if (!me) return null;
+  const from: SquadStatus = xi.includes(playerId) ? 'xi' : bench.includes(playerId) ? 'bench' : 'out';
+  if (from === to) return null;
+  if (to === 'xi' && !available(me)) return null;
+  const rank = (ids: string[], pos: Position) =>
+    ids.map(get).sort((a, b) => (a.position === pos ? 0 : 1) - (b.position === pos ? 0 : 1) || score(a, pos) - score(b, pos));
+  const drop = (ids: string[], id: string) => ids.filter((x) => x !== id);
+
+  let nx = drop(xi, playerId), nb = drop(bench, playerId);
+  let swapWith: Player | undefined;
+  if (to === 'xi') {
+    // sai o titular mais fraco da mesma posição (ou o mais fraco do time)
+    swapWith = rank(nx, me.position)[0];
+    if (swapWith) { nx = drop(nx, swapWith.id); if (from === 'bench') nb.push(swapWith.id); else nb.unshift(swapWith.id); }
+    nx.push(playerId);
+  } else if (from === 'xi') {
+    // entra o melhor reserva da mesma posição
+    const cands = nb.map(get).filter(available).sort((a, b) => (a.position === me.position ? 0 : 1) - (b.position === me.position ? 0 : 1) || score(b, me.position) - score(a, me.position));
+    swapWith = cands[0];
+    if (swapWith) { nb = drop(nb, swapWith.id); nx.push(swapWith.id); }
+    if (to === 'bench') nb.push(playerId);
+  } else if (to === 'bench') {
+    if (nb.length >= BENCH_SIZE) { swapWith = rank(nb, me.position)[0]; if (swapWith) nb = drop(nb, swapWith.id); }
+    nb.push(playerId);
+  }
+  return { xi: nx, bench: nb.slice(0, BENCH_SIZE), swapWith };
+}
+
+export function applyMove(club: Club, playerId: string, to: SquadStatus): boolean {
+  const plan = planMove(club, playerId, to);
+  if (!plan) return false;
+  club.lineup = { xi: plan.xi, bench: plan.bench };
+  return true;
+}

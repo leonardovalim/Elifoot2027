@@ -121,9 +121,28 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .fill.accent { background: var(--mustard); }
 
 /* ---------- tela título ---------- */
-.title-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; padding: 16px; text-align: center; color: var(--paper); }
+.title-screen { position: relative; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 16px; text-align: center; color: var(--paper); overflow: hidden; }
+.intro-canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; image-rendering: crisp-edges; z-index: 0; }
+.title-screen::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(ellipse 60% 45% at 50% 42%, rgba(14,17,38,0.72) 0%, rgba(14,17,38,0.35) 55%, transparent 100%); opacity: 0; transition: opacity 0.6s; }
+.title-screen.revealed::after { opacity: 1; }
+.title-screen .logo, .title-screen .menu { position: relative; z-index: 2; opacity: 0; pointer-events: none; }
+.title-screen .foot { position: absolute; bottom: 12px; z-index: 2; opacity: 0; margin: 0; color: rgba(246,236,214,0.75); text-shadow: 1px 1px 0 var(--ink); }
+.title-screen.revealed .logo { animation: logo-drop 0.7s cubic-bezier(.2,1.6,.4,1) forwards; pointer-events: auto; }
+.title-screen.revealed .menu { animation: fade-up 0.5s 0.45s ease-out forwards; pointer-events: auto; }
+.title-screen.revealed .foot { animation: fade-up 0.5s 0.7s ease-out forwards; }
+.skip-hint { position: absolute; bottom: 16px; z-index: 2; margin: 0; font-size: 13px; color: rgba(246,236,214,0.6); letter-spacing: 1px; text-transform: uppercase; animation: blink 1.4s steps(2, start) infinite; }
+@media (orientation: portrait) {
+  .title-screen { background: linear-gradient(#070816, #0e1126 42%); justify-content: flex-start; padding-top: 10vh; }
+  .intro-canvas { top: auto; height: 58%; object-position: 86% 100%; }
+}
+@keyframes logo-drop { 0% { opacity: 0; transform: translateY(-60px) scale(1.15); } 70% { opacity: 1; transform: translateY(6px) scale(0.98); } 100% { opacity: 1; transform: none; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) {
+  .title-screen.revealed .logo, .title-screen.revealed .menu, .title-screen.revealed .foot { animation: none; opacity: 1; }
+}
 .logo h1 { font-size: clamp(38px, 8.5vw, 72px); line-height: 0.95; letter-spacing: 4px; color: var(--mustard); text-shadow: 4px 4px 0 var(--tomato-dk), 8px 8px 0 var(--ink); }
-.logo p { margin-top: 18px; color: var(--paper-2); font-size: 18px; }
+.logo p { margin-top: 18px; color: var(--paper-3); font-size: 19px; font-weight: 700; text-shadow: 2px 2px 0 var(--ink); }
 .trophy { font-size: 48px; display: block; margin-bottom: 8px; filter: drop-shadow(3px 3px 0 var(--ink)); }
 .title-screen .menu { display: flex; flex-direction: column; gap: 10px; }
 .foot { position: absolute; bottom: 12px; color: var(--paper-2); }
@@ -187,6 +206,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .hud-club span, .hud .lbl, .hud-date span { font-size: 13px; color: var(--muted); }
 .hud-kicker { color: var(--tomato-dk) !important; font-size: 10px !important; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; }
 .hud-date b { font-size: 16px; }
+.hud-money, .hud-rep { display: flex; flex-direction: column; gap: 1px; }
 .hud-money b { font-size: 18px; color: var(--good); }
 .hud-money b.neg { color: var(--bad); }
 .hud-resources { flex: 2 1 380px; flex-direction: row !important; align-items: center; gap: 16px; }
@@ -403,3 +423,66 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .field-error { color: var(--bad); font-size: 14px; font-weight: 700; }
 input[aria-invalid="true"] { --b: var(--bad); }
 .nw { white-space: nowrap; }
+
+/* ---------- escalação manual, selo "novo" e comparação no mercado ---------- */
+.squad .grid-table tr.xi td { background: rgba(242, 182, 50, 0.16); }
+.squad .grid-table tr.out td { color: var(--muted); }
+.st { display: inline-block; min-width: 30px; text-align: center; font-size: 11px; font-weight: 800; padding: 1px 4px; }
+.st.xi { background: var(--ink); color: #fff; }
+.st.bench { box-shadow: inset 0 0 0 2px var(--ink); color: var(--ink); }
+.st.out { color: var(--muted); }
+.tag.new { background: #2f5fbf; text-transform: uppercase; font-weight: 800; letter-spacing: .5px; }
+.tag.warn { background: var(--warn); color: var(--ink); }
+.lineup-mode { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); margin: 2px 0 6px; min-height: 30px; }
+.lineup-mode b { color: var(--ink); }
+.lineup-actions { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; margin-bottom: 8px; border-bottom: 2px dotted var(--paper-2); }
+.lineup-actions .btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; width: 100%; }
+.lineup-actions .swap { font-size: 12px; font-weight: 600; opacity: .8; }
+.market-split .grid-table tbody tr { cursor: pointer; }
+.up-n { color: var(--good); font-weight: 700; }
+.down-n { color: var(--bad); font-weight: 700; }
+.verdict { font-size: 14px; margin: 6px 0; }
+.compare-card .vs { display: flex; flex-direction: column; gap: 3px; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.compare-card .vs select { width: 100%; }
+.cmp { display: grid; grid-template-columns: 34px minmax(0, 1fr) 24px 24px 28px; gap: 6px; align-items: center; font-size: 14px; }
+.cmp b, .cmp span:nth-child(4), .cmp span:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; }
+.cmp.head { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+.cmp.head span:nth-child(2) { grid-column: 2 / 4; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp.head b { display: none; }
+.cmp.head span:nth-child(4) { grid-column: 4 / 6; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-card .btn.primary { width: 100%; margin-top: 4px; }
+.ok-msg { font-size: 14px; }
+@media (max-width: 760px) { .market-split .card, .squad .split .card { order: -1; } }
+
+/* ---------- identidade dos times na partida ---------- */
+.dual .l { background: var(--l, var(--tomato)); }
+.dual .r { background: var(--r, var(--night-2)); }
+.side-tag { display: inline-block; flex: none; min-width: 38px; text-align: center; font-size: 11px; font-weight: 800; letter-spacing: .5px; padding: 1px 5px; box-shadow: 0 0 0 2px var(--ink); align-self: center; }
+.team { border-bottom: 4px solid var(--side, transparent); padding-bottom: 6px; }
+.team-id { display: flex; align-items: center; gap: 6px; margin: 3px 0 2px; }
+.team.right .team-id { justify-content: flex-end; }
+.you { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--good); }
+.ev { align-items: baseline; padding-left: 6px; box-shadow: inset 4px 0 var(--side, transparent); }
+.ev .side-tag { align-self: baseline; }
+.ev.mine { background: rgba(58, 154, 75, 0.08); }
+.ev .txt { min-width: 0; }
+.list .side-tag { margin-right: 4px; }
+
+/* ---------- telas grandes: a partida usa o espaço disponível ---------- */
+.overlay .window.match-window { max-width: min(1440px, 96vw); }
+.match-window .match .feed { height: max(420px, calc(100vh - 340px)); }
+@media (min-width: 1500px) {
+  .match-window .live-grid { grid-template-columns: minmax(0, 1.6fr) minmax(360px, 1fr); }
+  .match-window .ev { font-size: 16px; padding: 7px 6px; }
+}
+@media (max-width: 900px) { .match-window .match .feed { height: 300px; } }
+
+/* ---------- monitores grandes: escala a interface em vez de sobrar tela vazia ---------- */
+:root { --z: 1; }
+@media (min-width: 1680px) and (min-height: 900px) { :root { --z: 1.2; } }
+@media (min-width: 2200px) and (min-height: 1150px) { :root { --z: 1.4; } }
+.game { zoom: var(--z); }
+.game { min-height: calc(100vh / var(--z)); }
+.overlay .window.match-window { max-width: min(1440px, calc(96vw / var(--z))); }
+.match-window .match .feed { height: max(360px, calc(100vh / var(--z) - 400px)); }
+@media (max-width: 900px) { .match-window .match .feed { height: 300px; } }

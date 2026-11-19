@@ -256,7 +256,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       )}
 
       {prep && (
-        <Modal title="Dia de jogo" wide>
+        <Modal title="Dia de jogo" wide className="match-window">
           <MatchDay career={c} prep={prep} onDone={onMatchDone} />
         </Modal>
       )}
