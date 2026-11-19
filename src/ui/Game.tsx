@@ -59,6 +59,12 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   const pause = () => { if (speed > 0) resumeSpeed.current = speed; setSpeed(0); };
 
+  // depois de uma partida o tempo volta na velocidade mais lenta, para dar tempo de mexer no elenco antes do próximo jogo
+  const slowDownAfterMatch = () => {
+    resumeSpeed.current = 1;
+    setSpeed((s) => (s > 1 ? 1 : s));
+  };
+
   const act: Act = (fn) => {
     const err = fn(ref.current);
     if (typeof err === 'string') setToast(err);
@@ -72,7 +78,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     const t = setInterval(() => {
       const career = ref.current;
       if (isMatchDay(career)) {
-        if (autoSim) { simulateRound(career); track('match_simulated', { mode: 'auto' }); save(); force(); return; }
+        if (autoSim) { simulateRound(career); track('match_simulated', { mode: 'auto' }); slowDownAfterMatch(); save(); force(); return; }
         setPrep(prepareRound(career));
         return;
       }
@@ -111,6 +117,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     track('match_finished', { round: p.round + 1, season: ref.current.season.year, result: gf > ga ? 'win' : gf < ga ? 'loss' : 'draw', goals_for: gf, goals_against: ga, home });
     completeRound(ref.current, p, o);
     setPrep(null);
+    slowDownAfterMatch();
     save();
     force();
   };
