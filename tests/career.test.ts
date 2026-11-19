@@ -1,42 +1,114 @@
-import { finishSeason, newCareer, playRound, divisionOf, buyPlayer, marketListings } from '../src/game/career';
-import { isSeasonOver } from '../src/core/season';
+import {
+  acceptOffer, advanceDay, buyPlayer, challengeOptions, closeSeason, completeRound, isMatchDay, liveRng,
+  marketListings, myClubId, newWorld, prepareRound, simulateRound, startCareer, type Career,
+} from '../src/game/career';
+import { changeStyle, runToEnd, substitute, toOutcome } from '../src/sports/football/engine';
 
-describe('carreira', () => {
-  it('mesma seed → mesma temporada inteira (base do modo online)', () => {
-    const a = newCareer(123), b = newCareer(123);
-    while (!isSeasonOver(a.season)) { playRound(a); playRound(b); }
+/** Joga até o fim da temporada simulando as rodadas. */
+function playSeason(c: Career) {
+  let guard = 0;
+  while (c.phase !== 'encerramento' && guard++ < 2000) {
+    if (c.unemployed) break;
+    if (isMatchDay(c)) simulateRound(c);
+    else advanceDay(c);
+  }
+}
+
+function start(seed: number, type: 'baixo' | 'crescimento' | 'pressao' = 'baixo') {
+  const w = newWorld(seed, 'Teste');
+  const clubId = challengeOptions(w, type)[0]!.clubId;
+  return startCareer(seed, 'Teste', type, clubId);
+}
+
+describe('carreira com calendário', () => {
+  it('empreendedor é separado da organização (GDD 2.7)', () => {
+    const c = start(1);
+    const club = c.clubs[myClubId(c)]!;
+    expect(c.entrepreneur.bonds[0]!.type).toBe('contratado');
+    const cash0 = c.entrepreneur.cash, budget0 = club.budget;
+    while (c.date < '2027-02-01') advanceDay(c); // passa o dia 1º de fev → salário mensal
+    expect(c.entrepreneur.cash).toBeGreaterThan(cash0);
+    expect(club.budget).not.toBe(budget0);
+  });
+
+  it('desafios oferecem clubes da divisão certa com objetivo', () => {
+    const w = newWorld(3);
+    const low = challengeOptions(w, 'baixo');
+    const high = challengeOptions(w, 'pressao');
+    expect(low.every((o) => w.season.divisions[3]!.teamIds.includes(o.clubId))).toBe(true);
+    expect(high.every((o) => w.season.divisions[0]!.teamIds.includes(o.clubId))).toBe(true);
+    expect(high.some((o) => o.objective === 'titulo')).toBe(true);
+  });
+
+  it('mesma seed → mesma carreira (base do online)', () => {
+    const a = start(123), b = start(123);
+    playSeason(a); playSeason(b);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('roda 3 temporadas completas sem quebrar e mantém elencos válidos', () => {
-    const c = newCareer(9);
+  it('partida ao vivo com a mesma sequência dá o mesmo resultado que simular', () => {
+    const a = start(7), b = start(7);
+    while (!isMatchDay(a)) { advanceDay(a); advanceDay(b); }
+    simulateRound(a);
+    const prep = prepareRound(b);
+    runToEnd(prep.match, liveRng(prep));
+    completeRound(b, prep, toOutcome(prep.match));
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('intervenções mudam a partida e são aceitas pelo motor', () => {
+    const c = start(8);
+    while (!isMatchDay(c)) advanceDay(c);
+    const prep = prepareRound(c);
+    const rng = liveRng(prep);
+    const side = prep.match.home.clubId === myClubId(c) ? 'home' : 'away';
+    runToEnd(prep.match, rng, 30);
+    changeStyle(prep.match, side, 'attacking');
+    const s = prep.match[side];
+    expect(substitute(prep.match, side, s.FW[0]!.id, s.bench.find((p) => p.position !== 'GK')!.id)).toBeNull();
+    runToEnd(prep.match, rng);
+    const o = toOutcome(prep.match);
+    expect(o.events.some((e) => e.type === 'tactic')).toBe(true);
+    expect(o.events.some((e) => e.type === 'sub')).toBe(true);
+    completeRound(c, prep, o);
+    expect(c.season.round).toBe(1);
+  });
+
+  it('roda 3 temporadas completas com elencos válidos e calendário coerente', () => {
+    const c = start(9);
     for (let s = 0; s < 3; s++) {
-      while (!isSeasonOver(c.season)) playRound(c);
-      finishSeason(c);
+      playSeason(c);
+      if (c.unemployed) {
+        expect(c.offers.length).toBeGreaterThan(0);
+      }
+      if (c.phase === 'encerramento') closeSeason(c);
+      if (c.unemployed) {
+        // aceita a primeira proposta e segue
+        const o = c.offers[0]!;
+        acceptOffer(c, o);
+      }
     }
     expect(c.season.year).toBe(2030);
-    expect(c.history).toHaveLength(3);
+    expect(c.entrepreneur.history).toHaveLength(3);
+    expect(c.awards.length).toBe(12);
     for (const club of Object.values(c.clubs)) {
       expect(club.players.filter((p) => p.position === 'GK').length).toBeGreaterThanOrEqual(1);
       expect(club.players.length).toBeGreaterThanOrEqual(16);
     }
-    expect(c.season.divisions.every((d) => d.teamIds.length === 12)).toBe(true);
-    expect(divisionOf(c, c.managerClubId)).toBeGreaterThanOrEqual(0);
   });
 
-  it('save sobrevive a JSON (localStorage/Postgres)', () => {
-    const c = newCareer(5);
-    playRound(c);
-    const restored = JSON.parse(JSON.stringify(c));
-    playRound(c); playRound(restored);
-    expect(JSON.stringify(restored)).toBe(JSON.stringify(c));
+  it('save sobrevive a JSON', () => {
+    const c = start(5);
+    for (let i = 0; i < 40; i++) isMatchDay(c) ? simulateRound(c) : advanceDay(c);
+    const r: Career = JSON.parse(JSON.stringify(c));
+    for (let i = 0; i < 40; i++) { isMatchDay(c) ? simulateRound(c) : advanceDay(c); isMatchDay(r) ? simulateRound(r) : advanceDay(r); }
+    expect(JSON.stringify(r)).toBe(JSON.stringify(c));
   });
 
-  it('compra respeita orçamento', () => {
-    const c = newCareer(11);
-    const me = c.clubs[c.managerClubId]!;
-    me.budget = 0;
+  it('compra respeita o caixa', () => {
+    const c = start(11);
+    c.clubs[myClubId(c)]!.budget = 0;
     const l = marketListings(c)[0]!;
-    expect(buyPlayer(c, l.player.id, l.clubId)).toBe('Dinheiro insuficiente.');
+    expect(buyPlayer(c, l.player.id, l.clubId)).toBe('Caixa insuficiente.');
   });
 });

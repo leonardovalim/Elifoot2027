@@ -1,494 +1,184 @@
-import { useEffect, useMemo, useState } from 'react';
-import { divisionStandings, isSeasonOver, totalRounds } from '../core/season';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { OBJECTIVE_LABEL } from '../core/entrepreneur';
 import {
-  buyPlayer,
+  CHALLENGES,
+  challengeOptions,
+  clubStrength,
   divisionOf,
-  finishSeason,
-  marketListings,
-  newCareer,
-  playRound,
-  sellPlayer,
+  newWorld,
+  startCareer,
   type Career,
-  type RoundReport,
+  type ChallengeType,
 } from '../game/career';
-import { football } from '../sports/football/engine';
-import { playerValue } from '../sports/football/generate';
-import { FORMATIONS, overall, pickLineup } from '../sports/football/lineup';
-import type { Club, Formation, Player, Style } from '../sports/football/types';
-import { POS_LABEL, STYLE_LABEL, money } from './format';
+import { Game } from './Game';
 import { clearCareer, loadCareer, saveCareer } from './storage';
+import { track } from './analytics';
+import { loadVotes, saveVote } from './interest';
+import { Badge, Modal, Stars, money } from './util';
 
-type Tab = 'rodada' | 'elenco' | 'tabela' | 'mercado' | 'clube';
-const POS_ORDER = { GK: 0, DF: 1, MF: 2, FW: 3 } as const;
+type Screen = 'title' | 'create' | 'game';
+
+const SPORTS = [
+  { id: 'futebol', name: 'Futebol', icon: '⚽', ready: true, pitch: '' },
+  { id: 'basquete', name: 'Basquete', icon: '🏀', ready: false, pitch: 'Franquias, draft, rotação de elenco e teto salarial.' },
+  { id: 'volei', name: 'Vôlei', icon: '🏐', ready: false, pitch: 'Clubes, fundamentos, posições e competições nacionais.' },
+  { id: 'tenis', name: 'Tênis', icon: '🎾', ready: false, pitch: 'Carreira de um atleta: ranking, calendário e preparação.' },
+  { id: 'auto', name: 'Automobilismo', icon: '🏎️', ready: false, pitch: 'Equipe, pilotos, carros, engenharia e estratégia de corrida.' },
+  { id: 'mma', name: 'MMA', icon: '🥊', ready: false, pitch: 'Academia, lutadores, categorias de peso e eventos.' },
+];
+type Sport = (typeof SPORTS)[number];
+const VOTE_LABEL = ['', 'Pouco', 'Talvez', 'Gostaria', 'Muito', 'Quero já!'];
 
 export function App() {
   const [career, setCareer] = useState<Career | null>(() => loadCareer());
-  const [pending, setPending] = useState<Career | null>(null);
+  const [screen, setScreen] = useState<Screen>('title');
+  useEffect(() => { track('$pageview', { screen }); }, [screen]);
+  useEffect(() => { track('app_opened', { has_save: !!career }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!career) {
+  if (screen === 'game' && career) {
     return (
-      <NewGame
-        pending={pending}
-        onCreate={() => setPending(newCareer((Date.now() ^ (Math.random() * 1e9)) >>> 0))}
-        onPick={(clubId) => {
-          if (!pending) return;
-          const c = { ...pending, managerClubId: clubId };
-          saveCareer(c);
-          setCareer(c);
-          setPending(null);
+      <Game
+        initial={career}
+        onReset={() => {
+          if (!confirm('Apagar o save e voltar ao início?')) return;
+          clearCareer();
+          setCareer(null);
+          setScreen('title');
         }}
       />
     );
   }
+
+  if (screen === 'create') {
+    return (
+      <Create
+        onBack={() => setScreen('title')}
+        onStart={(c) => { saveCareer(c); setCareer(c); setScreen('game'); }}
+      />
+    );
+  }
+
   return (
-    <Game
-      career={career}
-      onChange={(c) => {
-        saveCareer(c);
-        setCareer(c);
-      }}
-      onQuit={() => {
-        if (confirm('Apagar o save e começar de novo?')) {
-          clearCareer();
-          setCareer(null);
-        }
-      }}
-    />
+    <div className="title-screen">
+      <div className="logo">
+        <span className="trophy">🏆</span>
+        <h1>MESTRES<br />DO ESPORTE</h1>
+        <p>Construa seu legado.</p>
+      </div>
+      <div className="menu">
+        {career && <button className="btn primary big" onClick={() => setScreen('game')}>Continuar carreira</button>}
+        <button className={`btn big ${career ? '' : 'primary'}`} onClick={() => {
+          if (career && !confirm('Começar uma nova carreira apaga a atual. Continuar?')) return;
+          setScreen('create');
+        }}>Nova carreira</button>
+      </div>
+      <p className="hint foot">Versão de testes</p>
+    </div>
   );
 }
 
-function NewGame({ pending, onCreate, onPick }: { pending: Career | null; onCreate: () => void; onPick: (id: string) => void }) {
-  useEffect(() => {
-    if (!pending) onCreate();
-  }, [pending, onCreate]);
-  if (!pending) return null;
-  const last = pending.season.divisions.length - 1;
-  const clubs = pending.season.divisions[last]!.teamIds.map((id) => pending.clubs[id]!);
+function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) => void }) {
+  const [seed, setSeed] = useState(() => (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
+  const [name, setName] = useState('');
+  const [type, setType] = useState<ChallengeType | null>(null);
+  const [nameError, setNameError] = useState(false);
+  const [votes, setVotes] = useState(loadVotes);
+  const [voting, setVoting] = useState<Sport | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const world = useMemo(() => newWorld(seed), [seed]);
+  const options = useMemo(() => (type ? challengeOptions(world, type) : []), [world, type]);
+
   return (
-    <div className="shell narrow">
-      <header className="brand">
-        <h1>ELIFOOT<span>2027</span></h1>
-        <p>Codinome do projeto · gestão esportiva · futebol</p>
+    <div className="create">
+      <header className="create-head">
+        <button className="btn ghost" onClick={onBack}>‹ Voltar</button>
+        <h2>Nova carreira</h2>
       </header>
-      <section className="panel">
-        <h2>Escolha seu clube na Divisão {last + 1}</h2>
-        <p className="muted">Comece por baixo. Suba de divisão, equilibre o caixa, monte um elenco campeão.</p>
-        <div className="club-grid">
-          {clubs.map((c) => (
-            <button key={c.id} className="club-pick" onClick={() => onPick(c.id)}>
-              <Badge club={c} />
-              <strong>{c.name}</strong>
-              <span className="muted">Força {teamRating(c)} · {money(c.budget)}</span>
+
+      <section className="window">
+        <header className="window-title"><span>1 · Empreendedor</span></header>
+        <div className="window-body">
+          <label className="field">Seu nome
+            <input ref={nameRef} value={name} maxLength={24} autoFocus autoComplete="name" aria-invalid={nameError}
+              onChange={(e) => { setName(e.target.value); setNameError(false); }} />
+            {nameError && <span className="field-error">Digite seu nome para assumir o desafio.</span>}
+          </label>
+          <div className="sports">
+            {SPORTS.map((s) => (
+              <button key={s.id} className={`sport ${s.ready ? 'on' : 'off'}`} onClick={() => { if (!s.ready) { setVoting(s); track('sport_interest_opened', { sport: s.id }); } }}
+                aria-label={s.ready ? s.name : `${s.name}, em breve. Votar interesse`}>
+                <span className="ico">{s.icon}</span>{s.name}
+                {!s.ready && (votes[s.id] ? <span className="voted">{'★'.repeat(votes[s.id]!)}</span> : <span className="soon">em breve</span>)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="window">
+        <header className="window-title"><span>2 · Escolha seu desafio</span></header>
+        <div className="window-body challenges">
+          {(Object.keys(CHALLENGES) as ChallengeType[]).map((t) => (
+            <button key={t} className={`challenge ${type === t ? 'on' : ''}`} onClick={() => setType(t)}>
+              <b>{CHALLENGES[t].title}</b>
+              <span>{CHALLENGES[t].text}</span>
             </button>
           ))}
         </div>
-        <button className="link" onClick={onCreate}>↻ Gerar outro mundo</button>
-      </section>
-    </div>
-  );
-}
-
-function Game({ career, onChange, onQuit }: { career: Career; onChange: (c: Career) => void; onQuit: () => void }) {
-  const [tab, setTab] = useState<Tab>('rodada');
-  const [toast, setToast] = useState<string | null>(null);
-  const me = career.clubs[career.managerClubId]!;
-  const myDiv = divisionOf(career, me.id);
-
-  const mutate = (fn: (c: Career) => string | null | void) => {
-    const c = structuredClone(career);
-    const err = fn(c);
-    if (typeof err === 'string') {
-      setToast(err);
-      return;
-    }
-    onChange(c);
-  };
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="me">
-          <Badge club={me} />
-          <div>
-            <strong>{me.name}</strong>
-            <span className="muted">
-              Divisão {myDiv + 1} · Temporada {career.season.year} · Rodada {Math.min(career.season.round + 1, totalRounds(career.season))}/{totalRounds(career.season)}
-            </span>
-          </div>
-        </div>
-        <div className={`cash ${me.budget < 0 ? 'neg' : ''}`}>{money(me.budget)}</div>
-      </header>
-      <nav className="tabs">
-        {(['rodada', 'elenco', 'tabela', 'mercado', 'clube'] as Tab[]).map((t) => (
-          <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-            {t[0]!.toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </nav>
-      <main>
-        {tab === 'rodada' && <RoundTab career={career} mutate={mutate} />}
-        {tab === 'elenco' && <SquadTab career={career} mutate={mutate} />}
-        {tab === 'tabela' && <TableTab career={career} />}
-        {tab === 'mercado' && <MarketTab career={career} mutate={mutate} />}
-        {tab === 'clube' && <ClubTab career={career} mutate={mutate} onQuit={onQuit} />}
-      </main>
-      {toast && <div className="toast">{toast}</div>}
-    </div>
-  );
-}
-
-type Mutate = (fn: (c: Career) => string | null | void) => void;
-
-// ---------------- Rodada ----------------
-
-function RoundTab({ career, mutate }: { career: Career; mutate: Mutate }) {
-  const [live, setLive] = useState<{ report: RoundReport; minute: number } | null>(null);
-  const [speed, setSpeed] = useState(70);
-  const myDiv = divisionOf(career, career.managerClubId);
-  const over = isSeasonOver(career.season);
-
-  useEffect(() => {
-    if (!live || live.minute >= 95) return;
-    const t = setTimeout(() => setLive({ ...live, minute: live.minute + 1 }), speed);
-    return () => clearTimeout(t);
-  }, [live, speed]);
-
-  const report = live?.report ?? career.lastReport;
-  const minute = live ? live.minute : 95;
-  const running = !!live && live.minute < 95;
-
-  const next = !over ? career.season.divisions[myDiv]!.rounds[career.season.round]!.find(
-    (f) => f.home === career.managerClubId || f.away === career.managerClubId,
-  ) : undefined;
-  // durante a animação mostramos o jogo em andamento — sem spoiler do resultado final
-  const shown = running
-    ? report!.matches.find((m) => m.home === career.managerClubId || m.away === career.managerClubId)
-    : next;
-
-  return (
-    <div className="grid2">
-      <section className="panel">
-        {over && !running ? (
-          <>
-            <h2>Fim da temporada {career.season.year}</h2>
-            <SeasonSummary career={career} />
-            <button className="primary" onClick={() => mutate((c) => { finishSeason(c); })}>
-              Iniciar temporada {career.season.year + 1} →
-            </button>
-          </>
-        ) : (
-          <>
-            <h2>{running ? 'Em andamento' : 'Próximo jogo'}</h2>
-            {shown && (
-              <div className="fixture-big">
-                <ClubName club={career.clubs[shown.home]!} />
-                <span className="vs">x</span>
-                <ClubName club={career.clubs[shown.away]!} />
-              </div>
-            )}
-            <p className="muted">
-              {shown?.home === career.managerClubId ? 'Em casa' : 'Fora de casa'} · {career.clubs[career.managerClubId]!.formation} ·{' '}
-              {STYLE_LABEL[career.clubs[career.managerClubId]!.style]}
-            </p>
-            <div className="row">
-              {!running && (
-                <button
-                  className="primary"
-                  onClick={() => {
-                    let rep: RoundReport | undefined;
-                    mutate((c) => { rep = playRound(c); });
-                    if (rep) setLive({ report: rep, minute: 0 });
-                  }}
-                >
-                  ▶ Jogar rodada
-                </button>
-              )}
-              {running && (
-                <button onClick={() => setSpeed(speed > 20 ? 8 : 70)}>{speed > 20 ? '⏩ Acelerar' : 'Normal'}</button>
-              )}
-              {running && <button onClick={() => setLive({ ...live!, minute: 95 })}>⏭ Pular</button>}
-            </div>
-          </>
-        )}
       </section>
 
-      <section className="panel">
-        <h2>
-          {report ? `Rodada ${report.round}` : 'Resultados'}
-          {running && <span className="clock">{Math.min(minute, 90)}'{minute > 90 ? `+${minute - 90}` : ''}</span>}
-        </h2>
-        {!report && <p className="muted">Nenhum jogo disputado ainda.</p>}
-        {report && <LiveBoard career={career} report={report} minute={minute} division={myDiv} />}
-        {report?.finance && !running && (
-          <p className="muted small">
-            Bilheteria + cotas: {money(report.finance.income)} · Salários: {money(-report.finance.wages)}
-          </p>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function LiveBoard({ career, report, minute, division }: { career: Career; report: RoundReport; minute: number; division: number }) {
-  const [div, setDiv] = useState(division);
-  const matches = report.matches.filter((m) => m.divisionIndex === div);
-  const myMatch = report.matches.find((m) => m.home === career.managerClubId || m.away === career.managerClubId);
-  return (
-    <>
-      <div className="chips">
-        {career.season.divisions.map((_, i) => (
-          <button key={i} className={i === div ? 'on' : ''} onClick={() => setDiv(i)}>D{i + 1}</button>
-        ))}
-      </div>
-      <table className="board">
-        <tbody>
-          {matches.map((m) => {
-            const goals = m.outcome.events.filter((e) => e.type === 'goal' && e.minute <= minute);
-            const h = goals.filter((g) => g.side === 'home').length;
-            const a = goals.filter((g) => g.side === 'away').length;
-            const fresh = goals.some((g) => minute - g.minute < 3 && minute < 95);
-            const mine = m === myMatch;
-            return (
-              <tr key={m.home} className={`${mine ? 'mine' : ''} ${fresh ? 'flash' : ''}`}>
-                <td className="r">{career.clubs[m.home]!.name}</td>
-                <td className="score">{h} - {a}</td>
-                <td>{career.clubs[m.away]!.name}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {myMatch && div === division && (
-        <div className="feed">
-          <div className="poss">
-            Posse: {Math.round(myMatch.outcome.possession * 100)}% x {100 - Math.round(myMatch.outcome.possession * 100)}%
-          </div>
-          {myMatch.outcome.events
-            .filter((e) => e.minute <= minute && e.type !== 'miss')
-            .slice()
-            .reverse()
-            .slice(0, 12)
-            .map((e, i) => {
-              const team = career.clubs[e.side === 'home' ? myMatch.home : myMatch.away]!;
-              const icon = { goal: '⚽', save: '🧤', post: '🥅', yellow: '🟨', red: '🟥', miss: '' }[e.type];
-              const txt = { goal: 'GOL de', save: 'Defesa no chute de', post: 'Na trave! Chute de', yellow: 'Amarelo para', red: 'EXPULSO:', miss: '' }[e.type];
+      {type && (
+        <section className="window">
+          <header className="window-title">
+            <span>3 · Oportunidades</span>
+            <button className="btn sm ghost" onClick={() => setSeed((seed * 1103515245 + 12345) >>> 0)}>↻ outro universo</button>
+          </header>
+          <div className="window-body offers">
+            {options.map((o) => {
+              const club = world.clubs[o.clubId]!;
               return (
-                <div key={i} className={`ev ${e.type}`}>
-                  <span className="min">{e.minute}'</span> {icon} {txt} <strong>{e.playerName}</strong> <span className="muted">({team.short})</span>
+                <div key={o.clubId} className="offer">
+                  <div className="offer-head"><Badge club={club} size="lg" /><div><span className="offer-name">{club.name}</span><span className="hint"><span className="nw">Divisão {divisionOf(world, club.id) + 1}</span> · <span className="nw">desde {club.founded}</span></span></div></div>
+                  <dl className="kv">
+                    <dt>Orçamento</dt><dd>{money(club.budget)}</dd>
+                    <dt>Reputação</dt><dd>{club.reputation}/100</dd>
+                    <dt>Força do elenco</dt><dd>{Math.round(clubStrength(club))}</dd>
+                    <dt>Estrutura</dt><dd><Stars n={club.trainingCenter} /></dd>
+                    <dt>Seu salário</dt><dd>{money(o.monthlySalary)}/mês</dd>
+                  </dl>
+                  <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
+                  <button className="btn primary" onClick={() => {
+                    if (!name.trim()) { setNameError(true); nameRef.current?.focus(); nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+                    track('career_created', { challenge: type, division: divisionOf(world, club.id) + 1, objective: o.objective, club_reputation: club.reputation });
+                    onStart(startCareer(seed, name.trim(), type, o.clubId));
+                  }}>
+                    Assumir o desafio
+                  </button>
                 </div>
               );
             })}
-        </div>
+          </div>
+        </section>
       )}
-    </>
-  );
-}
 
-function SeasonSummary({ career }: { career: Career }) {
-  const d = divisionOf(career, career.managerClubId);
-  const table = divisionStandings(career.season.divisions[d]!, football.points);
-  const pos = table.findIndex((r) => r.teamId === career.managerClubId) + 1;
-  const last = career.season.divisions.length - 1;
-  const msg =
-    pos <= 2 && d > 0 ? '🎉 Acesso garantido!' : pos === 1 ? '🏆 Campeão!' : pos >= table.length - 1 && d < last ? '⬇ Rebaixado.' : 'Temporada encerrada.';
-  return (
-    <p>
-      Você terminou em <strong>{pos}º</strong> na Divisão {d + 1}. {msg}
-    </p>
-  );
-}
-
-// ---------------- Elenco ----------------
-
-function SquadTab({ career, mutate }: { career: Career; mutate: Mutate }) {
-  const me = career.clubs[career.managerClubId]!;
-  const lineup = useMemo(() => pickLineup(me), [me]);
-  const starters = new Set([lineup.GK, ...lineup.DF, ...lineup.MF, ...lineup.FW].map((p) => p.id));
-  const players = [...me.players].sort((a, b) => POS_ORDER[a.position] - POS_ORDER[b.position] || overall(b) - overall(a));
-
-  return (
-    <section className="panel">
-      <div className="row wrap">
-        <label>
-          Formação{' '}
-          <select value={me.formation} onChange={(e) => mutate((c) => { c.clubs[c.managerClubId]!.formation = e.target.value as Formation; })}>
-            {Object.keys(FORMATIONS).map((f) => <option key={f}>{f}</option>)}
-          </select>
-        </label>
-        <label>
-          Estilo{' '}
-          <select value={me.style} onChange={(e) => mutate((c) => { c.clubs[c.managerClubId]!.style = e.target.value as Style; })}>
-            {(Object.keys(STYLE_LABEL) as Style[]).map((s) => <option key={s} value={s}>{STYLE_LABEL[s]}</option>)}
-          </select>
-        </label>
-        <span className="muted small">Titulares escolhidos automaticamente pelos melhores de cada posição.</span>
-      </div>
-      <div className="scroll">
-        <table className="data">
-          <thead>
-            <tr><th></th><th>Pos</th><th>Nome</th><th>Idade</th><th>Geral</th><th>ATA</th><th>DEF</th><th>PAS</th><th>GOL</th><th>Salário</th><th>Valor</th><th></th></tr>
-          </thead>
-          <tbody>
-            {players.map((p) => (
-              <tr key={p.id} className={starters.has(p.id) ? 'starter' : ''}>
-                <td>{starters.has(p.id) ? '●' : ''}</td>
-                <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
-                <td>{p.name}{p.suspendedRounds > 0 && <span className="tag">suspenso</span>}{p.age <= 21 && p.potential - overall(p) >= 8 && <span className="tag good">promessa</span>}</td>
-                <td>{p.age}</td>
-                <td><strong>{overall(p)}</strong></td>
-                <Attr v={p.attack} /><Attr v={p.defense} /><Attr v={p.passing} /><Attr v={p.goalkeeping} />
-                <td>{money(p.wage)}</td>
-                <td>{money(playerValue(p))}</td>
-                <td>
-                  <button className="small" onClick={() => {
-                    if (confirm(`Vender ${p.name} por ~${money(Math.round(playerValue(p) * 0.85))}?`)) mutate((c) => sellPlayer(c, p.id));
-                  }}>Vender</button>
-                </td>
-              </tr>
+      {voting && (
+        <Modal title={`${voting.icon} ${voting.name} · em breve`} onClose={() => setVoting(null)}>
+          <p>{voting.pitch}</p>
+          <p><b>Quanto você quer gerenciar {voting.name.toLowerCase() === 'mma' ? 'MMA' : voting.name.toLowerCase()} no Mestres do Esporte?</b></p>
+          <div className="vote" role="radiogroup" aria-label="Interesse de 1 a 5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} role="radio" aria-checked={votes[voting.id] === n} aria-label={`${n} — ${VOTE_LABEL[n]}`}
+                className={(votes[voting.id] ?? 0) >= n ? 'on' : ''}
+                onClick={() => setVotes(saveVote(voting.id, n))}>★</button>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-const Attr = ({ v }: { v: number }) => <td className={v >= 75 ? 'hi' : v < 35 ? 'lo' : ''}>{v}</td>;
-
-// ---------------- Tabela ----------------
-
-function TableTab({ career }: { career: Career }) {
-  const myDiv = divisionOf(career, career.managerClubId);
-  const [d, setD] = useState(myDiv);
-  const div = career.season.divisions[d]!;
-  const rows = divisionStandings(div, football.points);
-  const last = career.season.divisions.length - 1;
-  return (
-    <section className="panel">
-      <div className="chips">
-        {career.season.divisions.map((_, i) => (
-          <button key={i} className={i === d ? 'on' : ''} onClick={() => setD(i)}>Divisão {i + 1}</button>
-        ))}
-      </div>
-      <div className="scroll">
-        <table className="data">
-          <thead><tr><th>#</th><th>Clube</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>GP</th><th>GC</th><th>SG</th></tr></thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.teamId} className={`${r.teamId === career.managerClubId ? 'mine' : ''} ${i < 2 && d > 0 ? 'up' : ''} ${i >= rows.length - 2 && d < last ? 'down' : ''}`}>
-                <td>{i + 1}</td>
-                <td><ClubName club={career.clubs[r.teamId]!} /></td>
-                <td><strong>{r.points}</strong></td>
-                <td>{r.played}</td><td>{r.won}</td><td>{r.drawn}</td><td>{r.lost}</td>
-                <td>{r.scoreFor}</td><td>{r.scoreAgainst}</td><td>{r.scoreFor - r.scoreAgainst}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="muted small"><span className="legend up" /> acesso · <span className="legend down" /> rebaixamento</p>
-    </section>
-  );
-}
-
-// ---------------- Mercado ----------------
-
-function MarketTab({ career, mutate }: { career: Career; mutate: Mutate }) {
-  const [pos, setPos] = useState<'ALL' | Player['position']>('ALL');
-  const me = career.clubs[career.managerClubId]!;
-  const listings = useMemo(() => marketListings(career, 60), [career]);
-  const shown = listings.filter((l) => pos === 'ALL' || l.player.position === pos);
-  return (
-    <section className="panel">
-      <div className="row wrap">
-        <div className="chips">
-          {(['ALL', 'GK', 'DF', 'MF', 'FW'] as const).map((p) => (
-            <button key={p} className={pos === p ? 'on' : ''} onClick={() => setPos(p)}>{p === 'ALL' ? 'Todos' : POS_LABEL[p]}</button>
-          ))}
-        </div>
-        <span className="muted small">Caixa: {money(me.budget)} · Elenco: {me.players.length}/26 · lista muda a cada rodada</span>
-      </div>
-      <div className="scroll">
-        <table className="data">
-          <thead><tr><th>Pos</th><th>Nome</th><th>Idade</th><th>Geral</th><th>Clube</th><th>Salário</th><th>Preço</th><th></th></tr></thead>
-          <tbody>
-            {shown.map((l) => (
-              <tr key={l.player.id}>
-                <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
-                <td>{l.player.name}</td>
-                <td>{l.player.age}</td>
-                <td><strong>{overall(l.player)}</strong></td>
-                <td className="muted">{career.clubs[l.clubId]?.name}</td>
-                <td>{money(l.player.wage)}</td>
-                <td>{money(l.price)}</td>
-                <td><button className="small" disabled={me.budget < l.price} onClick={() => mutate((c) => buyPlayer(c, l.player.id, l.clubId))}>Comprar</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-// ---------------- Clube ----------------
-
-function ClubTab({ career, mutate, onQuit }: { career: Career; mutate: Mutate; onQuit: () => void }) {
-  const me = career.clubs[career.managerClubId]!;
-  const wages = me.players.reduce((a, p) => a + p.wage, 0);
-  return (
-    <div className="grid2">
-      <section className="panel">
-        <h2>Finanças</h2>
-        <dl className="kv">
-          <dt>Caixa</dt><dd className={me.budget < 0 ? 'neg' : ''}>{money(me.budget)}</dd>
-          <dt>Folha por rodada</dt><dd>{money(wages)}</dd>
-          <dt>Torcida</dt><dd>{me.fans.toLocaleString('pt-BR')}</dd>
-          <dt>Estádio</dt><dd>{me.stadium.toLocaleString('pt-BR')} lugares</dd>
-          <dt>Ingresso</dt>
-          <dd className="row">
-            <button className="small" onClick={() => mutate((c) => { const x = c.clubs[c.managerClubId]!; x.ticketPrice = Math.max(1, x.ticketPrice - 1); })}>−</button>
-            {money(me.ticketPrice)}
-            <button className="small" onClick={() => mutate((c) => { c.clubs[c.managerClubId]!.ticketPrice += 1; })}>+</button>
-          </dd>
-        </dl>
-        <p className="muted small">Ingresso caro aumenta receita por torcedor, mas esvazia o estádio.</p>
-        <h2>Histórico</h2>
-        {career.history.length === 0 ? <p className="muted">Primeira temporada.</p> : (
-          <ul className="plain">{career.history.map((h) => <li key={h.year}>{h.year}: {h.position}º na Divisão {h.division}</li>)}</ul>
-        )}
-        <button className="link danger" onClick={onQuit}>Apagar save e recomeçar</button>
-      </section>
-      <section className="panel">
-        <h2>Notícias</h2>
-        <ul className="plain news">{career.news.slice(0, 25).map((n, i) => <li key={i}>{n}</li>)}</ul>
-      </section>
+          </div>
+          <div className="vote-scale"><span>Pouco</span><span>Quero já!</span></div>
+          {votes[voting.id] ? (
+            <p className="center ok"><b>{VOTE_LABEL[votes[voting.id]!]}</b>, voto registrado. As modalidades mais votadas chegam primeiro.</p>
+          ) : <p className="center hint">As modalidades mais votadas chegam primeiro.</p>}
+          <div className="row center"><button className="btn primary" onClick={() => setVoting(null)}>{votes[voting.id] ? 'Fechar' : 'Agora não'}</button></div>
+        </Modal>
+      )}
     </div>
   );
-}
-
-// ---------------- util ----------------
-
-function teamRating(c: Club) {
-  const l = pickLineup(c);
-  const xi = [l.GK, ...l.DF, ...l.MF, ...l.FW];
-  return Math.round(xi.reduce((a, p) => a + overall(p), 0) / xi.length);
-}
-
-function Badge({ club }: { club: Club }) {
-  return (
-    <span className="badge" style={{ background: club.colors[0], color: club.colors[1] }}>
-      {club.short}
-    </span>
-  );
-}
-
-function ClubName({ club }: { club: Club }) {
-  return <span className="clubname"><Badge club={club} /> {club.name}</span>;
 }
