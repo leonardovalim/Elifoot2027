@@ -340,11 +340,11 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .match .feed { background: var(--paper-3); box-shadow: 0 0 0 2px var(--ink); padding: 8px; height: 420px; overflow-y: auto; }
 .ev { display: flex; gap: 8px; padding: 5px 0; font-size: 15px; border-bottom: 2px dotted var(--paper-2); }
 .ev .min { color: var(--muted); min-width: 34px; }
-.ev.goal { font-weight: 700; color: var(--tomato-dk); font-size: 16px; }
-.ev.goal.mine { color: var(--good); }
-.ev.red { color: var(--bad); font-weight: 700; }
-.ev.half, .ev.end { justify-content: center; font-weight: 700; background: var(--paper-2); }
-.ev.tactic, .ev.sub { color: var(--muted); font-style: italic; }
+.ev.ev-goal { font-weight: 700; color: var(--tomato-dk); font-size: 16px; }
+.ev.ev-goal.mine { color: var(--good); }
+.ev.ev-red { color: var(--bad); font-weight: 700; }
+.ev.ev-half, .ev.ev-end { justify-content: center; font-weight: 700; background: var(--paper-2); }
+.ev.ev-tactic, .ev.ev-sub { color: var(--muted); font-style: italic; }
 .sub-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .sub-row select { max-width: 200px; }
 .motm { background: var(--ink); color: var(--paper); padding: 12px; display: flex; flex-direction: column; gap: 2px; position: relative; margin-bottom: 8px; }

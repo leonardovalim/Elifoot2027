@@ -51,7 +51,12 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const home = career.clubs[m.home.clubId]!;
   const away = career.clubs[m.away.clubId]!;
   const colors = matchColors(home, away);
-  const barColors = { '--l': colors.home.bg, '--r': colors.away.bg } as CSSProperties;
+  // seu time sempre à esquerda, adversário à direita (independe de mando de campo)
+  const L: Side = side;
+  const R: Side = side === 'home' ? 'away' : 'home';
+  const clubOf = { home, away };
+  const venue = side === 'home' ? 'em casa' : 'fora';
+  const barColors = { '--l': colors[L].bg, '--r': colors[R].bg } as CSSProperties;
 
   const simulateToEnd = () => {
     while (!m.finished) stepMinute(m, rng.current!);
@@ -62,15 +67,15 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   if (stage === 'pre') {
     return (
       <div className="match">
-        <p className="kicker">Rodada {p.round + 1} · {formatDate(career.date)} · {home.stadiumName}</p>
+        <p className="kicker">Rodada {p.round + 1} · {formatDate(career.date)} · {home.stadiumName} ({venue})</p>
         <div className="scoreboard">
-          <TeamHead club={home} color={colors.home} mine={side === 'home'} sub={`${m.home.formation} · ${STYLE_LABEL[m.home.style]}`} />
+          <TeamHead club={clubOf[L]} color={colors[L]} mine sub={`${m[L].formation} · ${STYLE_LABEL[m[L].style]}`} />
           <div className="score idle">×</div>
-          <TeamHead club={away} color={colors.away} mine={side === 'away'} sub={`${m.away.formation} · ${STYLE_LABEL[m.away.style]}`} right />
+          <TeamHead club={clubOf[R]} color={colors[R]} mine={false} sub={`${m[R].formation} · ${STYLE_LABEL[m[R].style]}`} right />
         </div>
         <div className="compare" style={barColors}>
-          <Compare label="Força do time" a={clubStrength(home)} b={clubStrength(away)} />
-          <Compare label="Condição média" a={avgCond(m.home)} b={avgCond(m.away)} />
+          <Compare label="Força do time" a={clubStrength(clubOf[L])} b={clubStrength(clubOf[R])} />
+          <Compare label="Condição média" a={avgCond(m[L])} b={avgCond(m[R])} />
         </div>
         <p className="hint center">Público esperado: {lastAttendance(home, away).toLocaleString('pt-BR')} torcedores</p>
         <div className="row center">
@@ -91,9 +96,9 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       <div className="match">
         <p className="kicker">Fim de jogo</p>
         <div className="scoreboard">
-          <TeamHead club={home} color={colors.home} mine={side === 'home'} />
-          <div className="score">{o.homeScore} × {o.awayScore}</div>
-          <TeamHead club={away} color={colors.away} mine={side === 'away'} right />
+          <TeamHead club={clubOf[L]} color={colors[L]} mine />
+          <div className="score">{goalsOf(o, L)} × {goalsOf(o, R)}</div>
+          <TeamHead club={clubOf[R]} color={colors[R]} mine={false} right />
         </div>
         <div className="two-col">
           <section>
@@ -104,7 +109,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
               ))}
               {o.homeScore + o.awayScore === 0 && <li className="hint">Sem gols.</li>}
             </ul>
-            <StatsBars style={barColors} a={o.stats.home} b={o.stats.away} possession={o.possession} />
+            <StatsBars style={barColors} a={o.stats[L]} b={o.stats[R]} possession={L === 'home' ? o.possession : 1 - o.possession} />
           </section>
           <section>
             {motm && (
@@ -138,9 +143,9 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   return (
     <div className="match live">
       <div className="scoreboard">
-        <TeamHead club={home} color={colors.home} mine={side === 'home'} />
-        <div className="score">{m.home.goals} × {m.away.goals}<span className="clock">{minuteLabel}'</span></div>
-        <TeamHead club={away} color={colors.away} mine={side === 'away'} right />
+        <TeamHead club={clubOf[L]} color={colors[L]} mine />
+        <div className="score">{m[L].goals} × {m[R].goals}<span className="clock">{minuteLabel}'</span></div>
+        <TeamHead club={clubOf[R]} color={colors[R]} mine={false} right />
       </div>
       <div className="controls">
         <button className="btn" onClick={() => setRunning(!running)}>{running ? '⏸ Pausar' : '▶ Continuar'}</button>
@@ -153,7 +158,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
           {feed.map((e, i) => {
             const s = 'side' in e ? e.side : null;
             return (
-              <div key={i} className={`ev ${e.type} ${s === side ? 'mine' : ''}`} style={s ? ({ '--side': colors[s].bg } as CSSProperties) : undefined}>
+              <div key={i} className={`ev ev-${e.type} ${s === side ? 'mine' : ''}`} style={s ? ({ '--side': colors[s].bg } as CSSProperties) : undefined}>
                 <span className="min">{e.minute}'</span>
                 {s ? <SideTag color={colors[s]} label={m[s].short} /> : null}
                 <span className="txt">{narrate(e)}</span>
@@ -162,7 +167,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
           })}
         </section>
         <section>
-          <StatsBars style={barColors} a={m.home.stats} b={m.away.stats} possession={possessionOf(m.home.stats, m.away.stats)} />
+          <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
           <h4>Intervenções</h4>
           <div className="chips">
             {(Object.keys(STYLE_LABEL) as Style[]).map((s) => (
@@ -203,6 +208,7 @@ const avgCond = (s: SideState) => {
   const xs = [s.GK, ...s.DF, ...s.MF, ...s.FW];
   return xs.reduce((a, p) => a + (s.condition[p.id] ?? 100), 0) / xs.length;
 };
+const goalsOf = (o: FootballOutcome, s: Side) => (s === 'home' ? o.homeScore : o.awayScore);
 const possessionOf = (a: TeamStats, b: TeamStats) => (a.possessionMinutes + b.possessionMinutes ? a.possessionMinutes / (a.possessionMinutes + b.possessionMinutes) : 0.5);
 
 function TeamHead({ club, sub, right, color, mine }: { club: Career['clubs'][string]; sub?: string; right?: boolean; color: SideColor; mine: boolean }) {
