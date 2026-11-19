@@ -1,6 +1,6 @@
 import { SAVE_VERSION, type Career } from '../game/career';
 
-const KEY = 'elifoot2027.save';
+const KEY = 'universo-esportivo.save';
 
 export function loadCareer(): Career | null {
   try {
@@ -17,7 +17,7 @@ export function saveCareer(c: Career) {
   try {
     localStorage.setItem(KEY, JSON.stringify(c));
   } catch {
-    /* modo privado / cota cheia: o jogo segue sem save */
+    /* modo privado / cota cheia: segue sem save */
   }
 }
 
@@ -25,6 +25,6 @@ export function clearCareer() {
   try {
     localStorage.removeItem(KEY);
   } catch {
-    /* ignore */
+    /* ignora */
   }
 }

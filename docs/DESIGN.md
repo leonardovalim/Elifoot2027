@@ -1,59 +1,99 @@
-# Design
+# Design: decisões, métricas e backlog
 
-## Princípios
+Fonte da visão: *Universo Esportivo: Visão do Produto v1.2 + GDD v0.3* (documento do produto). Este arquivo registra **como** o código implementa a visão e o que ainda falta.
 
-1. **Motor determinístico.** Toda aleatoriedade vem de `Rng` com seed. Mesma seed + mesmas decisões = mesmo resultado. Isso permite que, no online, o servidor simule a rodada (resultado oficial, anti-trapaça) e o cliente apenas reproduza a animação.
-2. **Core agnóstico de esporte.** Temporada, divisões, tabela, finanças e mercado não sabem que esporte estão rodando. Cada esporte implementa `HeadToHeadSport` (futebol, vôlei, basquete…) ou, na fase 3, `RaceSport` (F1…).
-3. **Balanceamento é testado, não opinado.** `tests/balance.test.ts` roda milhares de partidas e falha se o futebol ficar irreal ou se surgir tática dominante.
+## Princípios técnicos
+
+1. **Motor determinístico.** Toda aleatoriedade vem de `Rng` com seed, e o estado do RNG é salvo junto com a carreira. Mesma seed + mesmas decisões = mesmo resultado. Testes garantem que (a) duas carreiras com a mesma seed são idênticas e (b) assistir à partida ao vivo e simulá-la dão o mesmo placar.
+2. **Core agnóstico de esporte.** `core/` não importa nada de `sports/`. Cada modalidade implementa `HeadToHeadSport` (ou, na fase 3, `RaceSport`).
+3. **Empreendedor ≠ organização (GDD 2.7).** `Entrepreneur.cash` é patrimônio pessoal, e `Club.budget` é o caixa da organização. Dinheiro só passa de um para o outro por operações explícitas (hoje, salário e bônus; depois, aporte, dividendos e empréstimos).
+4. **Balanceamento é testado, não opinado.** `tests/balance.test.ts` roda milhares de partidas e falha se o futebol ficar irreal ou se surgir tática dominante.
+
+## Mapeamento GDD → código
+
+| GDD | Implementação | Status |
+|---|---|---|
+| 1.6 Escolha do desafio | `CHALLENGES`, `challengeOptions`, `boardObjective` | ✅ |
+| 1.7 Mundo por ciclos | `advanceDay`, fases pré-temporada → temporada → encerramento → entressafra | ✅ |
+| 2.2 Empreendedor | `core/entrepreneur.ts` | ✅ básico |
+| 2.3 Delegação | "Auxiliar troca cansados" (substituições automáticas) | 🟡 mínimo |
+| 2.4 Partida narrada + intervenções | `engine.ts` incremental + `narration.ts` + `MatchDay.tsx` | ✅ |
+| 2.6 Propriedade híbrida | Tipos `Bond` (`contratado`/`socio`/`proprietario`, `share`) | 🟡 só contratado |
+| 2.8 Finanças da organização | `Ledger`, `financialState` | ✅ simplificado |
+| 2.11 Progressão (reputação, experiência) | Avaliação no fim da temporada, propostas por reputação | ✅ |
+| 3.2 Atributos físicos/técnicos/mentais | `Attributes` (11), `WEIGHTS` por posição | ✅ |
+| 3.3 Banco, substituições, suspensões | ✅ (lesões: pendente) | 🟡 |
+| 3.5 Campeonatos | Pontos corridos, acesso/queda, campeões, artilharia | ✅ (copa: pendente) |
+| GD-04 Avançar sem acompanhar | "Simular meus jogos sem assistir" + velocidade 3 | ✅ |
+| GD-10 IA com as mesmas regras | IA respeita o caixa ao comprar atletas | 🟡 IA ainda não contrata ativamente |
+
+## Ritmo (inspiração na Game Dev Story)
+
+- **1 dia por tick**: ▶ 420ms, ▶▶ 170ms, ▶▶▶ 45ms. Espaço pausa.
+- **Pausa automática** em: dia de jogo, fim de temporada, demissão/propostas, abertura de qualquer menu.
+- **Na partida**: pausa automática no intervalo, em gol sofrido e em expulsão sofrida (momentos de decisão).
+- **Calendário**: rodadas quinzenais aos domingos (fev–nov), salários e cotas no dia 1º, treino diário.
 
 ## Motor de futebol
 
 A cada minuto:
-1. **Posse**: decidida pela força do meio-campo (com bônus de mando).
-2. **Chance**: o time com a bola finaliza com probabilidade proporcional a `ataque / (ataque + defesa adversária)`, modulada pelo estilo dos dois times.
-3. **Finalização**: finalizador sorteado (atacantes pesam mais), conversão por `ataque do finalizador × goleiro`.
-4. **Disciplina**: amarelos ponderados por agressividade; quem já tem amarelo joga com cautela; 2º amarelo/vermelho remove o jogador e recalcula setores.
+1. **Cansaço**: a condição cai conforme a resistência e a postura (ofensiva cansa mais). O rendimento é multiplicado por `0,7 + 0,3 × condição`.
+2. **Posse**: decidida pela força do meio-campo, com bônus de mando.
+3. **Chance**: o time com a bola finaliza com probabilidade proporcional a `ataque / (ataque + defesa adversária)`, modulada pela postura dos dois times.
+4. **Finalização**: o finalizador é sorteado (atacantes pesam mais); a conversão compara a finalização dele com o goleiro. Há assistência em ~70% dos gols.
+5. **Disciplina**: o amarelo é ponderado pela agressividade; quem já tem amarelo joga com cautela.
+6. **Notas**: começam em 6,0 e sobem ou descem com gols, assistências, defesas, cartões e o resultado. O destaque da partida é a maior nota.
 
 ### Lições do Elifoot 98 (estudo de engenharia reversa)
 
 | Problema no clássico | Nossa decisão |
 |---|---|
-| Força única por jogador | 4 atributos (ataque, defesa, passe, goleiro) + agressividade + potencial |
+| Força única por jogador | 11 atributos e um peso por posição |
 | Sem posse de bola → 5-0-5 dominante | Posse vem do meio-campo; empilhar atacantes custa a bola |
-| Evolução ±1 por rodada (volátil) | Evolução lenta, guiada por idade, minutos jogados e potencial |
-| Tática sem trade-off | Estilo ofensivo cria mais chances **e** expõe a defesa |
+| Evolução ±1 por rodada (volátil) | Treino diário com ganhos raros, guiado por idade, potencial e nível do CT |
+| Sem cansaço | Condição física dentro e entre partidas, e rodízio de elenco |
 
-### Métricas atuais (times equivalentes, 3.000 jogos)
+### Métricas atuais (times equivalentes, 2.000 jogos)
 
 | Métrica | Valor | Referência real |
 |---|---|---|
-| Gols/jogo | ~2,7 | 2,5–2,8 |
+| Gols/jogo | ~2,6 | 2,5–2,8 |
 | Vitória mandante / empate | ~42% / ~26% | 43–46% / 25–28% |
-| Amarelos / vermelhos por jogo | ~3,2 / ~0,15 | 3–4 / 0,1–0,2 |
-| Spread de pts/jogo entre formações | < 0,35 | — |
+| Amarelos / vermelhos por jogo | ~3,1 / ~0,13 | 3–4 / 0,1–0,2 |
+| Spread de pts/jogo entre formações | < 0,35 | sem dominante |
+| Estilos (pts/jogo) | 1,36–1,38 | troca, não dominância |
 
 ## Economia
 
-Receita por rodada = bilheteria (mandante; demanda elástica ao preço do ingresso, limitada pelo estádio) + cota de TV por divisão. Despesa = folha salarial. Calibrada para ficar perto do equilíbrio: elite com sobra moderada, divisões inferiores no aperto — subir de divisão é também um objetivo financeiro.
+- Mensal: folha salarial (valor ÷ 90), cota de TV por divisão (170k, 85k, 42k e 19k), salário do empreendedor.
+- Por jogo em casa: bilheteria = público × ingresso, com público elástico ao preço e limitado pelo estádio.
+- Fim de temporada: premiação por posição.
+- Calibração: a elite fica com leve sobra e as divisões inferiores no aperto. Em 3 temporadas simuladas, a mediana do caixa fica estável.
 
 ## Referências e propriedade intelectual
 
-- **desvendando-elifoot-98** (engenharia reversa): usado só para estudar mecânicas. **Nenhum código descompilado é portado** — seria obra derivada de software proprietário.
-- **elifoot98web** (emulação via js-dos): referência apenas de UX (PWA, salas com código). **Não usamos o pacote `.jsdos`** (contém o executável original e Windows 3.1).
-- Nome, clubes e jogadores são fictícios. "Elifoot2027" é codinome interno — o produto precisa de nome próprio antes de qualquer lançamento público (marca registrada).
+- **desvendando-elifoot-98** (engenharia reversa): usado só para estudar mecânicas. **Nenhum código descompilado é portado.**
+- **elifoot98web**: referência apenas de UX (PWA, salas com código). **Não usamos o pacote `.jsdos`.**
+- **Game Dev Story (Kairosoft)**: inspiração de ritmo e de gênero. **Nenhum asset, sprite ou layout copiado.** A arte é pixel art própria, gerada em código (`ui/scene/sprites.ts`).
+- O mundo é 100% fictício (GDD 1.8).
 
-## Roadmap
+## Backlog priorizado
 
-| Fase | Entrega | Critério de pronto |
-|---|---|---|
-| 1 ✅ | Core + futebol single-player | Temporadas completas, balanceamento verde |
-| 2 | **Online**: Supabase (auth, Postgres), ligas privadas com código de convite, rodadas agendadas (cron) simuladas no servidor, placar ao vivo via Realtime | 2+ amigos jogando uma temporada assíncrona |
-| 3 | 2º esporte de formato diferente (F1 → `RaceSport`) | Core reaproveitado sem fork |
-| 4 | Vôlei + outros 4 esportes, priorizados por demanda | — |
+**Entrega 2: mundo vivo**
+- [ ] Comissão técnica (treinador, diretor, preparador, coordenador) com atributos, salário e evolução. Delegação em 2 níveis.
+- [ ] IA adversária contratando, vendendo e demitindo técnico, respeitando o próprio caixa (GD-10)
+- [ ] Copa em mata-mata paralela à liga
+- [ ] Lesões
+- [ ] Upgrade de estrutura (CT, estádio) com custo, o "escritório maior" da Game Dev Story
+- [ ] Patrocínio simples
 
-### Backlog da fase 1 (melhorias)
-- Escalação manual (hoje é automática por posição)
-- IA dos clubes comprando/vendendo (hoje só reage às suas ofertas)
-- Copa paralela ao campeonato (mata-mata)
-- Lesões e cansaço
-- Demissão por mau desempenho / propostas de outros clubes
+**Entrega 3: polimento da experiência**
+- [ ] Escalação manual (travar titulares)
+- [ ] Mais variedade de cenas: estádio no dia de jogo, clima e estação do ano
+- [ ] Eventos com escolha (proposta por atleta, crise, oportunidade)
+- [ ] PWA instalável
+
+**Fase 2: online**, backend leve e **sem Supabase** (decisão do produto)
+- Fase 1 continua 100% local (save no navegador). Próximo passo local: trocar o `localStorage` por IndexedDB, para ter vários saves e passar do limite de ~5 MB.
+- Para o online, a recomendação é **PocketBase**: um binário só, SQLite embutido, auth e realtime prontos, rodando numa VM pequena (Fly.io ou Railway). Alternativa serverless: **Turso** (SQLite/libSQL gerenciado) + funções na Vercel.
+- O motor determinístico roda no servidor (Node) para as rodadas agendadas, e o cliente só reproduz.

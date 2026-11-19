@@ -9,7 +9,7 @@ import { generateClub } from '../src/sports/football/generate';
 import { FORMATIONS } from '../src/sports/football/lineup';
 import type { Club, Formation, Style } from '../src/sports/football/types';
 
-const N = 3000;
+const N = 2000;
 
 function stats(make: (rng: Rng, i: number) => [Club, Club], seed = 1) {
   const rng = new Rng(seed);

@@ -1,4 +1,4 @@
-import type { Club, Formation, Player, Position } from './types';
+import type { Attributes, Club, Formation, Player, Position } from './types';
 
 export const FORMATIONS: Record<Formation, { DF: number; MF: number; FW: number }> = {
   '4-4-2': { DF: 4, MF: 4, FW: 2 },
@@ -10,55 +10,55 @@ export const FORMATIONS: Record<Formation, { DF: number; MF: number; FW: number 
   '5-4-1': { DF: 5, MF: 4, FW: 1 },
 };
 
-/** Valor do jogador numa posição. Fora de posição ele rende menos. */
+/** Peso de cada atributo por posição (somam 1). Fonte única da "habilidade geral". */
+export const WEIGHTS: Record<Position, Partial<Record<keyof Attributes, number>>> = {
+  GK: { goalkeeping: 0.7, positioning: 0.15, concentration: 0.15 },
+  DF: { tackling: 0.35, positioning: 0.25, strength: 0.15, pace: 0.1, concentration: 0.15 },
+  MF: { passing: 0.35, decisions: 0.2, firstTouch: 0.15, stamina: 0.15, tackling: 0.075, finishing: 0.075 },
+  FW: { finishing: 0.4, pace: 0.2, firstTouch: 0.2, decisions: 0.1, strength: 0.1 },
+};
+
 export function ratingAt(p: Player, pos: Position): number {
-  switch (pos) {
-    case 'GK': return p.position === 'GK' ? p.goalkeeping : p.goalkeeping * 0.3;
-    case 'DF': return p.defense * 0.8 + p.passing * 0.2;
-    case 'MF': return p.passing * 0.6 + p.attack * 0.2 + p.defense * 0.2;
-    case 'FW': return p.attack * 0.85 + p.passing * 0.15;
-  }
+  let r = 0;
+  for (const [k, w] of Object.entries(WEIGHTS[pos])) r += p.attrs[k as keyof Attributes] * w!;
+  // goleiro na linha / jogador de linha no gol rendem bem menos
+  if ((pos === 'GK') !== (p.position === 'GK')) r *= 0.45;
+  return r;
 }
 
-export function overall(p: Player): number {
-  return Math.round(ratingAt(p, p.position));
-}
+export const overall = (p: Player) => Math.round(ratingAt(p, p.position));
+
+/** Fator de rendimento pela condição física: 100% → 1,0; 50% → 0,85. */
+export const conditionFactor = (condition: number) => 0.7 + 0.3 * Math.max(0, Math.min(100, condition)) / 100;
 
 export interface Lineup {
   GK: Player;
   DF: Player[];
   MF: Player[];
   FW: Player[];
+  bench: Player[];
 }
 
-export function available(p: Player): boolean {
-  return p.suspendedRounds <= 0;
-}
+export const available = (p: Player) => p.suspended <= 0;
 
 /**
- * Escalação automática: preenche cada setor com os melhores disponíveis,
- * priorizando jogadores da posição e só depois improvisando.
+ * Escalação automática: melhores disponíveis por posição, considerando a condição
+ * física (rodar o elenco importa). Banco: 7 melhores restantes.
  */
 export function pickLineup(club: Club, formation: Formation = club.formation): Lineup {
   const shape = FORMATIONS[formation];
   const pool = club.players.filter(available);
   const used = new Set<string>();
+  const score = (p: Player, pos: Position) => ratingAt(p, pos) * conditionFactor(p.condition);
 
   const take = (pos: Position, count: number): Player[] => {
     const chosen: Player[] = [];
-    const natural = pool
-      .filter((p) => p.position === pos && !used.has(p.id))
-      .sort((a, b) => ratingAt(b, pos) - ratingAt(a, pos));
-    for (const p of natural) {
-      if (chosen.length >= count) break;
-      chosen.push(p);
-      used.add(p.id);
-    }
-    if (chosen.length < count) {
-      const rest = pool
-        .filter((p) => !used.has(p.id) && p.position !== 'GK')
-        .sort((a, b) => ratingAt(b, pos) - ratingAt(a, pos));
-      for (const p of rest) {
+    const candidates = (natural: boolean) =>
+      pool
+        .filter((p) => !used.has(p.id) && (natural ? p.position === pos : p.position !== 'GK'))
+        .sort((a, b) => score(b, pos) - score(a, pos));
+    for (const natural of [true, false]) {
+      for (const p of candidates(natural)) {
         if (chosen.length >= count) break;
         chosen.push(p);
         used.add(p.id);
@@ -69,5 +69,14 @@ export function pickLineup(club: Club, formation: Formation = club.formation): L
 
   const gk = take('GK', 1)[0] ?? pool.find((p) => !used.has(p.id)) ?? club.players[0]!;
   used.add(gk.id);
-  return { GK: gk, DF: take('DF', shape.DF), MF: take('MF', shape.MF), FW: take('FW', shape.FW) };
+  const DF = take('DF', shape.DF);
+  const MF = take('MF', shape.MF);
+  const FW = take('FW', shape.FW);
+  const bench = pool
+    .filter((p) => !used.has(p.id))
+    .sort((a, b) => score(b, b.position) - score(a, a.position))
+    .slice(0, 7);
+  return { GK: gk, DF, MF, FW, bench };
 }
+
+export const starters = (l: Lineup) => [l.GK, ...l.DF, ...l.MF, ...l.FW];
