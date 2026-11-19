@@ -24,6 +24,7 @@ import { football, type FootballOutcome } from '../sports/football/engine';
 import { MatchDay } from './match/MatchDay';
 import { CareerPanel, FinancePanel, MarketPanel, SquadPanel, TablePanel, type Act } from './panels/Panels';
 import { CtScene, type SceneGain } from './scene/CtScene';
+import { track } from './analytics';
 import { saveCareer } from './storage';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
 
@@ -71,7 +72,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     const t = setInterval(() => {
       const career = ref.current;
       if (isMatchDay(career)) {
-        if (autoSim) { simulateRound(career); save(); force(); return; }
+        if (autoSim) { simulateRound(career); track('match_simulated', { mode: 'auto' }); save(); force(); return; }
         setPrep(prepareRound(career));
         return;
       }
@@ -105,6 +106,9 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const bond = activeBond(c);
 
   const onMatchDone = (p: PreparedRound, o: FootballOutcome) => {
+    const home = p.match.home.clubId === myClubId(ref.current);
+    const gf = home ? o.homeScore : o.awayScore, ga = home ? o.awayScore : o.homeScore;
+    track('match_finished', { round: p.round + 1, season: ref.current.season.year, result: gf > ga ? 'win' : gf < ga ? 'loss' : 'draw', goals_for: gf, goals_against: ga, home });
     completeRound(ref.current, p, o);
     setPrep(null);
     save();
@@ -113,6 +117,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   const endSeason = () => {
     const s = closeSeason(ref.current);
+    track('season_completed', { seasons_played: ref.current.entrepreneur.history.length, position: s.position, division: s.division + 1, objective: s.objective, achieved: s.achieved, fired: s.fired, promoted: s.promoted, relegated: s.relegated });
     setSummary(s);
     save();
     force();
@@ -124,7 +129,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       <div className="game">
         <Modal title="Você está sem clube">
           <h4>Propostas recebidas</h4>
-          <OfferList career={c} onAccept={(o) => { acceptOffer(ref.current, o); save(); force(); }} />
+          <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); save(); force(); }} />
           <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
         </Modal>
       </div>
@@ -171,7 +176,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
         <div className="speed" role="group" aria-label="Velocidade do tempo">
           <span className="speed-label">Tempo</span>
           {['⏸', '▶', '▶▶', '▶▶▶'].map((s, i) => (
-            <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} aria-label={i === 0 ? 'Pausar' : `Velocidade ${i}`} aria-pressed={speed === i} disabled={blocking && i > 0} onClick={() => { if (i === 0) pause(); else setSpeed(i); }} title={i === 0 ? 'Pausar (espaço)' : `Velocidade ${i}`}>{s}</button>
+            <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} aria-label={i === 0 ? 'Pausar' : `Velocidade ${i}`} aria-pressed={speed === i} disabled={blocking && i > 0} onClick={() => { if (i === 0) pause(); else { setSpeed(i); track('time_speed', { speed: i }); } }} title={i === 0 ? 'Pausar (espaço)' : `Velocidade ${i}`}>{s}</button>
           ))}
         </div>
       </header>
@@ -234,7 +239,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
       <nav className="dock">
         {MENUS.map((m) => (
-          <button key={m.id} className={`dock-btn ${menu === m.id ? 'active' : ''}`} aria-current={menu === m.id ? 'page' : undefined} onClick={() => { pause(); setMenu(m.id); }}>
+          <button key={m.id} className={`dock-btn ${menu === m.id ? 'active' : ''}`} aria-current={menu === m.id ? 'page' : undefined} onClick={() => { pause(); setMenu(m.id); track('menu_opened', { menu: m.id }); }}>
             <span className="ico">{m.icon}</span>{m.label}
           </button>
         ))}
@@ -267,14 +272,14 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             <>
               <p>A diretoria decidiu não renovar.</p>
               <h4>Propostas recebidas</h4>
-              <OfferList career={c} onAccept={(o) => { acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
+              <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
             </>
           ) : (
             <>
               {c.offers.length > 0 && (
                 <>
                   <h4>Propostas recebidas</h4>
-                  <OfferList career={c} onAccept={(o) => { acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
+                  <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
                 </>
               )}
               <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>

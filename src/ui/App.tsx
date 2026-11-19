@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { OBJECTIVE_LABEL } from '../core/entrepreneur';
 import {
   CHALLENGES,
@@ -12,6 +12,7 @@ import {
 } from '../game/career';
 import { Game } from './Game';
 import { clearCareer, loadCareer, saveCareer } from './storage';
+import { track } from './analytics';
 import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
@@ -32,6 +33,8 @@ const VOTE_LABEL = ['', 'Pouco', 'Talvez', 'Gostaria', 'Muito', 'Quero já!'];
 export function App() {
   const [career, setCareer] = useState<Career | null>(() => loadCareer());
   const [screen, setScreen] = useState<Screen>('title');
+  useEffect(() => { track('$pageview', { screen }); }, [screen]);
+  useEffect(() => { track('app_opened', { has_save: !!career }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (screen === 'game' && career) {
     return (
@@ -128,7 +131,7 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
           <div className="sports-label"><span>Modalidade</span></div>
           <div className="sports">
             {SPORTS.map((s) => (
-              <button key={s.id} className={`sport ${s.ready ? 'on' : 'off'}`} onClick={() => !s.ready && setVoting(s)}
+              <button key={s.id} className={`sport ${s.ready ? 'on' : 'off'}`} onClick={() => { if (!s.ready) { setVoting(s); track('sport_interest_opened', { sport: s.id }); } }}
                 aria-label={s.ready ? s.name : `${s.name}, em breve. Votar interesse`}>
                 <span className="ico">{s.icon}</span>{s.name}
                 {!s.ready && (votes[s.id] ? <span className="voted">{'★'.repeat(votes[s.id]!)}</span> : <span className="soon">em breve</span>)}
@@ -178,6 +181,7 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
                   <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
                   <button className="btn primary" onClick={() => {
                     if (!name.trim()) { setNameError(true); setStep(1); nameRef.current?.focus(); return; }
+                    track('career_created', { challenge: type, division: divisionOf(world, club.id) + 1, objective: o.objective, club_reputation: club.reputation });
                     onStart(startCareer(seed, name.trim(), type, o.clubId));
                   }}>
                     Assumir o desafio
