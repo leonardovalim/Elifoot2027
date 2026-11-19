@@ -14,6 +14,7 @@ import { Game } from './Game';
 import { clearCareer, loadCareer, saveCareer } from './storage';
 import { track } from './analytics';
 import { loadVotes, saveVote } from './interest';
+import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
 
 type Screen = 'title' | 'create' | 'game';
@@ -81,28 +82,53 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
   const [seed, setSeed] = useState(() => (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
   const [name, setName] = useState('');
   const [type, setType] = useState<ChallengeType | null>(null);
+  const [step, setStep] = useState<WizardStep>(1);
   const [nameError, setNameError] = useState(false);
+  const [challengeError, setChallengeError] = useState(false);
   const [votes, setVotes] = useState(loadVotes);
   const [voting, setVoting] = useState<Sport | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const world = useMemo(() => newWorld(seed), [seed]);
   const options = useMemo(() => (type ? challengeOptions(world, type) : []), [world, type]);
+  const nextStep = () => {
+    const next = nextWizardStep(step, { name, hasChallenge: !!type });
+    if (next === step) {
+      if (step === 1) { setNameError(true); nameRef.current?.focus(); }
+      if (step === 2) setChallengeError(true);
+      return;
+    }
+    setNameError(false);
+    setChallengeError(false);
+    setStep(next);
+  };
+  const previousStep = () => { setChallengeError(false); setStep(previousWizardStep(step)); };
+  const chooseChallenge = (t: ChallengeType) => { setType(t); setChallengeError(false); };
 
   return (
     <div className="create">
       <header className="create-head">
-        <button className="btn ghost" onClick={onBack}>‹ Voltar</button>
-        <h2>Nova carreira</h2>
+        <button className="btn ghost" onClick={step === 1 ? onBack : previousStep}>‹ {step === 1 ? 'Voltar' : 'Anterior'}</button>
+        <div>
+          <h2>Nova carreira</h2>
+        </div>
+        <nav className="wizard-progress" aria-label="Etapas da nova carreira">
+          {(['Você', 'Desafio', 'Oportunidades'] as const).map((label, i) => {
+            const target = (i + 1) as WizardStep;
+            const available = target <= step || (target === 2 && !!name.trim()) || (target === 3 && !!name.trim() && !!type);
+            return <button key={label} className={`wizard-step ${step === target ? 'on' : ''}`} aria-current={step === target ? 'step' : undefined} disabled={!available} onClick={() => setStep(target)}><b>{target}</b><span>{label}</span></button>;
+          })}
+        </nav>
       </header>
 
-      <section className="window">
-        <header className="window-title"><span>1 · Empreendedor</span></header>
+      {step === 1 && <section className="window wizard-card">
+        <header className="window-title"><span>1/3 · Seu perfil</span></header>
         <div className="window-body">
           <label className="field">Seu nome
             <input ref={nameRef} value={name} maxLength={24} autoFocus autoComplete="name" aria-invalid={nameError}
               onChange={(e) => { setName(e.target.value); setNameError(false); }} />
-            {nameError && <span className="field-error">Digite seu nome para assumir o desafio.</span>}
+            {nameError && <span className="field-error">Digite seu nome para continuar.</span>}
           </label>
+          <div className="sports-label"><span>Modalidade</span></div>
           <div className="sports">
             {SPORTS.map((s) => (
               <button key={s.id} className={`sport ${s.ready ? 'on' : 'off'}`} onClick={() => { if (!s.ready) { setVoting(s); track('sport_interest_opened', { sport: s.id }); } }}
@@ -112,28 +138,34 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
               </button>
             ))}
           </div>
+          <div className="wizard-actions"><button className="btn primary" onClick={nextStep}>Escolher desafio ›</button></div>
         </div>
-      </section>
+      </section>}
 
-      <section className="window">
-        <header className="window-title"><span>2 · Escolha seu desafio</span></header>
-        <div className="window-body challenges">
+      {step === 2 && <section className="window wizard-card">
+        <header className="window-title"><span>2/3 · Escolha seu desafio</span></header>
+        <div className="window-body">
+          <div className="challenges">
           {(Object.keys(CHALLENGES) as ChallengeType[]).map((t) => (
-            <button key={t} className={`challenge ${type === t ? 'on' : ''}`} onClick={() => setType(t)}>
+            <button key={t} className={`challenge ${type === t ? 'on' : ''}`} onClick={() => chooseChallenge(t)} aria-pressed={type === t}>
               <b>{CHALLENGES[t].title}</b>
               <span>{CHALLENGES[t].text}</span>
             </button>
           ))}
+          </div>
+          {challengeError && <p className="field-error">Escolha um desafio para ver as oportunidades.</p>}
+          <div className="wizard-actions"><button className="btn ghost" onClick={previousStep}>‹ Voltar</button><button className="btn primary" onClick={nextStep}>Ver oportunidades ›</button></div>
         </div>
-      </section>
+      </section>}
 
-      {type && (
-        <section className="window">
+      {step === 3 && type && (
+        <section className="window wizard-card offer-step">
           <header className="window-title">
-            <span>3 · Oportunidades</span>
+            <span>3/3 · Oportunidades</span>
             <button className="btn sm ghost" onClick={() => setSeed((seed * 1103515245 + 12345) >>> 0)}>↻ outro universo</button>
           </header>
-          <div className="window-body offers">
+          <div className="window-body">
+            <div className="offers">
             {options.map((o) => {
               const club = world.clubs[o.clubId]!;
               return (
@@ -148,7 +180,7 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
                   </dl>
                   <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
                   <button className="btn primary" onClick={() => {
-                    if (!name.trim()) { setNameError(true); nameRef.current?.focus(); nameRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+                    if (!name.trim()) { setNameError(true); setStep(1); nameRef.current?.focus(); return; }
                     track('career_created', { challenge: type, division: divisionOf(world, club.id) + 1, objective: o.objective, club_reputation: club.reputation });
                     onStart(startCareer(seed, name.trim(), type, o.clubId));
                   }}>
@@ -157,6 +189,8 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
                 </div>
               );
             })}
+            </div>
+            <div className="wizard-actions"><button className="btn ghost" onClick={previousStep}>‹ Trocar desafio</button></div>
           </div>
         </section>
       )}
