@@ -316,10 +316,10 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .stars i { width: 10px; height: 10px; background: var(--paper-2); box-shadow: 0 0 0 2px var(--ink); clip-path: polygon(50% 0, 62% 35%, 100% 38%, 70% 60%, 80% 100%, 50% 78%, 20% 100%, 30% 60%, 0 38%, 38% 35%); }
 .stars i.on { background: var(--mustard); }
 
-/* ---------- tipografia: pixel só em títulos e destaques ---------- */
-.logo h1, .window-title, .score, .big-pos, .countdown, .hud-money b, .hud-date b,
-.motm .rating, .paused-badge, .create-head h2, .badge {
-  font-family: var(--font-pixel);
-}
-.window-title { font-size: 17px; letter-spacing: 1.5px; }
+/* ---------- tipografia: uma fonte só (Nunito). Pixel apenas no logo grande ---------- */
+.logo h1 { font-family: var(--font-pixel); }
+.window-title { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
+.score, .big-pos { font-weight: 900; }
+.countdown, .hud-money b, .hud-date b, .create-head h2 { font-weight: 800; }
+.badge { font-weight: 900; }
 .grid-table td, .kv dd, .hud-money b { font-variant-numeric: tabular-nums; }

@@ -89,7 +89,7 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
         <header className="window-title"><span>1 · Empreendedor</span></header>
         <div className="window-body">
           <label className="field">Seu nome
-            <input value={name} maxLength={24} placeholder="Ex.: Leo Valim" onChange={(e) => setName(e.target.value)} />
+            <input value={name} maxLength={24} autoFocus autoComplete="name" onChange={(e) => setName(e.target.value)} />
           </label>
           <div className="sports">
             {SPORTS.map((s) => (
