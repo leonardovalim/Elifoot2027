@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { scenePresentation } from './scenePresentation';
+import { sceneDetails } from './sceneDetails';
 import { drawCoach, drawPlayer, drawText, lookFor, textWidth, SPRITE_H, SPRITE_W, type Look } from './sprites';
 
 export interface ScenePlayer {
@@ -79,41 +81,49 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
     if (!ctx) return;
     let raf = 0;
     let frame = 0;
+    let hasDrawn = false;
     const seed = { v: 99 };
+    const details = sceneDetails(trainingCenter);
 
     const tick = () => {
-      frame++;
       const moving = !pausedRef.current;
-      // atores
-      for (const a of actors.current) {
-        if (!moving) continue;
-        if (a.wait > 0) { a.wait--; continue; }
-        const dx = a.tx - a.x, dy = a.ty - a.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist < 1) {
-          a.wait = 30 + Math.floor(rand(seed) * 150);
-          a.tx = Math.max(FIELD.x + 4, Math.min(FIELD.x + FIELD.w - 14, a.x + (rand(seed) - 0.5) * 80));
-          a.ty = Math.max(FIELD.y + 2, Math.min(FIELD.y + FIELD.h - 16, a.y + (rand(seed) - 0.5) * 40));
-        } else {
-          const sp = 0.35;
-          a.x += (dx / dist) * sp;
-          a.y += (dy / dist) * sp;
-          a.flip = dx < 0;
+      if (moving) {
+        frame++;
+        // atores
+        for (const a of actors.current) {
+          if (a.wait > 0) { a.wait--; continue; }
+          const dx = a.tx - a.x, dy = a.ty - a.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 1) {
+            a.wait = 30 + Math.floor(rand(seed) * 150);
+            a.tx = Math.max(FIELD.x + 4, Math.min(FIELD.x + FIELD.w - 14, a.x + (rand(seed) - 0.5) * 80));
+            a.ty = Math.max(FIELD.y + 2, Math.min(FIELD.y + FIELD.h - 16, a.y + (rand(seed) - 0.5) * 40));
+          } else {
+            const sp = 0.35;
+            a.x += (dx / dist) * sp;
+            a.y += (dy / dist) * sp;
+            a.flip = dx < 0;
+          }
         }
-      }
-      // bola: passes entre atletas
-      const b = ball.current;
-      const list = actors.current;
-      if (list.length > 1) {
-        if (moving) b.t += 0.025;
-        if (b.t >= 1) { b.from = b.to; b.to = Math.floor(rand(seed) * list.length); b.t = 0; }
-        const f = list[b.from % list.length]!, t = list[b.to % list.length]!;
-        const ease = Math.min(1, b.t);
-        b.x = f.x + 4 + (t.x - f.x) * ease;
-        b.y = f.y + 11 + (t.y - f.y) * ease - Math.sin(ease * Math.PI) * 6;
-      }
+        // bola: passes entre atletas
+        const b = ball.current;
+        const list = actors.current;
+        if (list.length > 1) {
+          b.t += 0.025;
+          if (b.t >= 1) { b.from = b.to; b.to = Math.floor(rand(seed) * list.length); b.t = 0; }
+          const f = list[b.from % list.length]!, t = list[b.to % list.length]!;
+          const ease = Math.min(1, b.t);
+          b.x = f.x + 4 + (t.x - f.x) * ease;
+          b.y = f.y + 11 + (t.y - f.y) * ease - Math.sin(ease * Math.PI) * 6;
+        }
 
-      draw(ctx, frame);
+        draw(ctx, frame);
+        hasDrawn = true;
+      } else if (!hasDrawn) {
+        // Uma cena que começa pausada ainda precisa de um primeiro quadro.
+        draw(ctx, frame);
+        hasDrawn = true;
+      }
       raf = requestAnimationFrame(tick);
     };
 
@@ -126,13 +136,26 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
       const cx = (fr * 0.05) % (W + 40) - 40;
       c.fillRect(cx, 8, 18, 4); c.fillRect(cx + 4, 5, 10, 3);
       c.fillRect((cx + 130) % (W + 40) - 20, 14, 14, 3);
+      // silhueta do bairro atrás do CT
+      c.fillStyle = '#7699ad';
+      c.fillRect(0, 31, 10, 9); c.fillRect(5, 27, 8, 13); c.fillRect(91, 30, 14, 10); c.fillRect(105, 25, 12, 15);
+      c.fillRect(120, 31, 18, 9); c.fillRect(140, 28, 10, 12); c.fillRect(154, 31, 22, 9);
+      c.fillStyle = '#5b7d92';
+      c.fillRect(7, 29, 3, 2); c.fillRect(108, 27, 5, 2); c.fillRect(143, 30, 4, 2);
       // arquibancada / prédio
       c.fillStyle = '#7a5a46'; c.fillRect(14, 18, 70, 22);
       c.fillStyle = '#a77b5e'; c.fillRect(14, 16, 70, 3);
       c.fillStyle = colors[0]; c.fillRect(14, 22, 70, 3);
-      for (let i = 0; i < 6; i++) { c.fillStyle = '#ffe9a8'; c.fillRect(20 + i * 10, 28, 5, 5); }
+      c.fillStyle = '#5a3e38'; c.fillRect(17, 34, 64, 6);
+      c.fillStyle = '#ffe9a8';
+      for (let i = 0; i < details.litWindows; i++) { c.fillRect(20 + i * 10, 28, 5, 4); }
+      c.fillStyle = '#33283a'; c.fillRect(45, 33, 9, 7);
+      c.fillStyle = '#f2b632'; c.fillRect(47, 34, 5, 5);
       c.fillStyle = '#f4ead5'; c.fillRect(40, 9, 18, 7);
       drawText(c, 'CT', 45, 10, colors[0], '#f4ead5');
+      // placa de evolução da estrutura
+      c.fillStyle = '#352d3d'; c.fillRect(88, 20, 29, 10); c.fillStyle = '#d9b45a'; c.fillRect(90, 22, 25, 6);
+      drawText(c, details.board === 'elite' ? '5' : details.board === 'pro' ? '3' : '1', 101, 22, '#352d3d', '#d9b45a');
       // estrelas do nível do CT
       for (let i = 0; i < 5; i++) {
         c.fillStyle = i < trainingCenter ? '#ffcc33' : '#5b4a3e';
@@ -146,6 +169,12 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
         c.fillStyle = i % 2 ? '#4fa64a' : '#5cb556';
         c.fillRect(0, 40 + i * 7, W, 7);
       }
+      // faixas de luz dos refletores e área de apoio do treino
+      c.fillStyle = 'rgba(255, 246, 200, 0.10)';
+      for (let i = 0; i < details.lightPools; i++) c.fillRect(181 + i * 14, 40, 8, 68);
+      c.fillStyle = '#7a5a46'; c.fillRect(12, 112, 27, 3); c.fillRect(15, 115, 2, 5); c.fillRect(34, 115, 2, 5);
+      c.fillStyle = '#a77b5e'; c.fillRect(15, 110, 21, 2);
+      c.fillStyle = '#6e4a37'; c.fillRect(43, 113, 12, 7); c.fillStyle = '#f2b632'; c.fillRect(45, 115, 2, 2); c.fillRect(49, 115, 2, 2);
       c.fillStyle = '#f2f7ee';
       c.fillRect(FIELD.x, FIELD.y, FIELD.w, 1); c.fillRect(FIELD.x, FIELD.y + FIELD.h - 1, FIELD.w, 1);
       c.fillRect(FIELD.x, FIELD.y, 1, FIELD.h); c.fillRect(FIELD.x + FIELD.w - 1, FIELD.y, 1, FIELD.h);
@@ -160,7 +189,7 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
       c.fillRect(FIELD.x + FIELD.w, FIELD.y + 34, 4, 1); c.fillRect(FIELD.x + FIELD.w, FIELD.y + 54, 4, 1); c.fillRect(FIELD.x + FIELD.w + 3, FIELD.y + 34, 1, 21);
       // cones
       c.fillStyle = '#f07a2a';
-      for (let i = 0; i < 5; i++) { c.fillRect(150 + i * 12, FIELD.y + 70, 3, 2); c.fillRect(151 + i * 12, FIELD.y + 69, 1, 1); }
+      for (let i = 0; i < details.coneCount; i++) { c.fillRect(145 + i * 9, FIELD.y + 70, 3, 2); c.fillRect(146 + i * 9, FIELD.y + 69, 1, 1); }
 
       // atores ordenados por profundidade
       const sorted = [...actors.current].sort((a, b) => a.y - b.y);
@@ -188,5 +217,15 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
     return () => cancelAnimationFrame(raf);
   }, [colors, trainingCenter]);
 
-  return <canvas ref={canvas} width={W} height={H} className="scene" aria-label="Centro de treinamento" />;
+  const presentation = scenePresentation(trainingCenter, paused, players.length);
+
+  return (
+    <div className="scene-shell">
+      <canvas ref={canvas} width={W} height={H} className="scene" role="img" aria-label={presentation.label} />
+      <div className="scene-status" aria-live="polite">
+        <b>{paused ? '⏸ Pausado' : '● Treino ativo'}</b>
+        <span>{presentation.detail}</span>
+      </div>
+    </div>
+  );
 }

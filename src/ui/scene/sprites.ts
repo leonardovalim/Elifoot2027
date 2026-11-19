@@ -37,6 +37,19 @@ const COACH_BODY = [
   '..KK.KK..',
 ];
 
+const DIGITS: Record<string, string[]> = {
+  '0': ['###', '#.#', '#.#', '#.#', '###'],
+  '1': ['.#.', '##.', '.#.', '.#.', '###'],
+  '2': ['##.', '..#', '.##', '#..', '###'],
+  '3': ['##.', '..#', '.##', '..#', '##.'],
+  '4': ['#.#', '#.#', '###', '..#', '..#'],
+  '5': ['###', '#..', '##.', '..#', '##.'],
+  '6': ['.##', '#..', '###', '#.#', '.##'],
+  '7': ['###', '..#', '.#.', '.#.', '.#.'],
+  '8': ['.#.', '#.#', '.#.', '#.#', '.#.'],
+  '9': ['.##', '#.#', '.##', '..#', '##.'],
+};
+
 function hash(s: string) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -49,11 +62,19 @@ export interface Look {
   shirt: string;
   detail: string;
   shorts: string;
+  number: number;
 }
 
 export function lookFor(id: string, shirt: string, detail: string): Look {
   const h = hash(id);
-  return { skin: SKINS[h % SKINS.length]!, hair: HAIRS[(h >> 4) % HAIRS.length]!, shirt, detail, shorts: detail === '#ffffff' ? '#f4f4f4' : detail };
+  return {
+    skin: SKINS[h % SKINS.length]!,
+    hair: HAIRS[(h >> 4) % HAIRS.length]!,
+    shirt,
+    detail,
+    shorts: detail === '#ffffff' ? '#f4f4f4' : detail,
+    number: (h % 99) + 1,
+  };
 }
 
 export const SPRITE_W = 9;
@@ -71,6 +92,22 @@ function paint(ctx: CanvasRenderingContext2D, rows: string[], x: number, y: numb
   });
 }
 
+function drawNumber(ctx: CanvasRenderingContext2D, number: number, x: number, y: number, color: string) {
+  const chars = String(number).split('');
+  const width = chars.length * 3 + chars.length - 1;
+  const startX = x + Math.floor((SPRITE_W - width) / 2);
+  ctx.fillStyle = color;
+  chars.forEach((char, i) => {
+    const glyph = DIGITS[char];
+    if (!glyph) return;
+    glyph.forEach((row, ry) => {
+      for (let rx = 0; rx < row.length; rx++) {
+        if (row[rx] === '#') ctx.fillRect(startX + i * 4 + rx, y + ry, 1, 1);
+      }
+    });
+  });
+}
+
 export function drawPlayer(ctx: CanvasRenderingContext2D, look: Look, x: number, y: number, frame: number, flip: boolean) {
   const map: Record<string, string> = {
     H: look.hair, S: look.skin, E: '#1a1420', T: look.shirt, t: look.detail, P: look.shorts, L: look.skin, B: '#1a1420',
@@ -79,6 +116,8 @@ export function drawPlayer(ctx: CanvasRenderingContext2D, look: Look, x: number,
   ctx.fillStyle = 'rgba(0,0,0,0.22)';
   ctx.fillRect(x + 1, y + SPRITE_H - 1, 7, 1);
   paint(ctx, [...BODY, ...LEGS[frame % 2]!], x, y, map, flip);
+  // Glifo bitmap pequeno: mantém o número determinístico sem sair da silhueta 9x13.
+  drawNumber(ctx, look.number, x, y + 5, look.detail);
 }
 
 export function drawCoach(ctx: CanvasRenderingContext2D, x: number, y: number, frame: number) {
