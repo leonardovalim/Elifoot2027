@@ -223,7 +223,8 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
     <div className="scene-shell">
       <canvas ref={canvas} width={W} height={H} className="scene" role="img" aria-label={presentation.label} />
       <div className="scene-status" aria-live="polite">
-        <b>{paused ? '⏸ Pausado' : '● Treino ativo'}</b>
+        {/* pausado: o selo "Pausado · continuar" sobre a cena já avisa; aqui não repete */}
+        {!paused && <b>● Treino ativo</b>}
         <span>{presentation.detail}</span>
       </div>
     </div>

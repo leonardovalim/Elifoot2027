@@ -1,6 +1,6 @@
 import {
   acceptOffer, advanceDay, buyPlayer, challengeOptions, closeSeason, completeRound, isMatchDay, liveRng,
-  marketListings, myClubId, newWorld, prepareRound, simulateRound, startCareer, type Career,
+  marketListings, myClubId, newWorld, prepareRound, seasonSummary, simulateRound, startCareer, type Career,
 } from '../src/game/career';
 import { changeStyle, runToEnd, substitute, toOutcome } from '../src/sports/football/engine';
 
@@ -110,5 +110,24 @@ describe('carreira com calendário', () => {
     c.clubs[myClubId(c)]!.budget = 0;
     const l = marketListings(c)[0]!;
     expect(buyPlayer(c, l.player.id, l.clubId)).toBe('Caixa insuficiente.');
+  });
+});
+
+describe('demissão por caixa negativo', () => {
+  it('quem quebra o clube perde reputação mesmo cumprindo o objetivo em campo', () => {
+    const w = newWorld(21, 'Teste');
+    const c = startCareer(21, 'Teste', 'crescimento', challengeOptions(w, 'crescimento')[0]!.clubId);
+    const club = c.clubs[myClubId(c)]!;
+    for (const p of club.players) {
+      for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) p.attrs[k] = 99;
+    }
+    playSeason(c);
+    club.budget = -50_000_000; // fecha a temporada no vermelho, mesmo somando a premiação
+    const s = seasonSummary(c);
+    expect(s.achieved).toBe(true);
+    expect(s.broke).toBe(true);
+    expect(s.fired).toBe(true);
+    expect(s.reputationDelta).toBe(-10 + (s.promoted ? 4 : 0) + (s.position === 1 ? 5 : 0));
+    expect(s.reputationDelta).toBeLessThan(0);
   });
 });

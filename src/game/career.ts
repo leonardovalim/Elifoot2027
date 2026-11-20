@@ -676,7 +676,8 @@ export function seasonSummary(c: Career): SeasonSummary {
   const prize = PRIZE[d]?.[pos - 1] ?? 0;
   const broke = c.clubs[me]!.budget + prize < 0;
   const fired = broke || (!achieved && (relegated || pos - expected >= 4));
-  const reputationDelta = (achieved ? 8 : fired ? -10 : -4) + (promoted ? 4 : 0) + (pos === 1 ? 5 : 0);
+  // quebrar o clube pesa mais que o resultado em campo: demitido por caixa negativo leva a penalidade de demissão
+  const reputationDelta = (broke ? -10 : achieved ? 8 : fired ? -10 : -4) + (promoted ? 4 : 0) + (pos === 1 ? 5 : 0);
   return { position: pos, division: d, objective: bond.objective, achieved, fired, promoted, relegated, prize, reputationDelta, broke };
 }
 
