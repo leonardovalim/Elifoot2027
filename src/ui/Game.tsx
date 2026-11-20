@@ -5,9 +5,17 @@ import { divisionStandings } from '../core/season';
 import {
   acceptOffer,
   activeBond,
+  activeIndex,
   advanceDay,
-  closeSeason,
+  closeSeasonAll,
   completeRound,
+  isMultiplayer,
+  managerCount,
+  managerNeedingAttention,
+  managerState,
+  nextQueuedMatch,
+  switchManager,
+  visibleNews,
   decide,
   divisionOf,
   isMatchDay,
@@ -61,6 +69,10 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const [menu, setMenu] = useState<Menu | null>(null);
   const [prep, setPrep] = useState<PreparedRound | null>(null);
   const [summary, setSummary] = useState<SeasonSummary | null>(null);
+  /** Multijogador: balanços que ainda faltam mostrar (um por técnico). */
+  const [summaryQueue, setSummaryQueue] = useState<{ manager: number; s: SeasonSummary }[]>([]);
+  /** Multijogador: tela de "passe o aparelho" para o técnico indicado. */
+  const [handoff, setHandoff] = useState<number | null>(null);
   const [autoSim, setAutoSim] = useState(false);
   const [gains, setGains] = useState<{ list: SceneGain[]; key: string }>({ list: [], key: '' });
   const [toast, setToast] = useState<string | null>(null);
@@ -69,7 +81,23 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const save = useCallback(() => saveCareer(ref.current), []);
   const decision = pendingDecision(c);
   const midOpen = !!c.midSeason?.open && !c.unemployed;
-  const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary || !!decision || midOpen;
+  const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary || !!decision || midOpen || handoff !== null;
+  const multi = isMultiplayer(c);
+
+  /** Passa a vez para o técnico `i` (mostra a tela de troca se mudou de pessoa). */
+  const giveTurn = (i: number) => {
+    if (!multi || i === activeIndex(ref.current)) return;
+    switchManager(ref.current, i);
+    setHandoff(i);
+    setMenu(null);
+    save();
+  };
+
+  // multijogador: outro técnico tem decisão, janela ou emprego esperando → a vez passa para ele
+  const needs = multi && !prep && !summary && handoff === null && !menu && c.phase !== 'encerramento' ? managerNeedingAttention(c) : -1;
+  useEffect(() => {
+    if (needs >= 0 && needs !== activeIndex(ref.current)) { setSpeed(0); giveTurn(needs); force(); }
+  }, [needs]); // eslint-disable-line react-hooks/exhaustive-deps
   const running = speed > 0 && !blocking;
 
   const pause = () => { if (speed > 0) resumeSpeed.current = speed; setSpeed(0); month.current.clean = false; };
@@ -117,7 +145,9 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           matchAchievements(r, year, { watched: false, simulated: true, subs: 0 });
           slowDownAfterMatch(); save(); force(); return;
         }
-        setPrep(prepareRound(career));
+        const p = prepareRound(career);
+        if (p.manager !== undefined) giveTurn(p.manager);
+        setPrep(p);
         return;
       }
       const r = advanceDay(career);
@@ -162,7 +192,33 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const club = me ? c.clubs[me] : undefined;
   const bond = activeBond(c);
 
+  /** Fecha o balanço da vez; se faltar o de outro técnico, a vez passa para ele. */
+  const nextSummary = () => {
+    const [head, ...rest] = summaryQueue;
+    setSummaryQueue(rest);
+    if (head) { giveTurn(head.manager); setSummary(head.s); } else setSummary(null);
+    save();
+    force();
+  };
+
+  const handoffModal = handoff !== null && (
+    <Modal title="Troca de técnico" className="handoff">
+      <p className="handoff-name">Vez de <b>{managerState(c, handoff).entrepreneur.name}</b></p>
+      {club && <p className="hint center"><Badge club={club} size="lg" /> {club.name}</p>}
+      <p className="hint center">Passe o aparelho. Quem estava jogando não precisa ver as decisões do outro.</p>
+      <div className="row center"><button className="btn primary big" autoFocus onClick={() => setHandoff(null)}>Sou eu, continuar ›</button></div>
+    </Modal>
+  );
+
   const onMatchDone = (p: PreparedRound, o: FootballOutcome, info: MatchPlayInfo) => {
+    // multijogador: ainda há partida de outro técnico nesta rodada
+    const next = nextQueuedMatch(p, o);
+    if (next) {
+      giveTurn(next.manager!);
+      setPrep(next);
+      force();
+      return;
+    }
     const home = p.match.home.clubId === myClubId(ref.current);
     const gf = home ? o.homeScore : o.awayScore, ga = home ? o.awayScore : o.homeScore;
     track('match_finished', { round: p.round + 1, season: ref.current.season.year, result: gf > ga ? 'win' : gf < ga ? 'loss' : 'draw', goals_for: gf, goals_against: ga, home });
@@ -177,8 +233,12 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   const endSeason = () => {
     const facts = seasonFacts(ref.current, seasonSummary(ref.current));
-    const s = closeSeason(ref.current);
+    const me = activeIndex(ref.current);
+    const all = closeSeasonAll(ref.current);
+    const s = all[me] ?? all.find(Boolean)!;
     achieve((st) => onSeasonEnd(st, facts, ref.current));
+    // os outros técnicos veem o balanço deles em seguida
+    setSummaryQueue(all.map((x, i) => ({ manager: i, s: x })).filter((x) => x.s && x.manager !== me));
     track('season_completed', { seasons_played: ref.current.entrepreneur.history.length, position: s.position, division: s.division + 1, objective: s.objective, achieved: s.achieved, fired: s.fired, promoted: s.promoted, relegated: s.relegated });
     setSummary(s);
     save();
@@ -187,12 +247,17 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   // ------------------------------------------------ sem clube (demitido)
   if (!club || !bond) {
-    const accept = (o: Career['offers'][number]) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); };
+    const accept = (o: Career['offers'][number]) => {
+      track('offer_accepted', { unemployed: ref.current.unemployed });
+      const err = acceptOffer(ref.current, o);
+      if (err) { setToast(err); return; }
+      nextSummary();
+    };
     return (
       <div className="game">
-        {summary ? (
+        {handoff !== null ? null : summary ? (
           // acabou de ser demitido: mostra o balanço da temporada antes das propostas
-          <Modal title={`Balanço ${c.season.year - 1}`}>
+          <Modal title={multi ? `Balanço ${c.season.year - 1} · ${c.entrepreneur.name}` : `Balanço ${c.season.year - 1}`}>
             <SummaryView s={summary} />
             <p>
               {summary.broke
@@ -204,12 +269,14 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
           </Modal>
         ) : (
-          <Modal title="Você está sem clube">
+          <Modal title={multi ? `${c.entrepreneur.name}, você está sem clube` : 'Você está sem clube'}>
             <h4>Propostas recebidas</h4>
             <OfferList career={c} onAccept={accept} />
             <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
           </Modal>
         )}
+        {handoffModal}
+        {toast && <div className="toast">{toast}</div>}
       </div>
     );
   }
@@ -236,6 +303,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           <Badge club={club} size="lg" />
           <div>
             <b>{club.name}</b>
+            {multi && <span className="hud-manager">Técnico: <b>{c.entrepreneur.name}</b> ({activeIndex(c) + 1}/{managerCount(c)})</span>}
             <span>Div. {d + 1} · {(table[pos - 1]?.played ?? 0) > 0 ? `${pos}º lugar` : 'sem jogos'}</span>
           </div>
         </div>
@@ -265,6 +333,12 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           ))}
           <SoundToggle />
         </div>
+        {multi && (
+          <button className="btn sm pass-turn" disabled={!!prep || c.phase === 'encerramento'} onClick={() => { pause(); giveTurn((activeIndex(c) + 1) % managerCount(c)); force(); }}
+            title="Passar a vez para o próximo técnico">
+            Vez de {managerState(c, (activeIndex(c) + 1) % managerCount(c)).entrepreneur.name} ›
+          </button>
+        )}
         <button className="btn sm help-btn" aria-label="Ajuda: como jogar" title="Como jogar" onClick={() => { pause(); openHelp(); }}>?</button>
       </header>
 
@@ -317,7 +391,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           <section className="window news">
             <header className="window-title"><span>Notícias</span></header>
             <ul className="window-body feed">
-              {c.news.slice(0, 14).map((n, i) => (
+              {visibleNews(c).slice(0, 14).map((n, i) => (
                 <li key={i} className={n.kind}><span className="ico">{NEWS_ICON[n.kind]}</span><span>{n.text}<em>{n.date.slice(8, 10)}/{n.date.slice(5, 7)}</em></span></li>
               ))}
             </ul>
@@ -343,9 +417,9 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
         </Modal>
       )}
 
-      {prep && (
-        <Modal title="Dia de jogo" wide className="match-window">
-          <MatchDay career={c} prep={prep} onDone={onMatchDone} />
+      {prep && handoff === null && (
+        <Modal title={multi ? `Dia de jogo · ${c.entrepreneur.name}` : 'Dia de jogo'} wide className="match-window">
+          <MatchDay key={`${prep.manager ?? 0}-${prep.match.home.clubId}`} career={c} prep={prep} onDone={onMatchDone} />
         </Modal>
       )}
 
@@ -353,31 +427,38 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
         <SeasonEndModal career={c} onClose={endSeason} />
       )}
 
-      {summary && (
-        <Modal title={`Balanço ${c.season.year - 1}`}>
+      {summary && handoff === null && (
+        <Modal title={multi ? `Balanço ${c.season.year - 1} · ${c.entrepreneur.name}` : `Balanço ${c.season.year - 1}`}>
           <SummaryView s={summary} />
           {/* demitido não chega aqui: o retorno "sem clube" acima mostra o balanço com as propostas */}
           {c.offers.length > 0 && (
             <>
               <h4>Propostas recebidas</h4>
-              <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
+              <OfferList career={c} onAccept={(o) => {
+                track('offer_accepted', { unemployed: ref.current.unemployed });
+                const err = acceptOffer(ref.current, o);
+                if (err) { setToast(err); return; }
+                nextSummary();
+              }} />
             </>
           )}
           <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>
-          <button className="btn primary" onClick={() => { ref.current.offers = []; setSummary(null); save(); force(); }}>
+          <button className="btn primary" onClick={() => { ref.current.offers = []; nextSummary(); }}>
             {c.offers.length ? 'Ficar no clube' : 'Seguir para a nova temporada'} ›
           </button>
         </Modal>
       )}
 
-      {midOpen && !menu && !prep && !summary && (
+      {handoffModal}
+
+      {midOpen && !menu && !prep && !summary && handoff === null && (
         <MidSeasonModal career={c} onChoose={(clubId) => {
           track('midseason_offer', { choice: clubId ? c.midSeason!.offers.find((o) => o.clubId === clubId)!.reason : 'ficar' });
           doAct((career) => resolveMidSeason(career, clubId));
         }} />
       )}
 
-      {decision && !menu && !prep && !summary && !midOpen && c.phase !== 'encerramento' && (
+      {decision && !menu && !prep && !summary && !midOpen && handoff === null && c.phase !== 'encerramento' && (
         <DecisionModal career={c} decision={decision} onChoose={(choice) => {
           track('market_decision', { kind: decision.kind, choice });
           doAct((career) => decide(career, decision.id, choice), { kind: decision.kind, choice });
