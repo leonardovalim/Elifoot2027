@@ -74,7 +74,7 @@ export function playerValue(p: Player): number {
 
 /** Salário mensal. */
 export function wageFor(p: Player): number {
-  return Math.max(2000, Math.round(playerValue(p) / 90 / 100) * 100);
+  return Math.max(2000, Math.round(playerValue(p) / 100 / 100) * 100);
 }
 
 const SQUAD: Position[] = ['GK','GK','DF','DF','DF','DF','DF','DF','DF','MF','MF','MF','MF','MF','MF','MF','FW','FW','FW','FW'];
@@ -94,7 +94,7 @@ export function generateClub(rng: Rng, city: string, level: number, colors: [str
     players: SQUAD.map((pos) => generatePlayer(rng, pos, level)),
     formation: '4-4-2',
     style: 'balanced',
-    budget: Math.round((level ** 3 * 6) / 10000) * 10000,
+    budget: Math.round((level ** 3 * 8) / 10000) * 10000,
     reputation: Math.max(5, Math.min(95, Math.round((level - 35) * 1.6 + rng.gaussian() * 4))),
     fans: Math.round(level ** 2 * 3.2),
     stadium: Math.round((level ** 2 * 4.5) / 1000) * 1000 + 3000,

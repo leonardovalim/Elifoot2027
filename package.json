@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "balance": "vitest run tests/balance.test.ts"
+    "balance": "vitest run tests/balance.test.ts",
+    "qa": "node qa/playtest.mjs",
+    "qa:explore": "node qa/playtest.mjs --explore 200",
+    "qa:selftest": "node qa/selftest.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -19,6 +22,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.65.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"

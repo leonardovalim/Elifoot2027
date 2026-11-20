@@ -4,6 +4,7 @@ import {
   simulateRound, startCareer, type Career,
 } from '../src/game/career';
 import { moraleAfterMatch, moraleOf, type Decision, type DecisionChoice } from '../src/game/market';
+import { playerValue } from '../src/sports/football/generate';
 import { overall, pickLineup } from '../src/sports/football/lineup';
 import { athleteContext } from '../src/ui/panels/Decisions';
 
@@ -151,5 +152,17 @@ describe('mercado vivo', () => {
     const bench = l.bench[0]!;
     expect(athleteContext(cl, bench).role).toBe('bench');
     expect(athleteContext(cl, bench).sub).toBeUndefined();
+  });
+
+  it('atleta sem valor de mercado não recebe proposta de $0', () => {
+    // achado pelo playtest: elenco muito fraco gerava "Oferta $0 (NaN% do valor)"
+    const c = start(13);
+    for (const p of club(c).players) {
+      for (const k of Object.keys(p.attrs) as (keyof typeof p.attrs)[]) p.attrs[k] = 1;
+      p.potential = 1;
+    }
+    expect(club(c).players.every((p) => playerValue(p) === 0)).toBe(true);
+    const seen = playSeason(c, (d) => (d.kind === 'bid' ? 'refuse' : 'accept'));
+    expect(seen.filter((d) => d.kind === 'bid')).toEqual([]);
   });
 });

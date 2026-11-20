@@ -31,6 +31,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const [, tick] = useReducer((x: number) => x + 1, 0);
   const [subOut, setSubOut] = useState('');
   const [subIn, setSubIn] = useState('');
+  const [subErr, setSubErr] = useState('');
   const outcome = useRef<FootballOutcome | null>(null);
 
   useEffect(() => {
@@ -189,9 +190,10 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             <button className="btn sm" disabled={!subOut || !subIn || mine.subsLeft <= 0} onClick={() => {
               const err = substitute(m, side, subOut, subIn);
               if (!err) track('match_intervention', { type: 'substitution', minute: m.minute });
-              if (!err) { setSubOut(''); setSubIn(''); tick(); } else alert(err);
+              if (!err) { setSubOut(''); setSubIn(''); setSubErr(''); tick(); } else setSubErr(err);
             }}>Trocar ({mine.subsLeft})</button>
           </div>
+          {subErr && <p className="sub-error" role="alert">{subErr}</p>}
           <h4>Condição física · {m[side].short}</h4>
           <div className="cond-list">
             {onPitch.map((x) => (

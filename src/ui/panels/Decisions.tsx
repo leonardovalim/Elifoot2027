@@ -104,6 +104,7 @@ export function DecisionModal({ career, decision: d, onChoose }: { career: Caree
 
   if (d.kind === 'bid') {
     const buyer = career.clubs[d.clubId]!;
+    const value = playerValue(p);
     return (
       <Modal title={TITLE.bid}>
         <div className="decision">
@@ -113,8 +114,8 @@ export function DecisionModal({ career, decision: d, onChoose }: { career: Caree
           </div>
           {who}
           <dl className="kv">
-            <dt>Valor de mercado</dt><dd>{money(playerValue(p))}</dd>
-            <dt>Oferta</dt><dd className={d.fee >= playerValue(p) ? 'ok' : ''}>{money(d.fee)} ({Math.round((d.fee / playerValue(p)) * 100)}% do valor)</dd>
+            <dt>Valor de mercado</dt><dd>{money(value)}</dd>
+            <dt>Oferta</dt><dd className={d.fee >= value ? 'ok' : ''}>{money(d.fee)}{value > 0 && ` (${Math.round((d.fee / value) * 100)}% do valor)`}</dd>
           </dl>
           <p className="hint">Cobrir a oferta: ele fica e passa a ganhar o mesmo salário oferecido. Recusar uma proposta com salário bem maior deixa o atleta chateado.</p>
           <div className="decision-actions">
