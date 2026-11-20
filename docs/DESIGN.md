@@ -110,6 +110,14 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - **Selos clicáveis**: tocar em qualquer selo de atleta (raçudo, fair play, joia, novo, fim contr., sai, susp., fora de posição, titular) abre a ajuda direto na explicação dele. A área de toque é ampliada por CSS sem mudar o visual.
 - Os textos da ajuda descrevem regras reais do código; ao mudar uma regra, revise o verbete correspondente.
 
+## Janela do meio do campeonato
+
+- Abre ao fim da rodada 11 (`openMidSeasonWindow`), com RNG próprio derivado da seed e do ano: não altera a sequência do resto da simulação.
+- **Mérito**: entre os 3 primeiros, um clube de reputação maior (até reputação do jogador + 25, mesma divisão ou acima) convida; salário +15%.
+- **Crise**: 30% de chance de um clube nas 2 últimas posições (divisões 1–3) convidar para "evitar o rebaixamento"; salário +25%.
+- **Aceitar**: multa de 2 salários do patrimônio (até o que houver) e −3 de reputação; o objetivo do clube novo vale para a temporada inteira dele. **Recusar**: +2 de reputação.
+- Medido (30 seeds por desafio, sem interferência): abre em ~1/3 das carreiras de "começar de baixo" e "pressão" e ~2/3 em "crescimento" (times médios terminam o turno no topo com mais frequência).
+
 ## Conquistas e legado no CT
 
 - **51 conquistas secretas** (`game/achievements.ts`): 20 bronze, 15 prata, 10 ouro e 6 lendárias. A 51ª, **Laranja da Baixada**, é receber proposta do **Nova Iguaçu** (`NOVA_IGUACU_ID`, o clube mais forte da 1ª divisão em todo mundo gerado; exige reputação alta). São do **jogador**, não da carreira: ficam em `localStorage` (`mestres-do-esporte.conquistas`) e sobrevivem a apagar o save ou começar outra carreira.

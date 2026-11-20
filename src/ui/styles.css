@@ -736,3 +736,10 @@ html, body { overflow-x: hidden; }
 /* obras dentro do bloco recolhido no celular: o título já está no resumo */
 .fold .works-box { margin: 0; box-shadow: none; background: transparent; }
 .fold .works-box > h4:first-child { display: none; }
+
+/* janela do meio do campeonato */
+.mid-why { margin: 6px 0; font-size: 13px; line-height: 1.35; }
+.offer.mid-crise { box-shadow: inset 4px 0 0 var(--bad); }
+.offer.mid-merito { box-shadow: inset 4px 0 0 var(--good); }
+.mid-stay { display: block; width: calc(100% - 2 * var(--px)); white-space: normal; text-align: left; line-height: 1.3; } /* nome de clube longo quebra a linha em vez de vazar */
+.offer-head .mid-why { margin: 4px 0 0; }

@@ -13,6 +13,9 @@ import {
   isMatchDay,
   myClubId,
   pendingDecision,
+  resolveMidSeason,
+  MID_SEASON,
+  type MidOffer,
   prepareRound,
   seasonSummary,
   simulateRound,
@@ -63,7 +66,8 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   const save = useCallback(() => saveCareer(ref.current), []);
   const decision = pendingDecision(c);
-  const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary || !!decision;
+  const midOpen = !!c.midSeason?.open && !c.unemployed;
+  const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary || !!decision || midOpen;
   const running = speed > 0 && !blocking;
 
   const pause = () => { if (speed > 0) resumeSpeed.current = speed; setSpeed(0); month.current.clean = false; };
@@ -133,6 +137,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   useEffect(() => { if (decisionId) play('alert'); }, [decisionId]);
   useEffect(() => { if (prep) play('alert'); }, [prep]);
   useEffect(() => { if (seasonEnding) play('alert'); }, [seasonEnding]);
+  useEffect(() => { if (midOpen) play('alert'); }, [midOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -356,7 +361,14 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
         </Modal>
       )}
 
-      {decision && !menu && !prep && !summary && c.phase !== 'encerramento' && (
+      {midOpen && !menu && !prep && !summary && (
+        <MidSeasonModal career={c} onChoose={(clubId) => {
+          track('midseason_offer', { choice: clubId ? c.midSeason!.offers.find((o) => o.clubId === clubId)!.reason : 'ficar' });
+          doAct((career) => resolveMidSeason(career, clubId));
+        }} />
+      )}
+
+      {decision && !menu && !prep && !summary && !midOpen && c.phase !== 'encerramento' && (
         <DecisionModal career={c} decision={decision} onChoose={(choice) => {
           track('market_decision', { kind: decision.kind, choice });
           doAct((career) => decide(career, decision.id, choice), { kind: decision.kind, choice });
@@ -389,6 +401,37 @@ function SummaryView({ s }: { s: SeasonSummary }) {
         <dt>Reputação</dt><dd>{s.reputationDelta >= 0 ? '+' : ''}{s.reputationDelta}</dd>
       </dl>
     </div>
+  );
+}
+
+/** Janela do meio do campeonato: convites por mérito ou crise, com o custo de sair à vista. */
+function MidSeasonModal({ career, onChoose }: { career: Career; onChoose: (clubId: string | null) => void }) {
+  const w = career.midSeason!;
+  const mine = career.clubs[myClubId(career)]!;
+  const fine = Math.min(career.entrepreneur.cash, (activeBond(career)?.monthlySalary ?? 0) * MID_SEASON.fineSalaries);
+  const why = (o: MidOffer) => o.reason === 'merito'
+    ? 'Gostou do seu turno e quer você para o returno.'
+    : `Está em ${o.clubPosition}º, ameaçado de rebaixamento: quer você para salvar a temporada.`;
+  return (
+    <Modal title="Janela do meio do campeonato">
+      <p>Fim do 1º turno: o <b>{mine.name}</b> está em <b>{w.position}º</b> na Divisão {divisionOf(career, mine.id) + 1}. {w.offers.length === 1 ? 'Um clube quer' : 'Clubes querem'} você agora.</p>
+      <div className="offers small">
+        {w.offers.map((o) => {
+          const club = career.clubs[o.clubId]!;
+          return (
+            <div key={o.clubId} className={`offer mid-${o.reason}`}>
+              {/* o cartão de proposta é um grid de 4 linhas (cabeçalho, dados, objetivo, botão): o motivo fica no cabeçalho */}
+              <div className="offer-head"><Badge club={club} /><div><span className="offer-name">{club.name}</span><span className="hint">Divisão {divisionOf(career, club.id) + 1} · {o.clubPosition}º</span><span className="mid-why">{o.reason === 'merito' ? '⭐' : '🚨'} {why(o)}</span></div></div>
+              <dl className="kv"><dt>Reputação</dt><dd>{club.reputation}/100</dd><dt>Salário</dt><dd>{money(o.monthlySalary)}/mês</dd></dl>
+              <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
+              <button className="btn primary" onClick={() => onChoose(o.clubId)}>Aceitar</button>
+            </div>
+          );
+        })}
+      </div>
+      <p className="hint">Sair agora custa <b>{money(fine)}</b> de multa rescisória (do seu patrimônio) e <b>−{MID_SEASON.leaveReputation}</b> de reputação. O objetivo do clube novo vale para a temporada inteira dele.</p>
+      <button className="btn mid-stay" onClick={() => onChoose(null)}>Ficar no {mine.name} <span className="hint">(+{MID_SEASON.stayReputation} de reputação)</span></button>
+    </Modal>
   );
 }
 
