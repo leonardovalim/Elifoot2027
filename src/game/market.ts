@@ -87,7 +87,7 @@ export function marketDay(ctx: MarketCtx, rng: Rng) {
 function maybeBid(ctx: MarketCtx, club: Club, rng: Rng) {
   if (ctx.decisions.some((d) => d.kind === 'bid')) return;
   // atleta sem valor de mercado não recebe proposta (evitava oferta de $0 e "NaN% do valor" na tela)
-  const pool = club.players.filter((p) => canLose(club, p) && !p.leaving && playerValue(p) > 0);
+  const pool = club.players.filter((p) => canLose(club, p) && !p.leaving && !p.clubLocked && playerValue(p) > 0);
   if (!pool.length) return;
   const unhappy = pool.some((p) => moraleOf(p) < 25);
   if (!rng.chance(unhappy ? 0.03 : 0.016)) return;
@@ -123,7 +123,8 @@ function maybeRaise(ctx: MarketCtx, club: Club, rng: Rng) {
 /** A partir de agosto, quem tem contrato acabando pede renovação (até 2 por mês). */
 function askRenewals(ctx: MarketCtx, club: Club) {
   const expiring = club.players
-    .filter((p) => expiresThisSeason(p, ctx.year) && p.renewalAsked !== ctx.year && !p.leaving)
+    // o ídolo preso ao clube renova sozinho na virada da temporada
+    .filter((p) => expiresThisSeason(p, ctx.year) && p.renewalAsked !== ctx.year && !p.leaving && !p.clubLocked)
     .sort((a, b) => overall(b) - overall(a));
   // em novembro todos os que faltam pedem de uma vez, para ninguém sair sem aviso
   const take = monthOf(ctx.date) >= 11 ? expiring.length : 2;
@@ -240,7 +241,7 @@ export function releaseLeavers(clubs: Record<string, Club>, me: string, year: nu
   if (!club) return [];
   const out: string[] = [];
   for (const p of [...club.players]) {
-    if (!p.leaving || !expiresThisSeason(p, year)) continue;
+    if (!p.leaving || p.clubLocked || !expiresThisSeason(p, year)) continue;
     club.players = club.players.filter((x) => x.id !== p.id);
     if (club.lineup) club.lineup = { xi: club.lineup.xi.filter((x) => x !== p.id), bench: club.lineup.bench.filter((x) => x !== p.id) };
     const dest = Object.values(clubs).filter((c) => c.id !== me && c.players.length < 28);

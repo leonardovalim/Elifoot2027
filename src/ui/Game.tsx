@@ -28,6 +28,7 @@ import { DecisionModal } from './panels/Decisions';
 import { CareerPanel, FinancePanel, MarketPanel, SquadPanel, TablePanel, type Act } from './panels/Panels';
 import { CtScene, type SceneGain } from './scene/CtScene';
 import { track } from './analytics';
+import { play, SoundToggle } from './sound';
 import { saveCareer } from './storage';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
 
@@ -93,6 +94,13 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     }, SPEEDS[speed]);
     return () => clearInterval(t);
   }, [running, speed, autoSim, save]);
+
+  // o jogo parou para o jogador decidir algo: avisa com som
+  const decisionId = decision?.id;
+  const seasonEnding = c.phase === 'encerramento';
+  useEffect(() => { if (decisionId) play('alert'); }, [decisionId]);
+  useEffect(() => { if (prep) play('alert'); }, [prep]);
+  useEffect(() => { if (seasonEnding) play('alert'); }, [seasonEnding]);
 
   useEffect(() => {
     if (!toast) return;
@@ -205,6 +213,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           {['⏸', '▶', '▶▶', '▶▶▶'].map((s, i) => (
             <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} aria-label={i === 0 ? 'Pausar' : `Velocidade ${i}`} aria-pressed={speed === i} disabled={blocking && i > 0} onClick={() => { if (i === 0) pause(); else { setSpeed(i); track('time_speed', { speed: i }); } }} title={i === 0 ? 'Pausar (espaço)' : `Velocidade ${i}`}>{s}</button>
           ))}
+          <SoundToggle />
         </div>
       </header>
 
@@ -273,7 +282,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       </nav>
 
       {menu && (
-        <Modal title={MENUS.find((x) => x.id === menu)!.label} onClose={() => setMenu(null)} wide>
+        <Modal title={MENUS.find((x) => x.id === menu)!.label} onClose={() => setMenu(null)} wide className={`menu-${menu}`}>
           {menu === 'elenco' && <SquadPanel career={c} act={act} />}
           {menu === 'mercado' && <MarketPanel career={c} act={act} />}
           {menu === 'tabela' && <TablePanel career={c} />}

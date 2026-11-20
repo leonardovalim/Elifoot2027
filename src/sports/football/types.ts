@@ -53,6 +53,8 @@ export interface Player {
   renewalAsked?: number;
   /** Não renovou: deixa o clube ao fim da temporada. */
   leaving?: boolean;
+  /** Ídolo preso ao clube: nunca sai (sem mercado, propostas, venda, saída ou aposentadoria). */
+  clubLocked?: boolean;
 }
 
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2' | '5-3-2' | '4-5-1' | '3-4-3' | '5-4-1';
