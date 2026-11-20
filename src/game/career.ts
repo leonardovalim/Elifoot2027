@@ -75,6 +75,25 @@ export interface Offer {
   monthlySalary: number;
 }
 
+/** Convite na janela do meio do campeonato: por mérito (bom turno) ou por crise (clube na zona). */
+export interface MidOffer extends Offer {
+  reason: 'merito' | 'crise';
+  /** Posição do clube que convida, no momento da janela. */
+  clubPosition: number;
+}
+
+export interface MidSeasonWindow {
+  year: number;
+  /** Sua posição ao fim do turno. */
+  position: number;
+  offers: MidOffer[];
+  /** true enquanto aguarda a sua resposta (pausa o tempo). */
+  open: boolean;
+}
+
+/** Custo de aceitar no meio do campeonato e prêmio por recusar. */
+export const MID_SEASON = { fineSalaries: 2, leaveReputation: 3, stayReputation: 2 };
+
 export interface SeasonAward {
   year: number;
   division: number;
@@ -107,6 +126,8 @@ export interface Career {
   loan?: Loan;
   /** Meses seguidos fechando com o caixa negativo (ausente = 0). */
   monthsInRed?: number;
+  /** Janela do meio do campeonato (fim do 1º turno), ausente fora dela. */
+  midSeason?: MidSeasonWindow;
 }
 
 // ---------------------------------------------------------------- criação
@@ -525,6 +546,7 @@ export function completeRound(c: Career, prep: PreparedRound, mine: FootballOutc
 
   c.season.round++;
   c.lastRound = record;
+  if (c.season.round === Math.floor(c.roundDates.length / 2)) openMidSeasonWindow(c);
   if (c.season.round >= c.roundDates.length) {
     c.phase = 'encerramento';
     push(c, 'info', 'Fim da temporada! Hora do balanço.');
@@ -683,6 +705,7 @@ export function seasonSummary(c: Career): SeasonSummary {
 
 /** Fecha a temporada: premiação, avaliação, acesso/queda, envelhecimento, nova tabela e ofertas. */
 export function closeSeason(c: Career): SeasonSummary {
+  c.midSeason = undefined;
   const sum = seasonSummary(c);
   const rng = new Rng(c.rngState);
   const me = myClubId(c);
@@ -764,6 +787,83 @@ export function closeSeason(c: Career): SeasonSummary {
   c.offers = generateOffers(c, sum.fired ? 3 : sum.achieved ? 2 : 0);
   if (c.offers.length && !sum.fired) push(c, 'good', `Você recebeu ${c.offers.length} proposta(s) de outros clubes.`);
   return sum;
+}
+
+// ---------------------------------------------------------------- janela do meio do campeonato
+
+const positionIn = (c: Career, clubId: string) => {
+  const d = divisionOf(c, clubId);
+  return divisionStandings(c.season.divisions[d]!, football.points).findIndex((r) => r.teamId === clubId) + 1;
+};
+
+/**
+ * Fim do 1º turno: um clube maior chama quem está entre os 3 primeiros (mérito) e,
+ * às vezes, um clube na zona de rebaixamento chama para salvar a temporada (crise).
+ * RNG próprio (derivado da seed e do ano): não mexe na sequência do resto da simulação.
+ */
+export function openMidSeasonWindow(c: Career) {
+  if (c.unemployed) return;
+  const me = myClubId(c);
+  const mine = c.clubs[me];
+  if (!mine) return;
+  const d = divisionOf(c, me);
+  const position = positionIn(c, me);
+  const rep = c.entrepreneur.reputation;
+  const rng = new Rng((c.seed ^ Math.imul(c.season.year, 7919) ^ 0x51ed) >>> 0);
+  const offers: MidOffer[] = [];
+
+  const salaryNow = activeBond(c)?.monthlySalary ?? 0;
+  const raise = (cl: Club, mult: number) => Math.round(Math.max(salaryFor(cl) * mult, salaryNow * 1.2) / 500) * 500;
+  if (position <= 3) {
+    // "clube maior" de verdade: de divisão acima; quem já está na 1ª recebe de um rival maior da metade de cima
+    const bigger = Object.values(c.clubs)
+      .filter((cl) => cl.id !== me && cl.reputation <= rep + 25 && (d > 0
+        ? divisionOf(c, cl.id) < d
+        : cl.reputation > mine.reputation && positionIn(c, cl.id) <= 6))
+      .sort((a, b) => a.reputation - b.reputation)
+      .slice(0, 3);
+    if (bigger.length) {
+      const cl = bigger[rng.int(0, bigger.length - 1)]!;
+      offers.push({ clubId: cl.id, objective: boardObjective(c, cl.id), monthlySalary: raise(cl, 1.15), reason: 'merito', clubPosition: positionIn(c, cl.id) });
+    }
+  }
+
+  const inDanger = c.season.divisions.flatMap((div, di) => {
+    if (di >= DIVISIONS - 1) return []; // a última divisão não tem rebaixamento
+    const rows = divisionStandings(div, football.points);
+    return rows.slice(-2).map((r) => r.teamId);
+  }).filter((id) => id !== me && c.clubs[id]!.reputation <= rep + 18);
+  if (inDanger.length && rng.chance(0.3)) { // ~1 em 3 carreiras: convite de crise é evento, não rotina
+    const cl = c.clubs[inDanger[rng.int(0, inDanger.length - 1)]!]!;
+    offers.push({ clubId: cl.id, objective: 'permanencia', monthlySalary: raise(cl, 1.25), reason: 'crise', clubPosition: positionIn(c, cl.id) });
+  }
+
+  if (!offers.length) return;
+  c.midSeason = { year: c.season.year, position, offers, open: true };
+  push(c, 'good', `Janela do meio do campeonato: ${offers.length === 1 ? 'um clube quer' : `${offers.length} clubes querem`} você.`);
+}
+
+/** Resposta à janela: aceitar um convite (paga multa e perde reputação) ou ficar (ganha reputação). */
+export function resolveMidSeason(c: Career, acceptClubId: string | null): string | null {
+  const w = c.midSeason;
+  if (!w?.open) return 'Nenhuma proposta em aberto.';
+  const e = c.entrepreneur;
+  const old = c.clubs[myClubId(c)];
+  if (acceptClubId) {
+    const offer = w.offers.find((o) => o.clubId === acceptClubId);
+    if (!offer) return 'Proposta não encontrada.';
+    const fine = Math.min(e.cash, (activeBond(c)?.monthlySalary ?? 0) * MID_SEASON.fineSalaries);
+    e.cash -= fine;
+    e.reputation = Math.max(0, e.reputation - MID_SEASON.leaveReputation);
+    w.open = false;
+    acceptOffer(c, offer);
+    push(c, 'bad', `Você deixou o ${old?.name ?? 'clube'} no meio da temporada: multa de ${fmtMoney(fine)} e −${MID_SEASON.leaveReputation} de reputação.`);
+  } else {
+    e.reputation = Math.min(100, e.reputation + MID_SEASON.stayReputation);
+    w.open = false;
+    push(c, 'good', `Você recusou as propostas e ficou no ${old?.name ?? 'clube'}: +${MID_SEASON.stayReputation} de reputação pela fidelidade.`);
+  }
+  return null;
 }
 
 /** Propostas de trabalho conforme a reputação do empreendedor (GDD 2.11). */

@@ -163,6 +163,7 @@ function Content({ topic, tag }: { topic: HelpTopic; tag?: TagKind }) {
           <ul>
             <li>Os <b>2 primeiros sobem</b> e os <b>2 últimos caem</b>.</li>
             <li>Os <b>3 primeiros</b> de cada divisão recebem premiação.</li>
+            <li><b>Janela do meio do campeonato</b> (fim do 1º turno): às vezes chega convite de um clube maior, se o seu turno foi bom, ou de um clube ameaçado de rebaixamento. Sair custa 2 salários de multa e −3 de reputação; ficar dá +2.</li>
             <li>No <b>balanço</b> você vê a posição, o objetivo, a reputação e as propostas. Aceitar uma proposta troca de clube; o empréstimo em aberto fica com o clube antigo.</li>
           </ul>
         </>

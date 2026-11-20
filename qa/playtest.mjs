@@ -269,7 +269,7 @@ function snapshotSave() {
 
 /* Confere se o jogo reagiu à temporada como as regras dizem. before = início da temporada,
    closed = logo após o fechamento, after = depois da escolha no balanço. */
-function businessRules(before, closed, after, plan, action, fired = null) {
+function businessRules(before, closed, after, plan, action, fired = null, midSwitch = false) {
   const out = [];
   const bad = (severity, text) => out.push({ severity, text });
   if (fired) {
@@ -287,7 +287,7 @@ function businessRules(before, closed, after, plan, action, fired = null) {
   const h = closed.lastHistory;
   if (!h || closed.histLen !== before.histLen + 1) { bad('alta', 'a temporada não entrou no histórico da carreira'); return out; }
   const d = h.division, pos = h.position, n = before.divSize;
-  if (before.div + 1 !== d) bad('alta', `histórico diz Divisão ${d}, mas o clube começou a temporada na Divisão ${before.div + 1}`);
+  if (!midSwitch && before.div + 1 !== d) bad('alta', `histórico diz Divisão ${d}, mas o clube começou a temporada na Divisão ${before.div + 1}`);
   // Medido em 20 temporadas na Div. 1: elenco 99 é campeão ~90% das vezes (V 65% · E 20% · D 14% por jogo).
   // Fora do top 2 é raro mas possível; se o cenário vendeu atletas nas decisões, o elenco 99 nem existe mais.
   if (plan.team === 'forte' && !plan.sold && pos > 2) bad('baixa', `elenco todo com atributos 99 terminou em ${pos}º na Divisão ${d} (raro, ~5%; repetir com outra seed para ver se é azar)`);
@@ -300,7 +300,7 @@ function businessRules(before, closed, after, plan, action, fired = null) {
   if (!closed.unemployed) {
     const expected = promoted ? d - 1 : relegated ? d + 1 : d;
     if (closed.div + 1 !== expected) bad('alta', `terminou em ${pos}º na Divisão ${d}${promoted ? ' (acesso)' : relegated ? ' (rebaixamento)' : ''}, mas a nova temporada começou na Divisão ${closed.div + 1} (esperado ${expected})`);
-    if (pos === 1 && closed.titles !== before.titles + 1) bad('alta', `campeão da Divisão ${d} mas o título não foi registrado no clube`);
+    if (pos === 1 && !midSwitch && closed.titles !== before.titles + 1) bad('alta', `campeão da Divisão ${d} mas o título não foi registrado no clube`);
   }
   if (h.achieved && closed.reputation < before.reputation && !closed.brokeFired && closed.redMonths <= before.redMonths) bad('media', `cumpriu o objetivo e a reputação caiu (${before.reputation} → ${closed.reputation})`);
   if (closed.badNumbers || after.badNumbers) bad('alta', 'valores de dinheiro/reputação inválidos (NaN/Infinity) no save');
@@ -550,7 +550,7 @@ async function runViewport(browser, vpName, report) {
           const after = await page.evaluate(snapshotSave);
           rec.after = after;
           if (rec.firedFlow) rec.action = action = `demitido → ${closed.club}; ${action}`;
-          for (const v of businessRules(rec.before, closed, after, plan, action, rec.firedFlow ? rec.unemployedSnapshot : null)) add({ kind: 'regra-de-negócio', severity: v.severity, detail: `temporada ${done + 1} (${plan.label}): ${v.text}` });
+          for (const v of businessRules(rec.before, closed, after, rec.midSwitch ? { ...plan, team: 'normal', label: `${plan.label} → trocou de clube no meio` } : plan, action, rec.firedFlow ? rec.unemployedSnapshot : null, !!rec.midSwitch)) add({ kind: 'regra-de-negócio', severity: v.severity, detail: `temporada ${done + 1} (${plan.label}): ${v.text}` });
           done++;
           await check(`${tag}-nova-temporada`);
           if (done < SEASONS) await startSeason();
@@ -580,6 +580,11 @@ async function runViewport(browser, vpName, report) {
           const label = (await buttons.nth(k).innerText().catch(() => '?')).replace(/\s+/g, ' ').trim();
           (report.decisions ??= []).push({ viewport: vpName, season: done + 1, dialog: title, choice: label });
           if (/^Vender|^Deixar sair/i.test(label) && plan) plan.sold = true; // elenco forçado deixou de ser o original
+          if (title === 'Janela do meio do campeonato' && /^Aceitar/.test(label)) {
+            const rec = report.seasons.at(-1);
+            if (rec) rec.midSwitch = true; // trocou de clube no meio: as regras da temporada valem para o clube novo
+            (report.midSeason ??= []).push({ viewport: vpName, season: done + 1, choice: 'aceitou' });
+          } else if (title === 'Janela do meio do campeonato') (report.midSeason ??= []).push({ viewport: vpName, season: done + 1, choice: label });
           await buttons.nth(k).click({ timeout: 3000 }).catch(() => {});
         } else {
           // tempo correndo: após cada jogo o jogo volta para a velocidade 1, então acelera de novo
