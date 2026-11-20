@@ -6,8 +6,14 @@ import {
   buyPlayer,
   divisionOf,
   financialState,
+  LOAN_TERMS,
+  loanLimit,
+  loanPayoff,
+  loanQuote,
   marketListings,
   monthlyForecast,
+  payOffLoan,
+  takeLoan,
   myClubId,
   isNewSigning,
   sellPlayer,
@@ -22,6 +28,7 @@ import type { AttrKey, Club, Formation, Player, Style } from '../../sports/footb
 import { expiresThisSeason } from '../../game/market';
 import { track } from '../analytics';
 import { Morale } from './Decisions';
+import { askConfirm } from '../confirm';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -122,7 +129,13 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
             <>
               <LineupActions club={club} p={selected} current={status[selected.id]!} onMove={move} />
               <PlayerCard p={selected} year={career.season.year} isNew={isNewSigning(selected, career.date)} onSell={() => {
-                if (confirm(`Vender ${selected.name} por ~${money(Math.round(playerValue(selected) * 0.85))}?`)) { act((c) => sellPlayer(c, selected.id)); setSel(null); }
+                const p = selected;
+                void askConfirm({
+                  title: 'Vender atleta',
+                  body: <><p>Vender <b>{p.name}</b> por cerca de <b>{money(Math.round(playerValue(p) * 0.85))}</b>?</p><p className="hint">O clube que pagar mais leva na hora. Para negociar com calma, espere uma proposta chegar.</p></>,
+                  confirmLabel: 'Vender',
+                  danger: true,
+                }).then((ok) => { if (ok) { act((c) => sellPlayer(c, p.id)); setSel(null); } });
               }} />
             </>
           ) : <p className="hint">Selecione um atleta para ver atributos e mudar a escalação.</p>}
@@ -402,8 +415,8 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
   const club = career.clubs[myClubId(career)]!;
   const wages = club.players.reduce((a, p) => a + p.wage, 0);
   const l = career.ledger;
-  const income = l.gate + l.tv + (l.sponsor ?? 0) + l.prizes + l.sales;
-  const expense = l.wages + l.purchases + l.management;
+  const income = l.gate + l.tv + (l.sponsor ?? 0) + l.prizes + l.sales + (l.loanIn ?? 0);
+  const expense = l.wages + l.purchases + l.management + (l.loanPaid ?? 0);
   const state = financialState(club);
   const f = monthlyForecast(career);
   return (
@@ -429,10 +442,15 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
             <tr><td>TV + patrocínio</td><td className="pos-n">{money(f.tv + f.sponsor)}</td></tr>
             <tr><td>Bilheteria (1 jogo em casa)</td><td className="pos-n">{money(f.gate)}</td></tr>
             <tr><td>Folha + seu salário</td><td className="neg">{money(-(f.wages + f.management))}</td></tr>
+            {f.loan > 0 && <tr><td>Parcela do empréstimo</td><td className="neg">{money(-f.loan)}</td></tr>}
             <tr className="total"><td>Saldo do mês</td><td className={f.withGame < 0 ? 'neg' : 'pos-n'}>{money(f.withGame)}</td></tr>
           </tbody>
         </table>
         <p className="hint">Sem jogo em casa (pré-temporada e entressafra) o mês fecha em <b className={f.withoutGame < 0 ? 'neg' : ''}>{money(f.withoutGame)}</b>. Contratações, aumentos e o preço do ingresso mudam esta conta.</p>
+        {(career.monthsInRed ?? 0) > 0 && (
+          <p className="red-alert">⚠ {career.monthsInRed} {career.monthsInRed === 1 ? 'mês' : 'meses seguidos'} no vermelho. Se a temporada terminar com o caixa negativo, a diretoria demite você.</p>
+        )}
+        <LoanBox career={career} act={act} />
       </section>
       <section>
         <h4>Temporada {career.season.year}</h4>
@@ -446,10 +464,68 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
             <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
             <tr><td>Contratações</td><td className="neg">{money(-l.purchases)}</td></tr>
             <tr><td>Gestão (seu salário)</td><td className="neg">{money(-l.management)}</td></tr>
+            {(l.loanIn ?? 0) > 0 && <tr><td>Empréstimo recebido</td><td className="pos-n">{money(l.loanIn ?? 0)}</td></tr>}
+            {(l.loanPaid ?? 0) > 0 && <tr><td>Parcelas do empréstimo</td><td className="neg">{money(-(l.loanPaid ?? 0))}</td></tr>}
             <tr className="total"><td>Resultado</td><td className={income - expense < 0 ? 'neg' : 'pos-n'}>{money(income - expense)}</td></tr>
           </tbody>
         </table>
       </section>
+    </div>
+  );
+}
+
+function LoanBox({ career, act }: { career: Career; act: Act }) {
+  const club = career.clubs[myClubId(career)]!;
+  const limit = loanLimit(career);
+  const [share, setShare] = useState(0.5);
+  const [months, setMonths] = useState<number>(LOAN_TERMS[0].months);
+  const loan = career.loan;
+
+  if (loan) {
+    const payoff = loanPayoff(loan);
+    return (
+      <div className="loan-box">
+        <h4>Empréstimo em aberto</h4>
+        <dl className="kv">
+          <dt>Valor</dt><dd>{money(loan.principal)} ({Math.round(loan.rate * 100)}% de juros no total)</dd>
+          <dt>Parcela</dt><dd>{money(loan.installment)}/mês · faltam {loan.monthsLeft}</dd>
+          <dt>Para quitar hoje</dt><dd>{money(payoff)} <span className="hint">(5% de desconto)</span></dd>
+        </dl>
+        <button className="btn" disabled={club.budget < payoff} onClick={() => {
+          void askConfirm({
+            title: 'Quitar empréstimo',
+            body: <><p>Pagar <b>{money(payoff)}</b> agora e encerrar o empréstimo?</p><p className="hint">Caixa depois: {money(club.budget - payoff)}.</p></>,
+            confirmLabel: `Quitar por ${moneyShort(payoff)}`,
+          }).then((ok) => { if (ok) { act((c) => payOffLoan(c)); track('loan_paid_off', { amount: payoff }); } });
+        }}>{club.budget < payoff ? 'Caixa insuficiente para quitar' : `Quitar agora por ${moneyShort(payoff)}`}</button>
+      </div>
+    );
+  }
+
+  const principal = Math.floor((limit * share) / 10000) * 10000;
+  const q = loanQuote(principal, months);
+  return (
+    <div className="loan-box">
+      <h4>Empréstimo bancário</h4>
+      <p className="hint">O banco libera até <b>{money(limit)}</b> (4 meses de receita). Um empréstimo por vez; a parcela sai do caixa todo dia 1.</p>
+      <div className="chips">
+        {[0.25, 0.5, 0.75, 1].map((s) => (
+          <button key={s} className={`chip ${share === s ? 'on' : ''}`} onClick={() => setShare(s)}>{moneyShort(Math.floor((limit * s) / 10000) * 10000)}</button>
+        ))}
+      </div>
+      <div className="chips">
+        {LOAN_TERMS.map((t) => (
+          <button key={t.months} className={`chip ${months === t.months ? 'on' : ''}`} onClick={() => setMonths(t.months)}>{t.months} meses · {Math.round(t.rate * 100)}% juros</button>
+        ))}
+      </div>
+      <p className="loan-quote">{months}x de <b>{money(q.installment)}</b> · total {money(q.total)} <span className="hint">(juros {money(q.interest)})</span></p>
+      <button className="btn primary" disabled={principal <= 0} onClick={() => {
+        void askConfirm({
+          title: 'Pegar empréstimo',
+          body: <><p>Receber <b>{money(principal)}</b> agora e pagar <b>{months}x de {money(q.installment)}</b> (total {money(q.total)}).</p><p className="hint">A parcela sai do caixa todo dia 1. Terminar a temporada com o caixa negativo dá demissão.</p></>,
+          confirmLabel: `Pegar ${moneyShort(principal)}`,
+        }).then((ok) => { if (ok) { act((c) => takeLoan(c, principal, months)); track('loan_taken', { amount: principal, months }); } });
+      }}>Pegar {moneyShort(principal)}</button>
     </div>
   );
 }

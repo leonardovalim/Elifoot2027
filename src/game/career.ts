@@ -50,6 +50,21 @@ export interface Ledger {
   wages: number;
   purchases: number;
   management: number;
+  /** Dinheiro recebido de empréstimo (ausente em saves antigos). */
+  loanIn?: number;
+  /** Parcelas e quitação de empréstimo pagas (ausente em saves antigos). */
+  loanPaid?: number;
+}
+
+/** Empréstimo bancário do clube do jogador: um por vez, parcelas fixas no dia 1. */
+export interface Loan {
+  principal: number;
+  /** Juros totais do contrato (fração do principal). */
+  rate: number;
+  months: number;
+  installment: number;
+  monthsLeft: number;
+  takenOn: IsoDate;
 }
 
 export interface Offer {
@@ -87,6 +102,9 @@ export interface Career {
   autoSubs: boolean;
   /** Mercado vivo: propostas, pedidos de aumento e renovações esperando resposta (ausente em saves antigos). */
   decisions?: Decision[];
+  loan?: Loan;
+  /** Meses seguidos fechando com o caixa negativo (ausente = 0). */
+  monthsInRed?: number;
 }
 
 // ---------------------------------------------------------------- criação
@@ -170,6 +188,11 @@ export function challengeOptions(c: Career, type: ChallengeType, count = 4): Off
 
 export function acceptOffer(c: Career, offer: Offer) {
   const club = c.clubs[offer.clubId]!;
+  // a dívida é do clube antigo: o saldo restante é cobrado dele de uma vez
+  const old = c.clubs[myClubId(c)];
+  if (c.loan && old) old.budget -= c.loan.installment * c.loan.monthsLeft;
+  c.loan = undefined;
+  c.monthsInRed = 0;
   const bond: Bond = {
     orgId: club.id,
     sport: SPORT,
@@ -310,8 +333,83 @@ export function monthlyForecast(c: Career) {
   const gate = lastAttendance(club, club) * club.ticketPrice;
   const wages = club.players.reduce((a, p) => a + p.wage, 0);
   const management = activeBond(c)?.monthlySalary ?? 0;
-  const withGame = tv + sponsor + gate - wages - management;
-  return { tv, sponsor, gate, wages, management, withGame, withoutGame: withGame - gate };
+  const loan = c.loan?.installment ?? 0;
+  const withGame = tv + sponsor + gate - wages - management - loan;
+  return { tv, sponsor, gate, wages, management, loan, withGame, withoutGame: withGame - gate };
+}
+
+// ---------------------------------------------------------------- empréstimo
+
+/** Prazos disponíveis e juros totais de cada um. */
+export const LOAN_TERMS = [
+  { months: 6, rate: 0.08 },
+  { months: 12, rate: 0.18 },
+] as const;
+
+/** Limite: 4 meses de receita típica (TV, patrocínio e um jogo em casa). */
+export function loanLimit(c: Career): number {
+  const f = monthlyForecast(c);
+  return Math.max(0, Math.floor(((f.tv + f.sponsor + f.gate) * 4) / 10000) * 10000);
+}
+
+export function loanQuote(principal: number, months: number) {
+  const term = LOAN_TERMS.find((t) => t.months === months) ?? LOAN_TERMS[0];
+  const total = Math.round(principal * (1 + term.rate));
+  return { months: term.months, rate: term.rate, total, installment: Math.ceil(total / term.months / 100) * 100, interest: total - principal };
+}
+
+/** Saldo para quitar agora: parcelas restantes com 5% de desconto. */
+export const loanPayoff = (loan: Loan) => Math.round((loan.installment * loan.monthsLeft * 0.95) / 100) * 100;
+
+export function takeLoan(c: Career, principal: number, months: number): string | null {
+  if (c.loan) return 'Já existe um empréstimo em aberto.';
+  if (c.unemployed) return 'Sem clube no momento.';
+  const limit = loanLimit(c);
+  if (principal <= 0 || principal > limit) return `O banco libera no máximo ${fmtMoney(limit)}.`;
+  const q = loanQuote(principal, months);
+  const club = c.clubs[myClubId(c)]!;
+  club.budget += principal;
+  c.ledger.loanIn = (c.ledger.loanIn ?? 0) + principal;
+  c.loan = { principal, rate: q.rate, months: q.months, installment: q.installment, monthsLeft: q.months, takenOn: c.date };
+  push(c, 'money', `Empréstimo de ${fmtMoney(principal)} em ${q.months}x de ${fmtMoney(q.installment)}.`);
+  return null;
+}
+
+export function payOffLoan(c: Career): string | null {
+  const loan = c.loan;
+  if (!loan) return 'Nenhum empréstimo em aberto.';
+  const club = c.clubs[myClubId(c)]!;
+  const amount = loanPayoff(loan);
+  if (club.budget < amount) return 'Caixa insuficiente para quitar.';
+  club.budget -= amount;
+  c.ledger.loanPaid = (c.ledger.loanPaid ?? 0) + amount;
+  c.loan = undefined;
+  push(c, 'good', `Empréstimo quitado por ${fmtMoney(amount)}.`);
+  return null;
+}
+
+/** Dia 1: desconta a parcela e acompanha meses seguidos no vermelho. */
+function monthlyLoanAndRed(c: Career, club: Club) {
+  const loan = c.loan;
+  if (loan) {
+    club.budget -= loan.installment;
+    c.ledger.loanPaid = (c.ledger.loanPaid ?? 0) + loan.installment;
+    loan.monthsLeft--;
+    if (loan.monthsLeft <= 0) {
+      c.loan = undefined;
+      push(c, 'good', 'Última parcela paga: empréstimo quitado.');
+    }
+  }
+  if (club.budget < 0) {
+    const n = (c.monthsInRed ?? 0) + 1;
+    c.monthsInRed = n;
+    c.entrepreneur.reputation = Math.max(0, c.entrepreneur.reputation - 1);
+    push(c, 'bad', n === 1
+      ? `Caixa no vermelho (${fmtMoney(club.budget)}). A diretoria cobra uma solução.`
+      : `${n}º mês seguido no vermelho. Se a temporada terminar com o caixa negativo, você será demitido.`);
+  } else {
+    c.monthsInRed = 0;
+  }
 }
 
 function monthly(c: Career) {
@@ -328,9 +426,9 @@ function monthly(c: Career) {
       c.ledger.sponsor = (c.ledger.sponsor ?? 0) + sponsor;
       c.ledger.wages += wages;
       c.ledger.management += bond.monthlySalary;
+      monthlyLoanAndRed(c, club);
       const st = financialState(club);
-      if (st === 'critica') push(c, 'bad', `Finanças em estado crítico: caixa em ${fmtMoney(club.budget)}.`);
-      else if (st === 'atencao') push(c, 'money', `Atenção: o caixa não cobre três meses de folha.`);
+      if (st === 'atencao') push(c, 'money', `Atenção: o caixa não cobre três meses de folha.`);
     }
   }
 }
@@ -475,6 +573,8 @@ export interface SeasonSummary {
   relegated: boolean;
   prize: number;
   reputationDelta: number;
+  /** Terminou a temporada com o caixa negativo (mesmo somando a premiação): demissão. */
+  broke: boolean;
 }
 
 const PRIZE = [[2500000, 1200000, 700000], [900000, 450000, 250000], [400000, 200000, 100000], [180000, 90000, 50000]];
@@ -489,10 +589,11 @@ export function seasonSummary(c: Career): SeasonSummary {
   const relegated = d < DIVISIONS - 1 && pos > table.length - 2;
   const promoted = d > 0 && pos <= 2;
   const expected = { titulo: 1, acesso: 2, meio: 6, permanencia: 10 }[bond.objective];
-  const fired = !achieved && (relegated || pos - expected >= 4);
   const prize = PRIZE[d]?.[pos - 1] ?? 0;
+  const broke = c.clubs[me]!.budget + prize < 0;
+  const fired = broke || (!achieved && (relegated || pos - expected >= 4));
   const reputationDelta = (achieved ? 8 : fired ? -10 : -4) + (promoted ? 4 : 0) + (pos === 1 ? 5 : 0);
-  return { position: pos, division: d, objective: bond.objective, achieved, fired, promoted, relegated, prize, reputationDelta };
+  return { position: pos, division: d, objective: bond.objective, achieved, fired, promoted, relegated, prize, reputationDelta, broke };
 }
 
 /** Fecha a temporada: premiação, avaliação, acesso/queda, envelhecimento, nova tabela e ofertas. */
@@ -561,7 +662,7 @@ export function closeSeason(c: Career): SeasonSummary {
   c.rngState = rng.snapshot;
 
   if (sum.fired) {
-    push(c, 'bad', `Você foi demitido do ${myClub.name}.`);
+    push(c, 'bad', sum.broke ? `Você foi demitido do ${myClub.name}: a temporada terminou com o caixa negativo.` : `Você foi demitido do ${myClub.name}.`);
     c.entrepreneur.bonds = [];
     c.unemployed = true;
   } else {

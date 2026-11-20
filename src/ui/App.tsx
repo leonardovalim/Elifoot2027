@@ -5,6 +5,7 @@ import {
   challengeOptions,
   clubStrength,
   divisionOf,
+  myClubId,
   newWorld,
   startCareer,
   type Career,
@@ -17,6 +18,7 @@ import { IntroScene } from './scene/IntroScene';
 import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
+import { askConfirm } from './confirm';
 
 const INTRO_KEY = 'mestres-do-esporte.intro-seen';
 function hasSeenIntro(): boolean {
@@ -51,8 +53,15 @@ export function App() {
     return (
       <Game
         initial={career}
-        onReset={() => {
-          if (!confirm('Apagar o save e voltar ao início?')) return;
+        onReset={async () => {
+          const ok = await askConfirm({
+            title: 'Encerrar carreira',
+            body: <><p>O save desta carreira será apagado e você volta para a tela inicial.</p><p className="hint">Isso não pode ser desfeito.</p></>,
+            confirmLabel: 'Apagar e sair',
+            cancelLabel: 'Continuar jogando',
+            danger: true,
+          });
+          if (!ok) return;
           clearCareer();
           setCareer(null);
           setScreen('title');
@@ -80,8 +89,18 @@ export function App() {
       </div>
       <div className="menu">
         {career && <button className="btn primary big" onClick={() => setScreen('game')}>Continuar carreira</button>}
-        <button className={`btn big ${career ? '' : 'primary'}`} onClick={() => {
-          if (career && !confirm('Começar uma nova carreira apaga a atual. Continuar?')) return;
+        <button className={`btn big ${career ? '' : 'primary'}`} onClick={async () => {
+          if (career) {
+            const club = career.clubs[myClubId(career)];
+            const ok = await askConfirm({
+              title: 'Nova carreira',
+              body: <><p>Você já tem uma carreira salva{club ? <> com o <b>{club.name}</b></> : null}, temporada {career.season.year}.</p><p>Começar outra apaga essa de vez.</p></>,
+              confirmLabel: 'Apagar e começar outra',
+              cancelLabel: 'Manter a atual',
+              danger: true,
+            });
+            if (!ok) return;
+          }
           setScreen('create');
         }}>Nova carreira</button>
       </div>

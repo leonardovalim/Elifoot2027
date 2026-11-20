@@ -520,3 +520,20 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .market-filters .count { margin-left: auto; }
 .grid-table td.empty-row { text-align: center; padding: 18px 8px; white-space: normal; }
 @media (max-width: 560px) { .market-filters .count { margin-left: 0; flex-basis: 100%; } }
+
+/* ---------- empréstimo ---------- */
+.loan-box { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding: 10px 12px; background: var(--paper-2); box-shadow: inset 4px 0 var(--mustard-dk); }
+.loan-box h4 { margin: 0; }
+.loan-box p { margin: 0; }
+.loan-box .btn { align-self: flex-start; }
+.loan-quote { font-size: 14px; }
+.red-alert { margin: 10px 0 0; padding: 8px 10px; background: var(--bad); color: #fff; font-weight: 700; }
+
+/* ---------- confirmação do jogo (substitui o confirm() do navegador) ---------- */
+.overlay.confirm-overlay { z-index: 40; align-items: center; }
+.overlay .window.confirm-window { max-width: 420px; }
+.window-title.danger { background: var(--bad); }
+.confirm-body p { margin: 0 0 8px; }
+.confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.sub-error { margin: 6px 0 0; color: var(--bad); font-weight: 700; font-size: 13px; }
+@media (max-width: 560px) { .confirm-actions .btn { flex: 1 1 100%; } }

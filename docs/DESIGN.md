@@ -89,6 +89,8 @@ O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da 
 - Calibração (6 seeds, ano completo com entressafra, sem nenhuma ação): saldo anual sobre a folha anual, mediana de 21% (div. 4) a 28% (div. 1); os 10% piores ficam entre +3% e +14%. Clubes com folha acima da mediana ainda sobram 15–22%. A folga paga um reforço por temporada nas divisões de baixo; gastar além disso leva ao vermelho.
 - Antes (TV sem patrocínio, salário = valor ÷ 90): divisões 2–4 fechavam entre −9% e +4%, sem espaço para contratar nem dar aumento.
 - O painel de finanças mostra a previsão de um mês típico (com e sem jogo em casa).
+- **Empréstimo**: um por vez, até 4 meses de receita típica; 6 meses com 8% de juros totais ou 12 meses com 18%. Parcela fixa no dia 1; quitar antes dá 5% de desconto no saldo. Ao trocar de clube, o saldo restante fica com o clube antigo.
+- **Caixa negativo**: cada mês fechado no vermelho custa 1 de reputação e gera cobrança da diretoria; terminar a temporada com o caixa negativo (mesmo somando a premiação) dá demissão.
 - Teste `tests/economy.test.ts`: clube da divisão 4 sem mexer em nada nunca fica negativo na 1ª temporada.
 
 ## Mercado vivo
