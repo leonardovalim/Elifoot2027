@@ -156,8 +156,9 @@ export function DecisionModal({ career, decision: d, onChoose }: { career: Caree
         {payrollLine}
         <div className="decision-actions">
           <button className="btn primary" onClick={() => onChoose('accept')}>Renovar até {career.season.year + d.years}</button>
-          <button className="btn ghost" onClick={() => onChoose('release')}>Deixar sair no fim da temporada</button>
+          <button className="btn ghost" onClick={() => onChoose('release')}>Mandar a leilão no fim da temporada</button>
         </div>
+        <p className="hint">Sem renovar, ele vai a leilão quando a temporada acabar e rende só 25% a 45% do valor.</p>
       </div>
     </Modal>
   );

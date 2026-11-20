@@ -99,7 +99,8 @@ export function generateClub(rng: Rng, city: string, level: number, colors: [str
     budget: Math.round((level ** 3 * 8) / 10000) * 10000,
     reputation: Math.max(5, Math.min(95, Math.round((level - 35) * 1.6 + rng.gaussian() * 4))),
     fans: Math.round(level ** 2 * 3.2),
-    stadium: Math.round((level ** 2 * 4.5) / 1000) * 1000 + 3000,
+    // estádio um pouco maior que o público típico: crescer a torcida enche a casa e pede ampliação
+    stadium: Math.round((level ** 2 * 3.4) / 1000) * 1000 + 2000,
     stadiumName: `Estádio ${rng.chance(0.5) ? 'Municipal de' : 'do'} ${city}`,
     ticketPrice: Math.round(level / 3),
     trainingCenter: Math.max(1, Math.min(5, Math.round((level - 30) / 10))),
