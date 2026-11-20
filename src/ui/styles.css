@@ -722,3 +722,17 @@ html, body { overflow-x: hidden; }
   .hud-date { flex-direction: row !important; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
   .hud-date .hud-kicker { display: none; }
 }
+
+/* ---------- obras de estrutura, ocupação e artilharia ---------- */
+.works-box { margin: 14px 0 10px; }
+.work-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 2px dotted var(--paper-2); }
+.work-row p { margin: 2px 0 0; }
+.work-row .btn { flex: none; }
+.occupancy.near { color: var(--warn-dk, #b07a00); font-weight: 700; }
+.occupancy.full { color: var(--bad); font-weight: 800; }
+.grid-table.scorers td:last-child { text-align: right; white-space: nowrap; }
+.grid-table.scorers td.name { max-width: 160px; }
+
+/* obras dentro do bloco recolhido no celular: o título já está no resumo */
+.fold .works-box { margin: 0; box-shadow: none; background: transparent; }
+.fold .works-box > h4:first-child { display: none; }

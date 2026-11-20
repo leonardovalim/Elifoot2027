@@ -232,22 +232,36 @@ export function resolveDecision(ctx: MarketCtx, id: string, choice: DecisionChoi
   return null;
 }
 
+export interface AuctionResult { name: string; fee: number; buyer: string | null }
+
 /**
- * Fim de temporada, antes de renovar contratos: quem não renovou sai de graça
- * para um clube da IA. Devolve os nomes de quem saiu.
+ * Fim de temporada, antes de renovar contratos: quem não renovou vai a leilão
+ * (como no Elifoot). Rende pouco: 25% a 45% do valor, pago pelo clube que leva.
  */
-export function releaseLeavers(clubs: Record<string, Club>, me: string, year: number, rng: Rng): string[] {
+export function releaseLeavers(clubs: Record<string, Club>, me: string, year: number, rng: Rng): AuctionResult[] {
   const club = clubs[me];
   if (!club) return [];
-  const out: string[] = [];
+  const out: AuctionResult[] = [];
   for (const p of [...club.players]) {
     if (!p.leaving || p.clubLocked || !expiresThisSeason(p, year)) continue;
     club.players = club.players.filter((x) => x.id !== p.id);
     if (club.lineup) club.lineup = { xi: club.lineup.xi.filter((x) => x !== p.id), bench: club.lineup.bench.filter((x) => x !== p.id) };
-    const dest = Object.values(clubs).filter((c) => c.id !== me && c.players.length < 28);
     delete p.morale; delete p.raiseAskedOn; delete p.renewalAsked; delete p.leaving;
+    const fee = round1000(playerValue(p) * (0.25 + rng.next() * 0.2));
+    const bidders = Object.values(clubs).filter((c) => c.id !== me && c.players.length < 28 && c.budget >= fee * 1.2);
+    if (fee > 0 && bidders.length) {
+      const buyer = rng.weighted(bidders, (c) => c.reputation + 10);
+      buyer.budget -= fee;
+      club.budget += fee;
+      p.joinedOn = undefined;
+      buyer.players.push(p);
+      out.push({ name: p.name, fee, buyer: buyer.name });
+      continue;
+    }
+    // ninguém deu lance: sai de graça para quem tiver vaga
+    const dest = Object.values(clubs).filter((c) => c.id !== me && c.players.length < 28);
     if (dest.length) rng.pick(dest).players.push(p);
-    out.push(p.name);
+    out.push({ name: p.name, fee: 0, buyer: null });
   }
   return out;
 }

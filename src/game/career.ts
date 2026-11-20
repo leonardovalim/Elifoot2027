@@ -13,7 +13,7 @@ import { ATTR_SHORT, applyMatch, dailyTraining, endOfSeason, type TrainingGain }
 import { createMatch, football, runToEnd, toOutcome, type FootballOutcome, type MatchState } from '../sports/football/engine';
 import { DIVISIONS, divisionLevel, generateWorld, playerValue } from '../sports/football/generate';
 import { overall, pickLineup, starters } from '../sports/football/lineup';
-import type { Club, Player } from '../sports/football/types';
+import type { Club, Player, Work } from '../sports/football/types';
 import { marketDay, moraleAfterMatch, releaseLeavers, resolveDecision, type Decision, type DecisionChoice, type MarketCtx } from './market';
 
 export const SAVE_VERSION = 2;
@@ -52,6 +52,8 @@ export interface Ledger {
   management: number;
   /** Dinheiro recebido de empréstimo (ausente em saves antigos). */
   loanIn?: number;
+  /** Obras de estádio e CT (ausente em saves antigos). */
+  works?: number;
   /** Parcelas e quitação de empréstimo pagas (ausente em saves antigos). */
   loanPaid?: number;
 }
@@ -149,7 +151,7 @@ export function roundDates(year: number, rounds = 22): IsoDate[] {
   return Array.from({ length: rounds }, (_, i) => addDays(first, i * 14));
 }
 
-const emptyLedger = (): Ledger => ({ gate: 0, tv: 0, sponsor: 0, prizes: 0, sales: 0, wages: 0, purchases: 0, management: 0 });
+const emptyLedger = (): Ledger => ({ gate: 0, tv: 0, sponsor: 0, prizes: 0, sales: 0, wages: 0, purchases: 0, management: 0, works: 0 });
 
 export function divisionOf(c: Career, clubId: string): number {
   return c.season.divisions.findIndex((d) => d.teamIds.includes(clubId));
@@ -297,6 +299,7 @@ export function advanceDay(c: Career): DayReport {
   }
 
   if (dayOf(c.date) === 1) monthly(c);
+  finishWorks(c);
   marketDay(marketCtx(c), rng);
   if (c.phase === 'pre-temporada' && c.date >= addDays(c.roundDates[0]!, -6)) {
     c.phase = 'temporada';
@@ -505,6 +508,8 @@ export function completeRound(c: Career, prep: PreparedRound, mine: FootballOutc
     if (home.id === me) { myGains = gh; moraleAfterMatch(home, o.played.home); }
     if (away.id === me) { myGains = ga; moraleAfterMatch(away, o.played.away); }
     gate(c, home, away, m.divisionIndex, me);
+    fansAfterMatch(home, o.homeScore - o.awayScore);
+    fansAfterMatch(away, o.awayScore - o.homeScore);
   }
   c.season.divisions.forEach((d, i) => d.results.push(byDiv[i]!));
   c.rngState = rng.snapshot;
@@ -553,6 +558,85 @@ function gate(c: Career, home: Club, away: Club, division: number, me: string) {
 export function lastAttendance(home: Club, away: Club): number {
   const demand = home.fans * (1 + (away.fans / (home.fans + away.fans)) * 0.5);
   return Math.min(home.stadium, Math.round(demand * (30 / (home.ticketPrice + 20))));
+}
+
+// ---------------------------------------------------------------- torcida
+
+const MIN_FANS = 800;
+
+/** Vitória atrai torcedor, derrota afasta (devagar: o que pesa é a sequência). */
+function fansAfterMatch(club: Club, goalDiff: number) {
+  const f = goalDiff > 0 ? 1.006 : goalDiff === 0 ? 1.001 : 0.996;
+  club.fans = Math.max(MIN_FANS, Math.round(club.fans * f));
+}
+
+/** Público típico de um jogo em casa e a ocupação do estádio (0–1). */
+export function stadiumUse(club: Club) {
+  const crowd = lastAttendance(club, club);
+  return { crowd, occupancy: club.stadium ? crowd / club.stadium : 0 };
+}
+
+// ---------------------------------------------------------------- obras (estádio e CT)
+
+export const STADIUM_WORK_DAYS = 90;
+export const CT_WORK_DAYS = 60;
+/** Custo por lugar novo no estádio. */
+export const SEAT_COST = 150;
+/** Custo para levar o CT ao nível do índice (2 a 5). */
+export const CT_COST = [0, 0, 200000, 400000, 800000, 1500000];
+
+const workOf = (club: Club, kind: Work['kind']) => club.works?.find((w) => w.kind === kind);
+
+/** Ampliação do estádio: +15% dos lugares (mínimo 1.000), arredondado ao milhar. */
+export function stadiumQuote(club: Club) {
+  const seats = Math.max(1000, Math.round((club.stadium * 0.15) / 1000) * 1000);
+  return { seats, cost: seats * SEAT_COST, days: STADIUM_WORK_DAYS, busy: workOf(club, 'stadium') };
+}
+
+/** Próximo nível do CT (null se já está no máximo). */
+export function ctQuote(club: Club) {
+  const pending = workOf(club, 'ct');
+  const level = (pending?.level ?? club.trainingCenter) + 1;
+  if (level > 5) return null;
+  return { level, cost: CT_COST[level]!, days: CT_WORK_DAYS, busy: pending };
+}
+
+/** Começa uma obra no clube do jogador: paga na hora e fica pronta depois do prazo. */
+export function startWork(c: Career, kind: Work['kind']): string | null {
+  const club = c.clubs[myClubId(c)]!;
+  if (workOf(club, kind)) return 'Já existe uma obra dessas em andamento.';
+  const q = kind === 'stadium' ? stadiumQuote(club) : ctQuote(club);
+  if (!q) return 'O CT já está no nível máximo.';
+  if (club.budget < q.cost) return 'Caixa insuficiente para a obra.';
+  club.budget -= q.cost;
+  c.ledger.works = (c.ledger.works ?? 0) + q.cost;
+  const work: Work = { kind, startedOn: c.date, doneOn: addDays(c.date, q.days), cost: q.cost };
+  if (kind === 'stadium') work.seats = (q as ReturnType<typeof stadiumQuote>).seats;
+  else work.level = (q as NonNullable<ReturnType<typeof ctQuote>>).level;
+  club.works = [...(club.works ?? []), work];
+  push(c, 'money', kind === 'stadium'
+    ? `Obra iniciada: +${work.seats!.toLocaleString('pt-BR')} lugares no ${club.stadiumName}, pronta em ${formatDate(work.doneOn)}.`
+    : `Obra iniciada: CT nível ${work.level}, pronto em ${formatDate(work.doneOn)}.`);
+  return null;
+}
+
+function finishWorks(c: Career) {
+  const me = myClubId(c);
+  for (const club of Object.values(c.clubs)) {
+    if (!club.works?.length) continue;
+    const done = club.works.filter((w) => w.doneOn <= c.date);
+    if (!done.length) continue;
+    club.works = club.works.filter((w) => w.doneOn > c.date);
+    for (const w of done) {
+      if (w.kind === 'stadium') club.stadium += w.seats ?? 0;
+      else club.trainingCenter = Math.max(club.trainingCenter, w.level ?? club.trainingCenter);
+      if (club.id === me) {
+        push(c, 'good', w.kind === 'stadium'
+          ? `Obra concluída: o ${club.stadiumName} agora tem ${club.stadium.toLocaleString('pt-BR')} lugares.`
+          : `Obra concluída: CT nível ${club.trainingCenter}. Treinos e base melhoram.`);
+      }
+    }
+  }
 }
 
 /** IA (GD-10, versão inicial): ajusta formação ao elenco disponível e postura à condição física. */
@@ -614,6 +698,8 @@ export function closeSeason(c: Career): SeasonSummary {
       c.clubs[row.teamId]!.budget += prize;
       const club = c.clubs[row.teamId]!;
       club.reputation = Math.max(1, Math.min(99, club.reputation + (i < 2 ? 2 : i >= table.length - 2 ? -2 : 0)));
+      const swing = i === 0 ? 1.12 : i < 2 ? 1.07 : i >= table.length - 2 ? 0.9 : 1;
+      club.fans = Math.max(MIN_FANS, Math.round(club.fans * swing));
     });
     const champ = c.clubs[table[0]!.teamId]!;
     champ.titles.push({ year, competition: `Divisão ${di + 1}` });
@@ -642,9 +728,15 @@ export function closeSeason(c: Career): SeasonSummary {
 
   // acesso e rebaixamento
   const next = promoteAndRelegate(c.season, football.points);
-  // quem não renovou sai de graça antes da renovação automática
-  const gone = releaseLeavers(c.clubs, me, year, rng);
-  if (gone.length) push(c, 'info', `Fim de contrato, deixaram o clube: ${gone.join(', ')}.`);
+  // quem não renovou vai a leilão antes da renovação automática
+  for (const a of releaseLeavers(c.clubs, me, year, rng)) {
+    if (a.buyer) {
+      c.ledger.sales += a.fee;
+      push(c, 'money', `Leilão: ${a.name} foi arrematado pelo ${a.buyer} por ${fmtMoney(a.fee)}.`);
+    } else {
+      push(c, 'info', `Leilão sem lances: ${a.name} saiu de graça.`);
+    }
+  }
   c.decisions = [];
   // evolução de fim de ciclo
   c.season.divisions.forEach((d, di) => {
