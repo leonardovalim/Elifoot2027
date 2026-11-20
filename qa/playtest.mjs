@@ -79,7 +79,10 @@ function pageChecks(isMobile) {
     const txt = (el.innerText || el.getAttribute('aria-label') || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 40);
     return `<${el.tagName.toLowerCase()}${cls}>${txt ? ` "${txt}"` : ''}`;
   };
+  // conteúdo de <details> fechado não está na tela (o Chrome ainda informa posição para ele)
+  const inClosedDetails = (el) => { const d = el.closest('details:not([open])'); return !!d && !el.closest('summary'); };
   const visible = (el) => {
+    if (inClosedDetails(el)) return false;
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return false;
     const s = getComputedStyle(el);
@@ -184,7 +187,7 @@ function pageChecks(isMobile) {
 
 /* Lista os controles clicáveis da camada de cima, para o explorador sortear. */
 function clickables() {
-  const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const visible = (el) => { if (el.closest('details:not([open])') && !el.closest('summary')) return false; const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none'; };
   const dialogs = [...document.querySelectorAll('[role=dialog], [role=alertdialog]')].filter(visible);
   const scope = dialogs.at(-1) ?? document.body;
   document.querySelectorAll('[data-qa-pick]').forEach((el) => el.removeAttribute('data-qa-pick'));
