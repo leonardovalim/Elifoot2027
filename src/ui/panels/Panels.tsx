@@ -33,6 +33,7 @@ import { expiresThisSeason } from '../../game/market';
 import { track } from '../analytics';
 import { Morale } from './Decisions';
 import { askConfirm } from '../confirm';
+import { Tag, TemperamentTag } from '../help';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -122,13 +123,14 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
                     <td><span className={`st ${st}`}>{st === 'xi' ? 'TIT' : st === 'bench' ? 'RES' : '–'}</span></td>
                     <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
                     <td className="name">
-                      {p.name}
-                      {p.clubLocked && <span className="tag idol">ídolo</span>}
-                      {isNewSigning(p, career.date) && <span className="tag new">novo</span>}
-                      {p.suspended > 0 && <span className="tag bad">susp.</span>}
-                      {playsAt && playsAt !== p.position && <span className="tag warn">de {POS_LABEL[playsAt]}</span>}
-                      {p.age <= 21 && p.potential - overall(p) >= 8 && <span className="tag good">joia</span>}
-                      {p.leaving ? <span className="tag bad">sai</span> : expiresThisSeason(p, career.season.year) && <span className="tag warn" title="Contrato termina no fim da temporada">fim contr.</span>}
+                      <span className="nm">{p.name}</span>
+                      {p.clubLocked && <Tag kind="idolo">ídolo</Tag>}
+                      {isNewSigning(p, career.date) && <Tag kind="novo">novo</Tag>}
+                      {p.suspended > 0 && <Tag kind="susp">susp.</Tag>}
+                      {playsAt && playsAt !== p.position && <Tag kind="posicao">de {POS_LABEL[playsAt]}</Tag>}
+                      {isProspect(p) && <Tag kind="joia">joia</Tag>}
+                      <TemperamentTag p={p} />
+                      {p.leaving ? <Tag kind="sai">sai</Tag> : expiresThisSeason(p, career.season.year) && <Tag kind="fim-contrato" title="Contrato termina no fim da temporada">fim contr.</Tag>}
                     </td>
                     <td>{p.age}</td>
                     <td><b>{overall(p)}</b></td>
@@ -189,7 +191,7 @@ function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; cu
 function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void; isNew?: boolean; year?: number }) {
   return (
     <div className="player-card">
-      <h3>{p.name}{p.clubLocked && <span className="tag idol">ídolo</span>}{isNew && <span className="tag new">novo</span>}</h3>
+      <h3>{p.name}{p.clubLocked && <Tag kind="idolo">ídolo</Tag>}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
       {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
       {ATTR_GROUPS.map((g) => (
@@ -276,7 +278,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
   });
 
   const emptyMsg = 'Nenhum atleta com esses filtros neste mês. Tente afrouxar algum filtro; o mercado muda todo mês.';
-  const boughtMsg = bought && <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <span className="tag new">novo</span>.</p>;
+  const boughtMsg = bought && <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <Tag kind="novo">novo</Tag>.</p>;
 
   return (
     <div className="market">
@@ -320,7 +322,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                   <button className="mrow" aria-expanded={open} onClick={() => { setSel(open ? null : p.id); setBought(null); }}>
                     <span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span>
                     <span className="mrow-main">
-                      <span className="mrow-name">{p.name}{isProspect(p) && <span className="tag good">joia</span>}</span>
+                      <span className="mrow-name">{p.name}{isProspect(p) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={p} /></span>
                       <span className="mrow-sub">{p.age} anos · {career.clubs[l.clubId]?.name}</span>
                     </span>
                     <span className="mrow-num" title="Habilidade e diferença para o seu melhor da posição">
@@ -354,7 +356,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                 return (
                   <tr key={l.player.id} className={sel === l.player.id ? 'sel' : ''} onClick={() => { setSel(l.player.id); setBought(null); }}>
                     <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
-                    <td className="name">{l.player.name}{isProspect(l.player) && <span className="tag good">joia</span>}</td>
+                    <td className="name"><span className="nm">{l.player.name}</span>{isProspect(l.player) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={l.player} /></td>
                     <td>{l.player.age}</td>
                     <td><b>{overall(l.player)}</b></td>
                     <td className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{d > 0 ? `+${d}` : d}</td>
@@ -392,11 +394,11 @@ function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; cl
 
   return (
     <div className="player-card compare-card">
-      <h3>{p.name}</h3>
+      <h3>{p.name}<TemperamentTag p={p} /></h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · {career.clubs[l.clubId]?.name} · potencial ~{p.potential}</p>
       <p className="verdict">
         Hab <b>{overall(p)}</b> · seria o <b>{ORDINAL[rank] ?? `${rank + 1}º`}</b> {POS_LABEL[p.position]} do elenco
-        {rank === 0 && mine.length > 0 && <span className="tag good">titular</span>}
+        {rank === 0 && mine.length > 0 && <Tag kind="titular">titular</Tag>}
       </p>
       {mine.length > 0 && other && (
         <label className="vs">Comparar com

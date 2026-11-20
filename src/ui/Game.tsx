@@ -30,6 +30,7 @@ import { CtScene, type SceneGain } from './scene/CtScene';
 import { track } from './analytics';
 import { play, SoundToggle } from './sound';
 import { saveCareer } from './storage';
+import { openHelp } from './help';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
 
 type Menu = 'elenco' | 'mercado' | 'tabela' | 'financas' | 'carreira';
@@ -215,6 +216,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           ))}
           <SoundToggle />
         </div>
+        <button className="btn sm help-btn" aria-label="Ajuda: como jogar" title="Como jogar" onClick={() => { pause(); openHelp(); }}>?</button>
       </header>
 
       <main className="stage" aria-label="Visão geral da carreira">

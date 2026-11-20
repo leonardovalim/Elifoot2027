@@ -4,6 +4,7 @@ import { playerValue, wageFor } from '../../sports/football/generate';
 import { overall, pickLineup, ratingAt, statusOf, type SquadStatus } from '../../sports/football/lineup';
 import type { Club, Player, Position } from '../../sports/football/types';
 import { Badge, Bar, Modal, POS_LABEL, money } from '../util';
+import { Tag, TemperamentTag } from '../help';
 
 export const MORALE_FACE: Record<MoraleLevel, string> = { feliz: '😄', satisfeito: '🙂', insatisfeito: '😕', revoltado: '😠' };
 export const MORALE_LABEL: Record<MoraleLevel, string> = { feliz: 'Feliz', satisfeito: 'Satisfeito', insatisfeito: 'Insatisfeito', revoltado: 'Revoltado' };
@@ -70,8 +71,9 @@ function AthleteCard({ club, p }: { club: Club; p: Player }) {
       <div className="ctx-top">
         <b className="ctx-name">{p.name}</b>
         <span className={`role-pill ${ctx.role}`}>{ROLE_LABEL[ctx.role]}</span>
-        {ctx.playsAt !== p.position && <span className="tag warn">joga de {POS_LABEL[ctx.playsAt]}</span>}
-        {ctx.prospect && <span className="tag good">joia</span>}
+        {ctx.playsAt !== p.position && <Tag kind="posicao">joga de {POS_LABEL[ctx.playsAt]}</Tag>}
+        {ctx.prospect && <Tag kind="joia">joia</Tag>}
+        <TemperamentTag p={p} />
       </div>
       <span className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</span>
       <p className="ctx-read">{ctx.read}</p>

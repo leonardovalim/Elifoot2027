@@ -19,6 +19,7 @@ import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
 import { askConfirm } from './confirm';
+import { openHelp } from './help';
 
 const INTRO_KEY = 'mestres-do-esporte.intro-seen';
 function hasSeenIntro(): boolean {
@@ -103,6 +104,7 @@ export function App() {
           }
           setScreen('create');
         }}>Nova carreira</button>
+        <button className="btn" onClick={() => openHelp()}>Como jogar</button>
       </div>
       <p className="hint foot">Versão de testes</p>
     </div>
