@@ -7,6 +7,7 @@ import {
   advanceDay, buyPlayer, challengeOptions, closeSeason, decide, isMatchDay, marketListings, myClubId, newWorld,
   pendingDecision, seasonSummary, sellPlayer, simulateRound, startCareer, type Career,
 } from '../src/game/career';
+import { NOVA_IGUACU_ID } from '../src/sports/football/generate';
 
 function start(seed: number, type: 'baixo' | 'crescimento' | 'pressao' = 'crescimento') {
   const w = newWorld(seed, 'T');
@@ -121,19 +122,19 @@ describe('conquistas: ações, ajuda e colecionador', () => {
 });
 
 describe('Nova Iguaçu (conquista 51)', () => {
-  it('existe exatamente um Nova Iguaçu em todo mundo gerado, sem mudar o resto do mundo', () => {
+  it('existe exatamente um Nova Iguaçu em todo mundo gerado', () => {
     for (const seed of [1, 2, 3, 42, 777, 2026]) {
       const w = newWorld(seed, 'T');
       const ni = Object.values(w.clubs).filter((c) => c.name === 'Nova Iguaçu');
       expect(ni, `seed ${seed}`).toHaveLength(1);
-      expect(ni[0]!.colors).toEqual(['#f07a1a', '#ffffff']);
+      expect(ni[0]!.id).toBe(NOVA_IGUACU_ID);
     }
   });
 
   it('receber proposta do Nova Iguaçu destrava "Laranja da Baixada"', () => {
     const c = start(35);
     const s = emptyAch();
-    const ni = Object.values(c.clubs).find((x) => x.name === 'Nova Iguaçu')!;
+    const ni = c.clubs[NOVA_IGUACU_ID]!;
     c.offers = [{ clubId: ni.id, objective: 'meio', monthlySalary: 10_000 }];
     expect(checkState(s, c)).toContain('laranja-da-baixada');
   });

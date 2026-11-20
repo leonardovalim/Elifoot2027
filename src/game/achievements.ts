@@ -10,7 +10,7 @@ import { divisionOf, lastAttendance, myClubId } from './career';
 import type { FootballOutcome } from '../sports/football/engine';
 import { overall } from '../sports/football/lineup';
 import { temperament } from '../sports/football/temperament';
-import { NOVA_IGUACU } from '../sports/football/generate';
+import { NOVA_IGUACU_ID } from '../sports/football/generate';
 import type { Player, Side } from '../sports/football/types';
 
 export type Tier = 'bronze' | 'prata' | 'ouro' | 'lendaria';
@@ -321,7 +321,7 @@ export function onSeasonEnd(s: AchState, f: SeasonFacts, after: Career, now = ne
 function stateIds(c: Career): string[] {
   const ids: string[] = [];
   const e = c.entrepreneur;
-  if (c.offers.some((o) => c.clubs[o.clubId]?.name === NOVA_IGUACU)) ids.push('laranja-da-baixada');
+  if (c.offers.some((o) => o.clubId === NOVA_IGUACU_ID)) ids.push('laranja-da-baixada');
   if (e.cash >= 10_000_000) ids.push('magnata');
   if (e.reputation >= 90) ids.push('lenda-viva');
   const club = c.clubs[myClubId(c)];

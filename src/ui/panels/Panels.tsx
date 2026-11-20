@@ -53,6 +53,20 @@ function useRevealOnMobile(dep: string | null) {
   return ref;
 }
 
+/** true enquanto a media query casar (acompanha giro de tela e redimensionamento). */
+function useMedia(query: string) {
+  const [match, setMatch] = useState(() => window.matchMedia?.(query).matches ?? false);
+  useEffect(() => {
+    const mq = window.matchMedia?.(query);
+    if (!mq) return;
+    const on = () => setMatch(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [query]);
+  return match;
+}
+
 const STATUS_LABEL: Record<SquadStatus, string> = { xi: 'Titular', bench: 'Banco', out: 'Fora' };
 
 export function SquadPanel({ career, act }: { career: Career; act: Act }) {
@@ -107,6 +121,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
                     <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
                     <td className="name">
                       <span className="nm">{p.name}</span>
+                      {p.clubLocked && <Tag kind="idolo">ídolo</Tag>}
                       {isNewSigning(p, career.date) && <Tag kind="novo">novo</Tag>}
                       {p.suspended > 0 && <Tag kind="susp">susp.</Tag>}
                       {playsAt && playsAt !== p.position && <Tag kind="posicao">de {POS_LABEL[playsAt]}</Tag>}
@@ -173,7 +188,7 @@ function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; cu
 function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void; isNew?: boolean; year?: number }) {
   return (
     <div className="player-card">
-      <h3>{p.name}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>
+      <h3>{p.name}{p.clubLocked && <Tag kind="idolo">ídolo</Tag>}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
       {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
       {ATTR_GROUPS.map((g) => (
@@ -191,7 +206,9 @@ function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void
         <dt>Valor</dt><dd>{money(playerValue(p))}</dd>
         <dt>Contrato</dt><dd>até {p.contractUntil}{year !== undefined && (p.leaving ? ' · sai no fim da temporada' : expiresThisSeason(p, year) ? ' · termina nesta temporada' : '')}</dd>
       </dl>
-      {onSell && <button className="btn danger" onClick={onSell}>Vender</button>}
+      {p.clubLocked
+        ? <p className="hint idol-note">⭐ Ídolo do clube: não sai por dinheiro nenhum.</p>
+        : onSell && <button className="btn danger" onClick={onSell}>Vender</button>}
     </div>
   );
 }
@@ -244,6 +261,12 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
   const filtered = f.afford || f.upgrade || f.prospects || f.age !== 'ALL' || pos !== 'ALL' || f.sort !== 'overall';
   const selected = shown.find((l) => l.player.id === sel);
   const cardRef = useRevealOnMobile(sel);
+  // no celular a tabela vira lista em cartões e a ficha abre embaixo do atleta tocado
+  const narrow = useMedia('(max-width: 760px)');
+  const openRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (narrow && sel) openRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [narrow, sel]);
 
   const buy = (l: Listing) => act((c) => {
     const err = buyPlayer(c, l.player.id, l.clubId);
@@ -251,8 +274,11 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
     return err;
   });
 
+  const emptyMsg = 'Nenhum atleta com esses filtros neste mês. Tente afrouxar algum filtro; o mercado muda todo mês.';
+  const boughtMsg = bought && <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <Tag kind="novo">novo</Tag>.</p>;
+
   return (
-    <div>
+    <div className="market">
       <div className="toolbar">
         <div className="chips">
           {(['ALL', 'GK', 'DF', 'MF', 'FW'] as const).map((p) => (
@@ -280,6 +306,43 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
         <span className="hint count">{shown.length} de {available.length} atletas</span>
         {filtered && <button className="btn sm ghost" onClick={() => set(DEFAULT_FILTERS)}>Limpar filtros</button>}
       </div>
+      {narrow ? (
+        <>
+          {boughtMsg && <div className="card market-bought">{boughtMsg}</div>}
+          <ul className="market-list">
+            {shown.map((l) => {
+              const p = l.player;
+              const d = overall(p) - bestMine(p.position);
+              const open = sel === p.id;
+              return (
+                <li key={p.id} className={open ? 'open' : ''} ref={open ? openRef : undefined}>
+                  <button className="mrow" aria-expanded={open} onClick={() => { setSel(open ? null : p.id); setBought(null); }}>
+                    <span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span>
+                    <span className="mrow-main">
+                      <span className="mrow-name">{p.name}{isProspect(p) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={p} /></span>
+                      <span className="mrow-sub">{p.age} anos · {career.clubs[l.clubId]?.name}</span>
+                    </span>
+                    <span className="mrow-num" title="Habilidade e diferença para o seu melhor da posição">
+                      <b>{overall(p)}</b>
+                      <span className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{d > 0 ? `+${d}` : d === 0 ? '=' : d}</span>
+                    </span>
+                    <span className="mrow-num price">
+                      <b className={club.budget < l.price ? 'neg' : ''}>{moneyShort(l.price)}</b>
+                      <span className="hint">{moneyShort(p.wage)}/mês</span>
+                    </span>
+                  </button>
+                  {open && (
+                    <div className="mrow-detail">
+                      <CompareCard listing={l} club={club} career={career} onBuy={() => buy(l)} />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {shown.length === 0 && <li className="hint empty-row">{emptyMsg}</li>}
+          </ul>
+        </>
+      ) : (
       <div className="split market-split">
         <div className="scroll tall">
           <table className="grid-table">
@@ -300,18 +363,17 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                   </tr>
                 );
               })}
-              {shown.length === 0 && <tr><td colSpan={8} className="hint empty-row">Nenhum atleta com esses filtros neste mês. Tente afrouxar algum filtro; o mercado muda todo mês.</td></tr>}
+              {shown.length === 0 && <tr><td colSpan={8} className="hint empty-row">{emptyMsg}</td></tr>}
             </tbody>
           </table>
         </div>
         <aside className="card" ref={cardRef}>
           {selected
             ? <CompareCard key={selected.player.id} listing={selected} club={club} career={career} onBuy={() => buy(selected)} />
-            : bought
-              ? <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <Tag kind="novo">novo</Tag>.</p>
-              : <p className="hint">Selecione um atleta para ver os atributos lado a lado com os seus.</p>}
+            : boughtMsg || <p className="hint">Selecione um atleta para ver os atributos lado a lado com os seus.</p>}
         </aside>
       </div>
+      )}
     </div>
   );
 }
