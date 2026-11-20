@@ -12,7 +12,8 @@
     "balance": "vitest run tests/balance.test.ts",
     "qa": "node qa/playtest.mjs",
     "qa:explore": "node qa/playtest.mjs --explore 200",
-    "qa:selftest": "node qa/selftest.mjs"
+    "qa:selftest": "node qa/selftest.mjs",
+    "qa:ia": "node qa/ai-playtest/run.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
