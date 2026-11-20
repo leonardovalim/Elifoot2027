@@ -7,6 +7,8 @@ import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
 import { track } from '../analytics';
+import { play, SoundToggle } from '../sound';
+import { RoundBoard } from './RoundBoard';
 import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
 
 interface Props {
@@ -41,6 +43,12 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       stepMinute(m, rng.current!);
       // pausa automática em gol do adversário ou expulsão nossa: momento de decidir
       const fresh = m.events.slice(before);
+      for (const e of fresh) {
+        if (e.type === 'goal') play(e.side === side ? 'goalFor' : 'goalAgainst');
+        else if (e.type === 'red') play('card');
+        else if (e.type === 'half') play('halfTime');
+      }
+      if (m.finished) play('fullTime');
       if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || (e.type === 'red' && e.side === side))) setRunning(false);
       if (m.minute === m.firstHalfEnd) setRunning(false);
       if (m.finished) { outcome.current = toOutcome(m); setRunning(false); setStage('post'); }
@@ -62,6 +70,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const simulateToEnd = () => {
     while (!m.finished) stepMinute(m, rng.current!);
     outcome.current = toOutcome(m);
+    play('fullTime');
     setStage('post');
   };
 
@@ -80,7 +89,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         </div>
         <p className="hint center">Público esperado: {lastAttendance(home, away).toLocaleString('pt-BR')} torcedores</p>
         <div className="row center">
-          <button className="btn primary" onClick={() => { setStage('live'); setRunning(true); track('match_started', { mode: 'watch' }); }}>▶ Assistir (narrado)</button>
+          <button className="btn primary" onClick={() => { play('whistle'); setStage('live'); setRunning(true); track('match_started', { mode: 'watch' }); }}>▶ Assistir (narrado)</button>
           <button className="btn" onClick={() => { track('match_started', { mode: 'simulate' }); simulateToEnd(); }}>⏭ Simular resultado</button>
         </div>
       </div>
@@ -92,7 +101,6 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
     const motmSide = m[o.motm.side];
     const motm = [motmSide.GK, ...motmSide.DF, ...motmSide.MF, ...motmSide.FW, ...Object.values(career.clubs[motmSide.clubId]!.players)]
       .find((x) => x.id === o.motm.playerId);
-    const others = p.others.filter((x) => x.divisionIndex === p.myDivision);
     return (
       <div className="match">
         <p className="kicker">Fim de jogo</p>
@@ -121,12 +129,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
                 <span className="rating">{o.motm.rating.toFixed(1)}</span>
               </div>
             )}
-            <h4>Outros jogos da divisão</h4>
-            <ul className="list">
-              {others.map((x, i) => (
-                <li key={i}>{career.clubs[x.home]!.name} <b>{x.outcome.homeScore} × {x.outcome.awayScore}</b> {career.clubs[x.away]!.name}</li>
-              ))}
-            </ul>
+            <RoundBoard career={career} prep={p} minute={m.minute} final />
           </section>
         </div>
         <div className="row center">
@@ -152,8 +155,10 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         <button className="btn" onClick={() => setRunning(!running)}>{running ? '⏸ Pausar' : '▶ Continuar'}</button>
         {SPEEDS.map((s, i) => <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} onClick={() => setSpeed(i)}>{s.label}</button>)}
         <button className="btn" onClick={simulateToEnd}>⏭ Até o fim</button>
+        <SoundToggle />
       </div>
       <div className="live-grid">
+        <div className="live-main">
         <section className="feed">
           {feed.length === 0 && <p className="hint">Bola rolando.</p>}
           {feed.map((e, i) => {
@@ -167,6 +172,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             );
           })}
         </section>
+        <RoundBoard career={career} prep={p} minute={m.minute} final={false} />
+        </div>
         <section>
           <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
           <h4>Intervenções</h4>
