@@ -135,14 +135,25 @@ function pageChecks(isMobile) {
   }
 
   // 5. controles: cobertos, sobrepostos, pequenos demais
+  // fora da área visível do container com rolagem (ex.: linha rolada para baixo do cabeçalho fixo): não está na tela
+  const inScrollView = (el) => {
+    const sa = scrollableAncestor(el);
+    if (!sa) return true;
+    const a = sa.getBoundingClientRect(), r = el.getBoundingClientRect();
+    const head = sa.querySelector('th')?.getBoundingClientRect(); // o th é que fica fixo (sticky), o thead rola junto
+    const top = head && head.bottom > a.top && head.bottom < a.bottom ? head.bottom : a.top;
+    const cy = r.top + r.height / 2, cx = r.left + r.width / 2;
+    return cy > top && cy < a.bottom && cx > a.left && cx < a.right;
+  };
   const ctrls = [...scope.querySelectorAll('button, a[href], input, select, textarea, [role=button], [role=radio], [role=tab]')]
-    .filter((el) => visible(el) && !el.disabled);
+    .filter((el) => visible(el) && !el.disabled && inScrollView(el));
   for (const el of ctrls) {
     const r = el.getBoundingClientRect();
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     if (cx >= 0 && cy >= 0 && cx < vw && cy < vh) {
       const top = document.elementFromPoint(cx, cy);
-      if (top && top !== el && !el.contains(top) && !top.contains(el)) {
+      // sobreposição temporária de propósito (ex.: banner de conquista) não conta
+      if (top && top !== el && !el.contains(top) && !top.contains(el) && !top.closest('[data-qa-transient]')) {
         issues.push({ kind: 'controle-coberto', severity: 'alta', el: desc(el), detail: `o centro do controle está coberto por ${desc(top)}` });
       }
     }
@@ -159,6 +170,7 @@ function pageChecks(isMobile) {
     const a = ctrls[i].getBoundingClientRect();
     for (let j = i + 1; j < ctrls.length; j++) {
       if (ctrls[i].contains(ctrls[j]) || ctrls[j].contains(ctrls[i])) continue;
+      if (ctrls[i].closest('[data-qa-transient]') || ctrls[j].closest('[data-qa-transient]')) continue; // banner temporário
       const b = ctrls[j].getBoundingClientRect();
       const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
@@ -429,6 +441,43 @@ async function runViewport(browser, vpName, report) {
       await click(page.getByRole('button', { name: /Continuar ›/ }));
       await check('jogo-pos-partida');
     });
+    await step('conquistas', async () => {
+      // a primeira partida destrava "Primeiro apito": banner na tela e conquista salva
+      const banner = page.locator('.ach-toast');
+      await banner.first().waitFor({ timeout: 6000 }).catch(() => {});
+      const saved = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('mestres-do-esporte.conquistas') || '{}').unlocked || {}));
+      if (!saved.includes('primeiro-apito')) throw new Error(`depois da 1ª partida a conquista "primeiro-apito" não foi salva (salvas: ${saved.join(', ') || 'nenhuma'})`);
+      report.achievements = { afterFirstMatch: saved };
+      // todas as 50 de uma vez: CT completo e coleção (sem banners, pois não foram "ganhas" agora)
+      const realCollection = await page.evaluate(() => localStorage.getItem('mestres-do-esporte.conquistas'));
+      await page.evaluate(() => {
+        const KEY = 'mestres-do-esporte.conquistas';
+        const s = JSON.parse(localStorage.getItem(KEY) || '{}');
+        const ids = window.__ACH_IDS__ || [];
+        s.unlocked = Object.fromEntries(ids.map((id) => [id, new Date().toISOString()]));
+        localStorage.setItem(KEY, JSON.stringify(s));
+      }).catch(() => {});
+      const ids = await page.evaluate(() => (window.__ACH_IDS__ || []).length);
+      if (ids < 50) throw new Error(`esperava as conquistas expostas em window.__ACH_IDS__, veio ${ids}`);
+      await page.reload({ waitUntil: 'networkidle' });
+      await click(page.getByRole('button', { name: 'Continuar carreira' }));
+      await page.locator('.hud').waitFor({ timeout: 5000 });
+      await page.waitForTimeout(400);
+      await page.locator('.scene').scrollIntoViewIfNeeded();
+      await check('ct-todas-conquistas');
+      await page.locator('.scene').screenshot({ path: join(SHOTS, `${vpName}-ct-close.png`) });
+      await click(page.locator('.dock').getByRole('button', { name: 'Carreira' }));
+      const dlg = page.getByRole('dialog', { name: 'Carreira' });
+      await dlg.waitFor({ timeout: 3000 });
+      await dlg.locator('.ach-section').scrollIntoViewIfNeeded();
+      await check('carreira-conquistas');
+      await click(dlg.getByRole('button', { name: 'Fechar' }));
+      // devolve a coleção verdadeira: temporadas e exploração seguem com o progresso real
+      await page.evaluate((v) => { if (v) localStorage.setItem('mestres-do-esporte.conquistas', v); }, realCollection);
+      await page.reload({ waitUntil: 'networkidle' });
+      await click(page.getByRole('button', { name: 'Continuar carreira' }));
+      await page.locator('.hud').waitFor({ timeout: 5000 });
+    });
   }
 
   // ------------------------------------------------ temporadas inteiras (fim de temporada, balanço, propostas, demissão)
@@ -586,6 +635,9 @@ async function runViewport(browser, vpName, report) {
     }
     await check('explorar-final');
   }
+  // conquistas salvas ao fim desta tela (para conferir os ganchos de partida/temporada na interface real)
+  const finalAch = await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('mestres-do-esporte.conquistas') || '{}').unlocked || {})).catch(() => []);
+  (report.achievementsFinal ??= {})[vpName] = finalAch;
   await ctx.close();
 }
 

@@ -23,13 +23,16 @@ import {
 } from '../game/career';
 import { ATTR_SHORT } from '../sports/football/development';
 import { football, type FootballOutcome } from '../sports/football/engine';
-import { MatchDay } from './match/MatchDay';
+import { MatchDay, type MatchPlayInfo } from './match/MatchDay';
 import { DecisionModal } from './panels/Decisions';
 import { CareerPanel, FinancePanel, MarketPanel, SquadPanel, TablePanel, type Act } from './panels/Panels';
 import { CtScene, type SceneGain } from './scene/CtScene';
 import { track } from './analytics';
 import { saveCareer } from './storage';
 import { openHelp } from './help';
+import { achieve, useUnlocked } from './achievements';
+import { checkState, onAction, onMatch, onMonth, onSeasonEnd, seasonFacts, snapshotForActions } from '../game/achievements';
+import type { RoundRecord } from '../game/career';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
 
 type Menu = 'elenco' | 'mercado' | 'tabela' | 'financas' | 'carreira';
@@ -62,7 +65,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary || !!decision;
   const running = speed > 0 && !blocking;
 
-  const pause = () => { if (speed > 0) resumeSpeed.current = speed; setSpeed(0); };
+  const pause = () => { if (speed > 0) resumeSpeed.current = speed; setSpeed(0); month.current.clean = false; };
 
   // depois de uma partida o tempo volta na velocidade mais lenta, para dar tempo de mexer no elenco antes do próximo jogo
   const slowDownAfterMatch = () => {
@@ -70,12 +73,29 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     setSpeed((s) => (s > 1 ? 1 : s));
   };
 
-  const act: Act = (fn) => {
+  const doAct = (fn: Parameters<Act>[0], decided?: { kind: string; choice: string }) => {
+    const snap = snapshotForActions(ref.current);
     const err = fn(ref.current);
     if (typeof err === 'string') setToast(err);
+    else achieve((s) => onAction(s, snap, ref.current, decided));
     save();
     force();
   };
+  const act: Act = (fn) => doAct(fn);
+
+  // conquistas de partida (assistida ou automática)
+  const matchAchievements = (r: RoundRecord, year: number, info: MatchPlayInfo) => {
+    const career = ref.current;
+    const me = myClubId(career);
+    const m = r.matches.find((x) => x.home === me || x.away === me);
+    if (!m) return;
+    achieve((s) => onMatch(s, { career, outcome: m.outcome, side: m.home === me ? 'home' : 'away', homeId: m.home, awayId: m.away, year, ...info }));
+  };
+
+  // "Relógio suíço": o mês inteiro passou sem pausa manual
+  const month = useRef({ tracking: false, clean: false });
+  const unlocked = useUnlocked();
+  useEffect(() => { achieve((s) => checkState(s, ref.current)); }, []);
 
   // relógio do jogo
   useEffect(() => {
@@ -83,13 +103,24 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     const t = setInterval(() => {
       const career = ref.current;
       if (isMatchDay(career)) {
-        if (autoSim) { simulateRound(career); track('match_simulated', { mode: 'auto' }); slowDownAfterMatch(); save(); force(); return; }
+        if (autoSim) {
+          const year = career.season.year;
+          const r = simulateRound(career);
+          track('match_simulated', { mode: 'auto' });
+          matchAchievements(r, year, { watched: false, simulated: true, subs: 0 });
+          slowDownAfterMatch(); save(); force(); return;
+        }
         setPrep(prepareRound(career));
         return;
       }
       const r = advanceDay(career);
       if (r.gains.length) setGains({ list: r.gains.map((g) => ({ playerId: g.playerId, text: `+1 ${ATTR_SHORT[g.attr]}` })), key: r.date });
-      if (r.date.endsWith('-01')) save();
+      if (r.date.endsWith('-01')) {
+        const clean = month.current.tracking && month.current.clean;
+        achieve((s) => onMonth(s, career, clean));
+        month.current = { tracking: true, clean: true };
+        save();
+      }
       force();
     }, SPEEDS[speed]);
     return () => clearInterval(t);
@@ -105,7 +136,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement) && !blocking) {
         e.preventDefault();
-        setSpeed((s) => (s > 0 ? (resumeSpeed.current = s, 0) : resumeSpeed.current || 1));
+        setSpeed((s) => (s > 0 ? (resumeSpeed.current = s, month.current.clean = false, 0) : resumeSpeed.current || 1));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -116,11 +147,13 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const club = me ? c.clubs[me] : undefined;
   const bond = activeBond(c);
 
-  const onMatchDone = (p: PreparedRound, o: FootballOutcome) => {
+  const onMatchDone = (p: PreparedRound, o: FootballOutcome, info: MatchPlayInfo) => {
     const home = p.match.home.clubId === myClubId(ref.current);
     const gf = home ? o.homeScore : o.awayScore, ga = home ? o.awayScore : o.homeScore;
     track('match_finished', { round: p.round + 1, season: ref.current.season.year, result: gf > ga ? 'win' : gf < ga ? 'loss' : 'draw', goals_for: gf, goals_against: ga, home });
-    completeRound(ref.current, p, o);
+    const year = ref.current.season.year;
+    const r = completeRound(ref.current, p, o);
+    matchAchievements(r, year, info);
     setPrep(null);
     slowDownAfterMatch();
     save();
@@ -128,7 +161,9 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   };
 
   const endSeason = () => {
+    const facts = seasonFacts(ref.current, seasonSummary(ref.current));
     const s = closeSeason(ref.current);
+    achieve((st) => onSeasonEnd(st, facts, ref.current));
     track('season_completed', { seasons_played: ref.current.entrepreneur.history.length, position: s.position, division: s.division + 1, objective: s.objective, achieved: s.achieved, fired: s.fired, promoted: s.promoted, relegated: s.relegated });
     setSummary(s);
     save();
@@ -219,6 +254,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             gains={gains.list}
             gainsKey={gains.key}
             paused={!running}
+            legacy={unlocked}
           />
           {!running && !blocking && (
             <button className="paused-badge" onClick={() => setSpeed(resumeSpeed.current || 1)}>⏸ Pausado · continuar ▶</button>
@@ -314,7 +350,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       {decision && !menu && !prep && !summary && c.phase !== 'encerramento' && (
         <DecisionModal career={c} decision={decision} onChoose={(choice) => {
           track('market_decision', { kind: decision.kind, choice });
-          act((career) => decide(career, decision.id, choice));
+          doAct((career) => decide(career, decision.id, choice), { kind: decision.kind, choice });
         }} />
       )}
 

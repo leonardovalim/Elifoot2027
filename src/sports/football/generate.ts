@@ -120,7 +120,25 @@ export function generateWorld(rng: Rng): Club[][] {
     }
     result.push(clubs);
   }
+  ensureNovaIguacu(result);
   return result;
+}
+
+/** Clube fixo de todo mundo gerado (conquista secreta "Laranja da Baixada"). */
+export const NOVA_IGUACU = 'Nova Iguaçu';
+
+/**
+ * Um dos 48 clubes vira o Nova Iguaçu: a vaga sai dos ids já gerados, sem consumir o RNG,
+ * então o resto do mundo fica idêntico para a mesma seed.
+ */
+function ensureNovaIguacu(world: Club[][]) {
+  const all = world.flat();
+  const slot = all.reduce((h, c) => (h * 31 + c.id.charCodeAt(c.id.length - 1)) >>> 0, 7) % all.length;
+  const club = all[slot]!;
+  club.name = NOVA_IGUACU;
+  club.city = NOVA_IGUACU;
+  club.short = 'NIG';
+  club.colors = ['#f07a1a', '#ffffff'];
 }
 
 export const FIRST_NAMES = FIRST;

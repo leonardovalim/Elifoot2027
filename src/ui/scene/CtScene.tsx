@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { scenePresentation } from './scenePresentation';
 import { sceneDetails } from './sceneDetails';
 import { drawCoach, drawPlayer, drawText, lookFor, textWidth, SPRITE_H, SPRITE_W, type Look } from './sprites';
+import { drawLegacy, drawPlaza } from './legacy';
 
 export interface ScenePlayer {
   id: string;
@@ -20,10 +21,13 @@ interface Props {
   gains: SceneGain[];
   gainsKey: string;
   paused: boolean;
+  /** Conquistas do jogador (id → data): cada uma põe um objeto na cena. */
+  legacy?: Record<string, string>;
 }
 
 const W = 240;
-const H = 135;
+/** 135 de céu/prédio/campo + 18 do pátio de entrada (onde ficam os objetos de conquista). */
+export const H = 153;
 const FIELD = { x: 8, y: 40, w: 224, h: 88 };
 
 interface Actor {
@@ -45,13 +49,17 @@ function rand(seed: { v: number }) {
 }
 
 /** Centro de treinamento em pixel art: atletas treinando, bola rodando e "+1" flutuando. */
-export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paused }: Props) {
+export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paused, legacy }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const actors = useRef<Actor[]>([]);
   const floats = useRef<Float[]>([]);
   const ball = useRef({ x: W / 2, y: FIELD.y + FIELD.h / 2, from: 0, to: 1, t: 1 });
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const legacyRef = useRef(legacy ?? {});
+  legacyRef.current = legacy ?? {};
+  // conquista nova com o jogo pausado: redesenha a cena para o objeto aparecer na hora
+  const legacyCount = Object.keys(legacy ?? {}).length;
 
   // sincroniza atores com o elenco
   useEffect(() => {
@@ -164,6 +172,8 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
       // refletores
       c.fillStyle = '#4a4a58'; c.fillRect(200, 6, 2, 34); c.fillRect(224, 6, 2, 34);
       c.fillStyle = '#fff6c8'; c.fillRect(197, 4, 8, 3); c.fillRect(221, 4, 8, 3);
+      const has = (id: string) => !!legacyRef.current[id];
+      drawLegacy(c, 'back', fr, colors, has);
       // gramado listrado
       for (let i = 0; i < 14; i++) {
         c.fillStyle = i % 2 ? '#4fa64a' : '#5cb556';
@@ -191,6 +201,8 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
       c.fillStyle = '#f07a2a';
       for (let i = 0; i < details.coneCount; i++) { c.fillRect(145 + i * 9, FIELD.y + 70, 3, 2); c.fillRect(146 + i * 9, FIELD.y + 69, 1, 1); }
 
+      drawLegacy(c, 'ground', fr, colors, has);
+
       // atores ordenados por profundidade
       const sorted = [...actors.current].sort((a, b) => a.y - b.y);
       for (const a of sorted) {
@@ -198,6 +210,10 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
         drawPlayer(c, a.look, Math.round(a.x), Math.round(a.y), walking ? Math.floor(fr / 8) : 0, a.flip);
       }
       drawCoach(c, 20, FIELD.y + FIELD.h - SPRITE_H - 2, Math.floor(fr / 40));
+
+      // pátio de entrada e objetos de conquista na frente
+      drawPlaza(c, colors);
+      drawLegacy(c, 'front', fr, colors, has);
 
       // bola
       const b = ball.current;
@@ -215,7 +231,7 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [colors, trainingCenter]);
+  }, [colors, trainingCenter, legacyCount]);
 
   const presentation = scenePresentation(trainingCenter, paused, players.length);
 
