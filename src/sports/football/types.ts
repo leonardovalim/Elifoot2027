@@ -53,6 +53,8 @@ export interface Player {
   renewalAsked?: number;
   /** Não renovou: deixa o clube ao fim da temporada. */
   leaving?: boolean;
+  /** Subiu das categorias de base do clube (ausente em saves antigos). */
+  fromYouth?: boolean;
   /** Ídolo preso ao clube: nunca sai (sem mercado, propostas, venda, saída ou aposentadoria). */
   clubLocked?: boolean;
 }

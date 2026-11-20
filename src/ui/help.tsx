@@ -3,6 +3,8 @@ import { temperament } from '../sports/football/temperament';
 import type { Player } from '../sports/football/types';
 import { track } from './analytics';
 import { Modal } from './util';
+import { achieve } from './achievements';
+import { onHelpTopic } from '../game/achievements';
 
 /**
  * Ajuda do jogo ("Como jogar"). Abre pelo botão "?" do topo, pelo "Como jogar"
@@ -90,6 +92,7 @@ function Content({ topic, tag }: { topic: HelpTopic; tag?: TagKind }) {
           </ul>
           <p>Reputação abre portas: quanto maior, melhores os clubes que chamam você. Demitido, você escolhe entre as propostas que chegarem.</p>
           <p className="hint">Seu <b>patrimônio</b> (salário e bônus) é seu; o <b>caixa do clube</b> é do clube. Um não paga as contas do outro.</p>
+          <p><b>Conquistas:</b> são 51, todas secretas. Cada uma coloca um objeto novo no seu CT e fica com você para sempre, mesmo começando outra carreira. Veja as suas em <b>Carreira</b>.</p>
         </>
       );
     case 'tempo':
@@ -190,6 +193,9 @@ export function HelpHost() {
     show = (r) => setReq(r);
     return () => { show = null; };
   }, []);
+
+  // cada assunto lido conta para a conquista "Lição de casa"
+  useEffect(() => { if (req) achieve((s) => onHelpTopic(s, req.topic)); }, [req?.topic]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // aberto a partir de um selo: rola até o verbete dele
   useEffect(() => {

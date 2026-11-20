@@ -116,6 +116,7 @@ export function endOfSeason(club: Club, level: number, year: number, rng: Rng): 
     const have = club.players.filter((p) => p.position === pos).length;
     for (let i = have; i < need[pos]; i++) {
       const y = generatePlayer(rng, pos, level - 2 + club.trainingCenter, rng.int(17, 19), year + 1);
+      y.fromYouth = true;
       club.players.push(y);
       youth.push(y);
     }

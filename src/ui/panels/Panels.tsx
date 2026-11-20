@@ -34,6 +34,7 @@ import { track } from '../analytics';
 import { Morale } from './Decisions';
 import { askConfirm } from '../confirm';
 import { Tag, TemperamentTag } from '../help';
+import { AchievementsSection } from '../achievements';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -720,6 +721,7 @@ export function CareerPanel({ career, onReset }: { career: Career; onReset: () =
         )}
         {club && club.titles.length > 0 && (<><h4>Títulos do clube</h4><ul className="list">{club.titles.map((t, i) => <li key={i}>🏆 {t.competition} {t.year}</li>)}</ul></>)}
       </section>
+      <AchievementsSection />
     </div>
   );
 }

@@ -220,8 +220,9 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .stage { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; align-items: start; }
 .scene-wrap { position: relative; margin: var(--px); box-shadow: 0 0 0 var(--px) var(--ink); background: var(--grass); overflow: hidden; }
 .scene-shell { position: relative; }
-.scene { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; image-rendering: pixelated; image-rendering: crisp-edges; }
-.scene-status { position: absolute; left: 10px; bottom: 10px; display: flex; align-items: baseline; gap: 8px; max-width: calc(100% - 20px); padding: 5px 8px; background: rgba(29, 35, 64, 0.88); color: var(--paper); font-size: 12px; line-height: 1.2; box-shadow: 2px 2px 0 rgba(36, 26, 46, 0.55); }
+.scene { display: block; width: 100%; height: auto; aspect-ratio: 240 / 153; image-rendering: pixelated; image-rendering: crisp-edges; }
+/* fica embaixo da cena (não por cima): o pátio de entrada, com os objetos de conquista, ocupa a base do canvas */
+.scene-status { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; background: rgba(29, 35, 64, 0.96); color: var(--paper); font-size: 12px; line-height: 1.2; }
 .scene-status b { color: var(--mustard); white-space: nowrap; }
 .scene-status span { color: var(--paper-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .paused-badge {
@@ -276,7 +277,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .scroll.tall { max-height: 60vh; overflow-y: auto; }
 
 .grid-table { width: 100%; border-collapse: collapse; font-size: 15px; }
-.grid-table th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 700; padding: 4px 6px; border-bottom: 2px solid var(--ink); white-space: nowrap; position: sticky; top: 0; background: var(--paper); }
+.grid-table th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 700; padding: 4px 6px; border-bottom: 2px solid var(--ink); white-space: nowrap; position: sticky; top: 0; z-index: 2; background: var(--paper); } /* z-index: selos clicáveis (position: relative) não passam por cima ao rolar */
 .grid-table td { padding: 4px 6px; border-bottom: 2px dotted var(--paper-2); white-space: nowrap; }
 /* o nome fica numa linha; os selos descem para a linha de baixo quando não cabem (selo cortado não dá para tocar) */
 .grid-table td.name { white-space: normal; min-width: 150px; }
@@ -561,6 +562,37 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .help-tags dd { margin: 0; }
 @media (max-width: 560px) { .help-tags > div { grid-template-columns: 74px 1fr; gap: 8px; } }
 
+/* ---------- conquistas: banner (estilo Xbox) e coleção ---------- */
+/* como no Xbox, o banner não recebe toque: nunca bloqueia um botão embaixo dele */
+.ach-toast-wrap { position: fixed; top: 10px; left: 0; right: 0; display: flex; justify-content: center; z-index: 60; pointer-events: none; padding: 0 12px; }
+.ach-toast {
+  pointer-events: none; display: flex; align-items: center; gap: 12px; max-width: 460px; width: 100%;
+  background: #1d1a26; color: var(--paper); border: 0; padding: 10px 14px 10px 10px; text-align: left;
+  box-shadow: 0 0 0 var(--px) var(--ink), 4px 4px 0 rgba(0, 0, 0, 0.35);
+  animation: ach-in 420ms cubic-bezier(.2, .9, .3, 1.2), ach-out 380ms ease-in 4220ms forwards;
+}
+.ach-medal { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; font-size: 24px; background: var(--tier); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.35); }
+.ach-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ach-text small { color: var(--tier); font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+.ach-text b { font-size: 17px; }
+.ach-text span { font-size: 12px; color: var(--paper-2); }
+.ach-more { margin-left: auto; align-self: flex-start; font-size: 11px; font-weight: 800; color: var(--paper-2); }
+.tier-bronze { --tier: #c98a4b; }
+.tier-prata { --tier: #c7ced8; }
+.tier-ouro { --tier: #f2b632; }
+.tier-lendaria { --tier: #b28dff; }
+/* entra e sai com deslize curto: não atravessa o menu de baixo */
+@keyframes ach-in { from { transform: translateY(-16px) scale(.96); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes ach-out { to { transform: translateY(-16px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ach-toast { animation: none; } }
+
+.ach-section { grid-column: 1 / -1; }
+.ach-bar { height: 8px; background: var(--paper-2); margin: 4px 0 10px; box-shadow: 0 0 0 2px var(--ink); }
+.ach-bar i { display: block; height: 100%; background: var(--mustard); }
+.ach-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.ach-list li { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: var(--paper-3); box-shadow: inset 4px 0 0 var(--tier); }
+.ach-tier { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
 /* ---------- mercado: altura e lista no celular ---------- */
 /* Desktop: a janela cabe na tela; a lista e a ficha rolam por dentro, sem rolagem fora. */
 @media (min-width: 901px) {
@@ -587,6 +619,9 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .mrow-name, .mrow-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mrow-name { font-weight: 700; font-size: 15px; }
 .mrow-name .tag { margin-left: 4px; }
+/* no cartão a linha tem altura fixa: em vez do halo invisível (::after), o selo ganha padding real que cabe na linha */
+.mrow-name .tag-help { display: inline-block; line-height: 14px; padding: 2px 5px; vertical-align: 1px; }
+.mrow-name .tag-help::after { inset: 0; }
 .mrow-sub { font-size: 12px; color: var(--muted); }
 .mrow-num { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .mrow-num b { font-size: 16px; }

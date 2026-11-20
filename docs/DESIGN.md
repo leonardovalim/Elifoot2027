@@ -110,6 +110,15 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - **Selos clicáveis**: tocar em qualquer selo de atleta (raçudo, fair play, joia, novo, fim contr., sai, susp., fora de posição, titular) abre a ajuda direto na explicação dele. A área de toque é ampliada por CSS sem mudar o visual.
 - Os textos da ajuda descrevem regras reais do código; ao mudar uma regra, revise o verbete correspondente.
 
+## Conquistas e legado no CT
+
+- **51 conquistas secretas** (`game/achievements.ts`): 20 bronze, 15 prata, 10 ouro e 6 lendárias. A 51ª, **Laranja da Baixada**, é receber proposta do **Nova Iguaçu** (`NOVA_IGUACU_ID`, o clube mais forte da 1ª divisão em todo mundo gerado; exige reputação alta). São do **jogador**, não da carreira: ficam em `localStorage` (`mestres-do-esporte.conquistas`) e sobrevivem a apagar o save ou começar outra carreira.
+- **Cada conquista põe um objeto no CT** (`ui/scene/legacy.ts`), em pixel art nas cores do clube atual. Zonas: céu (balões, dirigível, avião, fogos, disco voador), telhado/fachada do CT, **sala de troféus** (anexo que só aparece com o primeiro troféu), gramado, beira do campo e **pátio de entrada** (faixa de 18 px abaixo do campo, por isso o canvas passou de 240×135 para 240×153).
+- **Banner estilo Xbox** (`ui/achievements.tsx`): fila, um por vez (~4,6 s), acima do menu de baixo. A coleção fica no painel **Carreira** (só as desbloqueadas + contador; as outras são secretas).
+- Regras puras e testadas (`tests/achievements.test.ts`, `tests/legacy.test.ts`); os ganchos ficam no `Game.tsx` (partida, fim de temporada, ações/decisões, virada de mês) e na ajuda ("Lição de casa").
+- Atletas vindos da base ganharam `fromYouth` (para "Prata da casa").
+- "CT de primeiro mundo" exige **cumprir o objetivo** num clube 5 estrelas (no desafio "Administrar a pressão" o clube já começa com 5).
+
 ## Referências e propriedade intelectual
 
 - **desvendando-elifoot-98** (engenharia reversa): usado só para estudar mecânicas. **Nenhum código descompilado é portado.**

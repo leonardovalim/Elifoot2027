@@ -14,7 +14,17 @@ import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from 
 interface Props {
   career: Career;
   prep: PreparedRound;
-  onDone: (prep: PreparedRound, outcome: FootballOutcome) => void;
+  onDone: (prep: PreparedRound, outcome: FootballOutcome, info: MatchPlayInfo) => void;
+}
+
+/** Como o jogador acompanhou a partida (para as conquistas). */
+export interface MatchPlayInfo {
+  /** Assistiu narrada até o apito final, sem pular. */
+  watched: boolean;
+  /** Pulou direto para o resultado ("Simular resultado"). */
+  simulated: boolean;
+  /** Substituições feitas pelo jogador. */
+  subs: number;
 }
 
 type Stage = 'pre' | 'live' | 'post';
@@ -35,6 +45,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const [subIn, setSubIn] = useState('');
   const [subErr, setSubErr] = useState('');
   const outcome = useRef<FootballOutcome | null>(null);
+  const playInfo = useRef<MatchPlayInfo>({ watched: false, simulated: false, subs: 0 });
 
   useEffect(() => {
     if (stage !== 'live' || !running) return;
@@ -51,7 +62,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       if (m.finished) play('fullTime');
       if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || (e.type === 'red' && e.side === side))) setRunning(false);
       if (m.minute === m.firstHalfEnd) setRunning(false);
-      if (m.finished) { outcome.current = toOutcome(m); setRunning(false); setStage('post'); }
+      if (m.finished) { outcome.current = toOutcome(m); playInfo.current.watched = true; setRunning(false); setStage('post'); }
       tick();
     }, SPEEDS[speed]!.ms);
     return () => clearInterval(t);
@@ -68,6 +79,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const barColors = { '--l': colors[L].bg, '--r': colors[R].bg } as CSSProperties;
 
   const simulateToEnd = () => {
+    if (stage === 'pre') playInfo.current.simulated = true;
     while (!m.finished) stepMinute(m, rng.current!);
     outcome.current = toOutcome(m);
     play('fullTime');
@@ -133,7 +145,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
           </section>
         </div>
         <div className="row center">
-          <button className="btn primary" onClick={() => onDone(p, o)}>Continuar ›</button>
+          <button className="btn primary" onClick={() => onDone(p, o, playInfo.current)}>Continuar ›</button>
         </div>
       </div>
     );
@@ -196,7 +208,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             </select>
             <button className="btn sm" disabled={!subOut || !subIn || mine.subsLeft <= 0} onClick={() => {
               const err = substitute(m, side, subOut, subIn);
-              if (!err) track('match_intervention', { type: 'substitution', minute: m.minute });
+              if (!err) { track('match_intervention', { type: 'substitution', minute: m.minute }); playInfo.current.subs++; }
               if (!err) { setSubOut(''); setSubIn(''); setSubErr(''); tick(); } else setSubErr(err);
             }}>Trocar ({mine.subsLeft})</button>
           </div>
