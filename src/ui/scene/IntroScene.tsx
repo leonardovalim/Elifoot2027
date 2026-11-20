@@ -35,7 +35,17 @@ const BALL_REST = { x: 201, y: 106 };
 
 const HOME = lookFor('intro-kicker', '#e4563c', '#ffffff');
 const KEEPER = lookFor('intro-keeper', '#3a9a4b', '#1d2340');
-const WALL = ['w1', 'w2', 'w3'].map((id) => lookFor(id, '#2a3160', '#f2b632'));
+const WALL = ['w1', 'w2', 'w3', 'w4'].map((id) => lookFor(id, '#2a3160', '#f2b632'));
+/**
+ * Barreira em fila paralela à linha de fundo: na câmera de TV ela "entra" na
+ * tela, então cada jogador fica um pouco mais alto (mais longe) e deslocado
+ * na mesma inclinação da linha de fundo. Centro sobre a reta bola → gol.
+ */
+const WALL_CENTER = { x: 150, ground: 114 };
+const WALL_SPOTS = [-7.5, -2.5, 2.5, 7.5].map((dy) => {
+  const ground = WALL_CENTER.ground + dy;
+  return { x: Math.round(WALL_CENTER.x + dy * END_SLOPE), ground: Math.round(ground) };
+});
 const CROWD_COLORS = ['#e4563c', '#f6ecd6', '#f2b632', '#2f5fbf', '#ffffff', '#c8323c', '#ead9b6'];
 
 function rng(seed: number) {
@@ -169,7 +179,8 @@ export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: numb
 
   // barreira
   const wallJump = s.flight > 0 && s.flight < 0.6 ? -Math.round(Math.sin(s.flight / 0.6 * Math.PI) * 5) : 0;
-  WALL.forEach((look, i) => drawPlayer(c, look, 142 + i * 9, 104 + wallJump, 0, true));
+  // do mais distante para o mais próximo, para quem está na frente cobrir quem está atrás
+  WALL_SPOTS.forEach((spot, i) => drawPlayer(c, WALL[i]!, spot.x - 4, spot.ground - SPRITE_H + 1 + wallJump, 0, true));
 
   // goleiro: na linha, salta para o ângulo do fundo e não alcança
   const dive = s.flight > 0.45 ? Math.min(1, (s.flight - 0.45) / 0.4) : 0;
@@ -233,7 +244,6 @@ export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: numb
       c.fillStyle = p.color; c.fillRect(Math.round(p.x + p.vx * t), Math.round(y), 1, 2);
     }
   }
-  void SPRITE_H;
 }
 
 interface Props {
