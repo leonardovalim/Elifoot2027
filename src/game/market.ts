@@ -86,12 +86,14 @@ export function marketDay(ctx: MarketCtx, rng: Rng) {
 /** Proposta de outro clube por um atleta: ~1 a cada 2 meses, mais se houver alguém insatisfeito. */
 function maybeBid(ctx: MarketCtx, club: Club, rng: Rng) {
   if (ctx.decisions.some((d) => d.kind === 'bid')) return;
-  const pool = club.players.filter((p) => canLose(club, p) && !p.leaving);
+  // atleta sem valor de mercado não recebe proposta (evitava oferta de $0 e "NaN% do valor" na tela)
+  const pool = club.players.filter((p) => canLose(club, p) && !p.leaving && playerValue(p) > 0);
   if (!pool.length) return;
   const unhappy = pool.some((p) => moraleOf(p) < 25);
   if (!rng.chance(unhappy ? 0.03 : 0.016)) return;
   const p = rng.weighted(pool, (x) => playerValue(x) * (moraleOf(x) < 25 ? 3 : 1));
   const fee = round1000(playerValue(p) * (0.9 + rng.next() * 0.55));
+  if (fee <= 0) return;
   const buyers = Object.values(ctx.clubs).filter((c) => c.id !== club.id && c.budget > fee * 1.2 && c.players.length < 28);
   if (!buyers.length) return;
   const buyer = rng.weighted(buyers, (c) => Math.max(1, c.reputation - club.reputation + 30));

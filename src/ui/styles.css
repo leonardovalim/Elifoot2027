@@ -60,7 +60,11 @@ h4 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin: 14
   padding: 6px 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 14px;
   border-bottom: var(--px) solid var(--ink);
 }
-.window-title .x { background: none; border: 0; color: var(--paper-3); cursor: pointer; font-size: 16px; padding: 0 4px; }
+.window-title .x {
+  background: none; border: 0; color: var(--paper-3); cursor: pointer; font-size: 16px; padding: 0;
+  /* alvo de toque de 32px sem aumentar a altura do título (margem negativa compensa o padding) */
+  display: inline-grid; place-items: center; min-width: 32px; min-height: 32px; margin: -6px -6px -6px 0;
+}
 .window-body { padding: 12px; }
 
 /* ---------- botões ---------- */

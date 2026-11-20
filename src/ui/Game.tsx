@@ -136,13 +136,25 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
   // ------------------------------------------------ sem clube (demitido)
   if (!club || !bond) {
+    const accept = (o: Career['offers'][number]) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); };
     return (
       <div className="game">
-        <Modal title="Você está sem clube">
-          <h4>Propostas recebidas</h4>
-          <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); save(); force(); }} />
-          <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
-        </Modal>
+        {summary ? (
+          // acabou de ser demitido: mostra o balanço da temporada antes das propostas
+          <Modal title={`Balanço ${c.season.year - 1}`}>
+            <SummaryView s={summary} />
+            <p>A diretoria decidiu não renovar.</p>
+            <h4>Propostas recebidas</h4>
+            <OfferList career={c} onAccept={accept} />
+            <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
+          </Modal>
+        ) : (
+          <Modal title="Você está sem clube">
+            <h4>Propostas recebidas</h4>
+            <OfferList career={c} onAccept={accept} />
+            <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
+          </Modal>
+        )}
       </div>
     );
   }
@@ -279,26 +291,17 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       {summary && (
         <Modal title={`Balanço ${c.season.year - 1}`}>
           <SummaryView s={summary} />
-          {c.unemployed ? (
+          {/* demitido não chega aqui: o retorno "sem clube" acima mostra o balanço com as propostas */}
+          {c.offers.length > 0 && (
             <>
-              <p>A diretoria decidiu não renovar.</p>
               <h4>Propostas recebidas</h4>
               <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
             </>
-          ) : (
-            <>
-              {c.offers.length > 0 && (
-                <>
-                  <h4>Propostas recebidas</h4>
-                  <OfferList career={c} onAccept={(o) => { track('offer_accepted', { unemployed: ref.current.unemployed }); acceptOffer(ref.current, o); setSummary(null); save(); force(); }} />
-                </>
-              )}
-              <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>
-              <button className="btn primary" onClick={() => { ref.current.offers = []; setSummary(null); save(); force(); }}>
-                {c.offers.length ? 'Ficar no clube' : 'Seguir para a nova temporada'} ›
-              </button>
-            </>
           )}
+          <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>
+          <button className="btn primary" onClick={() => { ref.current.offers = []; setSummary(null); save(); force(); }}>
+            {c.offers.length ? 'Ficar no clube' : 'Seguir para a nova temporada'} ›
+          </button>
         </Modal>
       )}
 
