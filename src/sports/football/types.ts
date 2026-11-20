@@ -1,3 +1,4 @@
+import type { Country } from './nations';
 export type Position = 'GK' | 'DF' | 'MF' | 'FW';
 
 /** GDD 3.2 — atributos 1–99 em três grupos + goleiro. */
@@ -57,6 +58,10 @@ export interface Player {
   fromYouth?: boolean;
   /** Ídolo preso ao clube: nunca sai (sem mercado, propostas, venda, saída ou aposentadoria). */
   clubLocked?: boolean;
+  /** Rodadas que ainda fica fora por lesão (ausente/0 = saudável). */
+  injured?: number;
+  /** País do atleta (ausente = Brasil). */
+  nationality?: Country;
 }
 
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2' | '5-3-2' | '4-5-1' | '3-4-3' | '5-4-1';
@@ -87,6 +92,8 @@ export interface Club {
   lineup?: { xi: string[]; bench: string[] };
   /** Obras em andamento (ausente em saves antigos). */
   works?: Work[];
+  /** Clube estrangeiro (só joga a Taça Continental); ausente = brasileiro. */
+  country?: Country;
 }
 
 /** Obra de estrutura: paga na hora, fica pronta em `doneOn`. */
@@ -108,7 +115,8 @@ export type MatchEvent =
   | { minute: number; type: 'save'; side: Side; playerId: string; playerName: string; keeperName: string }
   | { minute: number; type: 'post' | 'bar' | 'miss'; side: Side; playerId: string; playerName: string }
   | { minute: number; type: 'yellow' | 'red'; side: Side; playerId: string; playerName: string }
-  | { minute: number; type: 'sub'; side: Side; playerId: string; playerName: string; inName: string; inId: string; reason: 'cansaço' | 'tática' }
+  | { minute: number; type: 'injury'; side: Side; playerId: string; playerName: string; rounds: number }
+  | { minute: number; type: 'sub'; side: Side; playerId: string; playerName: string; inName: string; inId: string; reason: 'cansaço' | 'tática' | 'lesão' }
   | { minute: number; type: 'tactic'; side: Side; text: string }
   | { minute: number; type: 'half' | 'end' };
 

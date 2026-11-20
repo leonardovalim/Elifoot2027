@@ -39,7 +39,7 @@ export interface Lineup {
   bench: Player[];
 }
 
-export const available = (p: Player) => p.suspended <= 0;
+export const available = (p: Player) => p.suspended <= 0 && !(p.injured && p.injured > 0);
 
 const BENCH_SIZE = 7;
 const score = (p: Player, pos: Position) => ratingAt(p, pos) * conditionFactor(p.condition);

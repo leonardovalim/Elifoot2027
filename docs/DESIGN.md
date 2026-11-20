@@ -138,9 +138,12 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 
 **Entrega 2: mundo vivo**
 - [ ] Comissão técnica (treinador, diretor, preparador, coordenador) com atributos, salário e evolução. Delegação em 2 níveis.
-- [ ] IA adversária contratando, vendendo e demitindo técnico, respeitando o próprio caixa (GD-10)
-- [ ] Copa em mata-mata paralela à liga
-- [ ] Lesões
+- [x] IA adversária contratando de outros clubes da IA pela posição mais carente, respeitando o próprio caixa (~20 negociações por temporada, listadas no Mercado)
+- [ ] IA demitindo técnico
+- [x] Copa Mestres: mata-mata em jogo único com os 48 clubes (6 fases nas quartas-feiras entre rodadas), mando do clube de divisão mais baixa, pênaltis no empate, prêmio por fase ($30k → $1,2M); não conta na artilharia
+- [x] Taça Continental: os 4 primeiros da Divisão 1 contra 12 clubes estrangeiros fictícios (oitavas à final), prêmios de $150k a $2,5M
+- [x] Nacionalidades: ~8% de estrangeiros na liga (nome do país e bandeirinha), clubes estrangeiros com elenco do próprio país
+- [x] Lesões: ~1,3 por time por temporada (mais chance com cansaço), fora de 1 a 6 rodadas (média 2,7); substituição forçada automática, pausa e som na partida do jogador; as férias curam
 - [x] Upgrade de estrutura (CT, estádio) com custo, o "escritório maior" da Game Dev Story: obra paga na hora; estádio +15% dos lugares a $150 o lugar (90 dias), CT nível 2–5 por $200k/$400k/$800k/$1,5M (60 dias)
 - [x] Torcida viva: +0,6% por vitória, +0,1% por empate, −0,4% por derrota; campeão +12%, acesso +7%, rebaixamento −10%. Estádios novos nascem com ~70–80% de ocupação, então crescer enche a casa e pede ampliação
 - [x] Artilharia da temporada por divisão (aba Tabela)

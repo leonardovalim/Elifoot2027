@@ -63,7 +63,11 @@ describe('conquistas: partidas e temporada', () => {
     expect(got).toContain('primeira-vitoria');
     expect(got).toContain('classico-do-sofa');
     expect(got.filter((id) => id === 'primeiro-apito')).toHaveLength(1);
-    expect(s.matches).toBe(22);
+    // 22 do campeonato + os jogos de copa até cair (ou ser campeão)
+    const me = myClubId(c);
+    const cupGames = c.cup!.ties.flat().filter((t) => t.winner && (t.home === me || t.away === me)).length;
+    expect(cupGames).toBeGreaterThan(0);
+    expect(s.matches).toBe(22 + cupGames);
   });
 
   it('elenco no máximo: campeão, objetivo cumprido e conquistas de temporada', () => {

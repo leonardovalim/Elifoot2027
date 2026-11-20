@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { formatDate } from '../../core/calendar';
 import type { Rng } from '../../core/rng';
-import { clubStrength, lastAttendance, liveRng, myClubId, type Career, type PreparedRound } from '../../game/career';
+import { clubStrength, lastAttendance, liveRng, myClubId, myShootout, type Career, type PreparedRound } from '../../game/career';
 import { changeFormation, changeStyle, stepMinute, substitute, toOutcome, type FootballOutcome, type SideState } from '../../sports/football/engine';
 import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
@@ -9,6 +9,7 @@ import type { Formation, Side, Style, TeamStats } from '../../sports/football/ty
 import { track } from '../analytics';
 import { play, SoundToggle } from '../sound';
 import { RoundBoard } from './RoundBoard';
+import { Flag } from '../flag';
 import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
 
 interface Props {
@@ -57,10 +58,12 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       for (const e of fresh) {
         if (e.type === 'goal') play(e.side === side ? 'goalFor' : 'goalAgainst');
         else if (e.type === 'red') play('card');
+        else if (e.type === 'injury' && e.side === side) play('injury');
         else if (e.type === 'half') play('halfTime');
       }
       if (m.finished) play('fullTime');
-      if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || (e.type === 'red' && e.side === side))) setRunning(false);
+      // pausa em gol do adversário, expulsão ou lesão nossa: momento de decidir
+      if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || ((e.type === 'red' || e.type === 'injury') && e.side === side))) setRunning(false);
       if (m.minute === m.firstHalfEnd) setRunning(false);
       if (m.finished) { outcome.current = toOutcome(m); playInfo.current.watched = true; setRunning(false); setStage('post'); }
       tick();
@@ -78,6 +81,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const venue = side === 'home' ? 'em casa' : 'fora';
   const barColors = { '--l': colors[L].bg, '--r': colors[R].bg } as CSSProperties;
 
+  const competition = p.cupLabel ?? `Rodada ${p.round + 1}`;
+
   const simulateToEnd = () => {
     if (stage === 'pre') playInfo.current.simulated = true;
     while (!m.finished) stepMinute(m, rng.current!);
@@ -89,7 +94,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   if (stage === 'pre') {
     return (
       <div className="match">
-        <p className="kicker">Rodada {p.round + 1} · {formatDate(career.date)} · {home.stadiumName} ({venue})</p>
+        <p className="kicker">{competition} · {formatDate(career.date)} · {home.stadiumName} ({venue})</p>
+        {p.cup !== undefined && <p className="hint center cup-note">Mata-mata: se empatar, a vaga sai nos pênaltis.</p>}
         <div className="scoreboard">
           <TeamHead club={clubOf[L]} color={colors[L]} mine sub={`${m[L].formation} · ${STYLE_LABEL[m[L].style]}`} />
           <div className="score idle">×</div>
@@ -110,17 +116,31 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
 
   if (stage === 'post' && outcome.current) {
     const o = outcome.current;
+    const sh = myShootout(p, o);
+    const won = sh ? (side === 'home' ? sh.home > sh.away : sh.away > sh.home) : null;
     const motmSide = m[o.motm.side];
     const motm = [motmSide.GK, ...motmSide.DF, ...motmSide.MF, ...motmSide.FW, ...Object.values(career.clubs[motmSide.clubId]!.players)]
       .find((x) => x.id === o.motm.playerId);
     return (
       <div className="match">
-        <p className="kicker">Fim de jogo</p>
+        <p className="kicker">Fim de jogo · {competition}</p>
         <div className="scoreboard">
           <TeamHead club={clubOf[L]} color={colors[L]} mine />
-          <div className="score">{goalsOf(o, L)} × {goalsOf(o, R)}</div>
+          <div className="score">{goalsOf(o, L)} × {goalsOf(o, R)}{sh && <span className="clock">pên. {L === 'home' ? sh.home : sh.away} × {L === 'home' ? sh.away : sh.home}</span>}</div>
           <TeamHead club={clubOf[R]} color={colors[R]} mine={false} right />
         </div>
+        {sh && (
+          <section className={`shootout ${won ? 'won' : 'lost'}`} aria-label="Disputa de pênaltis">
+            <h4>{won ? 'Classificado nos pênaltis!' : 'Eliminado nos pênaltis'}</h4>
+            <ol className="kicks">
+              {sh.kicks.map((k, i) => (
+                <li key={i} className={`${k.side === side ? 'mine' : ''} ${k.scored ? 'in' : 'out'}`}>
+                  <SideTag color={colors[k.side]} label={m[k.side].short} /> {k.name} <b>{k.scored ? '⚽' : '✕'}</b>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
         <div className="two-col">
           <section>
             <h4>Gols</h4>
@@ -141,7 +161,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
                 <span className="rating">{o.motm.rating.toFixed(1)}</span>
               </div>
             )}
-            <RoundBoard career={career} prep={p} minute={m.minute} final />
+            <RoundBoard career={career} prep={p} minute={m.minute} final myPens={sh ? [sh.home, sh.away] : undefined} />
           </section>
         </div>
         <div className="row center">
@@ -237,7 +257,7 @@ function TeamHead({ club, sub, right, color, mine }: { club: Career['clubs'][str
     <div className={`team ${right ? 'right' : ''}`} style={{ '--side': color.bg } as CSSProperties}>
       <Badge club={club} size="lg" />
       <div>
-        <b>{club.name}</b>
+        <b>{club.country && <Flag country={club.country} />}{club.name}</b>
         <span className="team-id"><SideTag color={color} label={club.short} />{mine && <span className="you">seu time</span>}</span>
         {sub && <span className="hint">{sub}</span>}
       </div>
