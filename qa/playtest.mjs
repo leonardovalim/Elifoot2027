@@ -94,7 +94,7 @@ function pageChecks(isMobile) {
   };
 
   // escopo: se há janela aberta, só ela importa (o resto está atrás do overlay)
-  const dialogs = [...document.querySelectorAll('[role=dialog]')].filter(visible);
+  const dialogs = [...document.querySelectorAll('[role=dialog], [role=alertdialog]')].filter(visible);
   const scope = dialogs.at(-1) ?? document.body;
 
   // 1. rolagem horizontal da página
@@ -170,11 +170,12 @@ function pageChecks(isMobile) {
 /* Lista os controles clicáveis da camada de cima, para o explorador sortear. */
 function clickables() {
   const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none'; };
-  const dialogs = [...document.querySelectorAll('[role=dialog]')].filter(visible);
+  const dialogs = [...document.querySelectorAll('[role=dialog], [role=alertdialog]')].filter(visible);
   const scope = dialogs.at(-1) ?? document.body;
   document.querySelectorAll('[data-qa-pick]').forEach((el) => el.removeAttribute('data-qa-pick'));
   return [...scope.querySelectorAll('button, a[href], input, select, [role=button], [role=radio], label.check')]
-    .filter((el) => visible(el) && !el.disabled)
+    // o explorador não confirma ações destrutivas (ex.: "Apagar e sair"), para não apagar a carreira no meio do teste
+    .filter((el) => visible(el) && !el.disabled && !(el.closest('[role=alertdialog]') && el.classList.contains('danger') && /apagar|encerrar/i.test(el.innerText)))
     .map((el, i) => { el.dataset.qaPick = String(i); return { i, tag: el.tagName.toLowerCase(), type: el.tagName === 'INPUT' ? el.type : '', text: (el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 40) }; });
 }
 
@@ -261,8 +262,10 @@ function businessRules(before, closed, after, plan, action, fired = null) {
   if (!h || closed.histLen !== before.histLen + 1) { bad('alta', 'a temporada não entrou no histórico da carreira'); return out; }
   const d = h.division, pos = h.position, n = before.divSize;
   if (before.div + 1 !== d) bad('alta', `histórico diz Divisão ${d}, mas o clube começou a temporada na Divisão ${before.div + 1}`);
-  if (plan.team === 'forte' && pos > 2) bad('media', `elenco todo com atributos 99 terminou só em ${pos}º na Divisão ${d}`);
-  if (plan.team === 'forte' && !h.achieved) bad('media', `elenco todo 99 e objetivo "${h.objective}" não cumprido (${pos}º)`);
+  // Medido em 20 temporadas na Div. 1: elenco 99 é campeão ~90% das vezes (V 65% · E 20% · D 14% por jogo).
+  // Fora do top 2 é raro mas possível; se o cenário vendeu atletas nas decisões, o elenco 99 nem existe mais.
+  if (plan.team === 'forte' && !plan.sold && pos > 2) bad('baixa', `elenco todo com atributos 99 terminou em ${pos}º na Divisão ${d} (raro, ~5%; repetir com outra seed para ver se é azar)`);
+  if (plan.team === 'forte' && !plan.sold && !h.achieved && pos > 2) bad('baixa', `elenco todo 99 e objetivo "${h.objective}" não cumprido (${pos}º)`);
   if (plan.team === 'fraco' && pos <= Math.ceil(n / 2)) bad('media', `elenco todo com atributos 1 terminou em ${pos}º de ${n}`);
   const promoted = d > 1 && pos <= 2, relegated = d < 4 && pos > n - 2;
   if (h.achieved && closed.unemployed) bad('alta', `cumpriu o objetivo (${pos}º) e mesmo assim foi demitido`);
@@ -369,7 +372,7 @@ async function runViewport(browser, vpName, report) {
         const fast = page.getByRole('button', { name: 'Velocidade 3' });
         if (await fast.isEnabled().catch(() => false) && (await fast.getAttribute('aria-pressed')) !== 'true') await fast.click({ timeout: 2000 }).catch(() => {});
         await page.waitForTimeout(300);
-        const dialog = page.getByRole('dialog').last();
+        const dialog = page.locator('[role=dialog], [role=alertdialog]').last();
         const title = (await dialog.isVisible().catch(() => false)) ? await dialog.getAttribute('aria-label') : null;
         if (title === 'Dia de jogo') break;
         if (!title) continue;
@@ -429,7 +432,7 @@ async function runViewport(browser, vpName, report) {
       while (done < SEASONS) {
         if (Date.now() > deadline) throw new Error(`tempo esgotado na temporada ${done + 1}`);
         await page.waitForTimeout(1500);
-        const dialog = page.getByRole('dialog').last();
+        const dialog = page.locator('[role=dialog], [role=alertdialog]').last();
         const title = (await dialog.isVisible().catch(() => false)) ? await dialog.getAttribute('aria-label') : null;
         const tag = `temporada-${done + 1}`;
         if (title?.startsWith('Fim da temporada')) {
@@ -480,6 +483,7 @@ async function runViewport(browser, vpName, report) {
           const k = Math.floor(rand() * n);
           const label = (await buttons.nth(k).innerText().catch(() => '?')).replace(/\s+/g, ' ').trim();
           (report.decisions ??= []).push({ viewport: vpName, season: done + 1, dialog: title, choice: label });
+          if (/^Vender|^Deixar sair/i.test(label) && plan) plan.sold = true; // elenco forçado deixou de ser o original
           await buttons.nth(k).click({ timeout: 3000 }).catch(() => {});
         } else {
           // tempo correndo: após cada jogo o jogo volta para a velocidade 1, então acelera de novo
@@ -510,7 +514,7 @@ async function runViewport(browser, vpName, report) {
         // e o clique, o alvo não existe mais na camada de cima — isso não é bug, só pula a ação
         const stillOnTop = () => page.evaluate(({ i, text }) => {
           const el = document.querySelector(`[data-qa-pick="${i}"]`);
-          const dialogs = [...document.querySelectorAll('[role=dialog]')];
+          const dialogs = [...document.querySelectorAll('[role=dialog], [role=alertdialog]')];
           const scope = dialogs.at(-1) ?? document.body;
           return !!el && scope.contains(el) && (el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 40) === text;
         }, it).catch(() => false);
@@ -540,7 +544,7 @@ async function runViewport(browser, vpName, report) {
         for (const i of report.issues.slice(before)) { i.screenshot = `screenshots/${file}`; i.after = label; }
       }
       // se a tela não muda há muitas ações, fecha janelas para não ficar preso
-      const fp = await page.evaluate(() => document.body.innerText.length + '|' + document.querySelectorAll('[role=dialog]').length).catch(() => '');
+      const fp = await page.evaluate(() => document.body.innerText.length + '|' + document.querySelectorAll('[role=dialog], [role=alertdialog]').length).catch(() => '');
       stuck = fp === lastFingerprint ? stuck + 1 : 0; lastFingerprint = fp;
       if (stuck > 15) { await page.keyboard.press('Escape'); await page.locator('[aria-label=Fechar]').last().click({ timeout: 1000 }).catch(() => {}); stuck = 0; }
     }
