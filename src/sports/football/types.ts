@@ -83,6 +83,20 @@ export interface Club {
   titles: { year: number; competition: string }[];
   /** Escalação escolhida pelo jogador (ids). Ausente = auxiliar escala automaticamente. */
   lineup?: { xi: string[]; bench: string[] };
+  /** Obras em andamento (ausente em saves antigos). */
+  works?: Work[];
+}
+
+/** Obra de estrutura: paga na hora, fica pronta em `doneOn`. */
+export interface Work {
+  kind: 'stadium' | 'ct';
+  startedOn: string;
+  doneOn: string;
+  cost: number;
+  /** Estádio: lugares a mais. */
+  seats?: number;
+  /** CT: nível que o centro atinge. */
+  level?: number;
 }
 
 export type Side = 'home' | 'away';

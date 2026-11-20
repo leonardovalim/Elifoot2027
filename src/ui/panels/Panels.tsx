@@ -19,6 +19,10 @@ import {
   sellPlayer,
   type Career,
   type Listing,
+  ctQuote,
+  stadiumQuote,
+  stadiumUse,
+  startWork,
 } from '../../game/career';
 import { ATTR_SHORT } from '../../sports/football/development';
 import { football } from '../../sports/football/engine';
@@ -30,7 +34,7 @@ import { track } from '../analytics';
 import { Morale } from './Decisions';
 import { askConfirm } from '../confirm';
 import { Tag, TemperamentTag } from '../help';
-import { Bar, ClubName, POS_LABEL, STYLE_LABEL, money, moneyShort } from '../util';
+import { Bar, ClubName, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
 
@@ -459,6 +463,7 @@ export function TablePanel({ career }: { career: Career }) {
         </table>
       </div>
       <p className="hint"><span className="legend up" /> acesso · <span className="legend down" /> rebaixamento</p>
+      <Scorers career={career} division={d} />
       {career.awards.length > 0 && (
         <>
           <h4>Galeria de campeões</h4>
@@ -480,7 +485,7 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
   const wages = club.players.reduce((a, p) => a + p.wage, 0);
   const l = career.ledger;
   const income = l.gate + l.tv + (l.sponsor ?? 0) + l.prizes + l.sales + (l.loanIn ?? 0);
-  const expense = l.wages + l.purchases + l.management + (l.loanPaid ?? 0);
+  const expense = l.wages + l.purchases + l.management + (l.loanPaid ?? 0) + (l.works ?? 0);
   const state = financialState(club);
   const f = monthlyForecast(career);
   return (
@@ -493,6 +498,7 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
           <dt>Folha mensal</dt><dd>{money(wages)}</dd>
           <dt>Torcida</dt><dd>{club.fans.toLocaleString('pt-BR')}</dd>
           <dt>Estádio</dt><dd>{club.stadium.toLocaleString('pt-BR')} lugares</dd>
+          <dt>Público típico</dt><dd><Occupancy club={club} /></dd>
           <dt>Ingresso</dt>
           <dd className="row">
             <button className="btn sm" onClick={() => act((c) => { const x = c.clubs[myClubId(c)]!; x.ticketPrice = Math.max(1, x.ticketPrice - 1); })}>−</button>
@@ -514,6 +520,7 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
         {(career.monthsInRed ?? 0) > 0 && (
           <p className="red-alert">⚠ {career.monthsInRed} {career.monthsInRed === 1 ? 'mês' : 'meses seguidos'} no vermelho. Se a temporada terminar com o caixa negativo, a diretoria demite você.</p>
         )}
+        <WorksBox career={career} act={act} />
         <LoanBox career={career} act={act} />
       </section>
       <section>
@@ -527,6 +534,7 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
             <tr><td>Venda de atletas</td><td className="pos-n">{money(l.sales)}</td></tr>
             <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
             <tr><td>Contratações</td><td className="neg">{money(-l.purchases)}</td></tr>
+            {(l.works ?? 0) > 0 && <tr><td>Obras</td><td className="neg">{money(-(l.works ?? 0))}</td></tr>}
             <tr><td>Gestão (seu salário)</td><td className="neg">{money(-l.management)}</td></tr>
             {(l.loanIn ?? 0) > 0 && <tr><td>Empréstimo recebido</td><td className="pos-n">{money(l.loanIn ?? 0)}</td></tr>}
             {(l.loanPaid ?? 0) > 0 && <tr><td>Parcelas do empréstimo</td><td className="neg">{money(-(l.loanPaid ?? 0))}</td></tr>}
@@ -535,6 +543,93 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
         </table>
       </section>
     </div>
+  );
+}
+
+function Occupancy({ club }: { club: Club }) {
+  const { crowd, occupancy } = stadiumUse(club);
+  const pct = Math.round(occupancy * 100);
+  return (
+    <span className={`occupancy ${pct >= 100 ? 'full' : pct >= 85 ? 'near' : ''}`}>
+      {crowd.toLocaleString('pt-BR')} · {pct >= 100 ? 'lotado' : `${pct}% de ocupação`}
+    </span>
+  );
+}
+
+const daysLeft = (from: string, to: string) => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 86400000));
+
+/** Obras de estrutura: ampliar o estádio e melhorar o CT. */
+function WorksBox({ career, act }: { career: Career; act: Act }) {
+  const club = career.clubs[myClubId(career)]!;
+  const sq = stadiumQuote(club);
+  const cq = ctQuote(club);
+  const { occupancy } = stadiumUse(club);
+  const ask = (kind: 'stadium' | 'ct') => {
+    const stadium = kind === 'stadium';
+    const cost = stadium ? sq.cost : cq!.cost;
+    void askConfirm({
+      title: stadium ? 'Ampliar estádio' : 'Melhorar CT',
+      body: stadium
+        ? <><p>Construir <b>{sq.seats.toLocaleString('pt-BR')} lugares</b> por <b>{money(sq.cost)}</b>. Fica pronto em {sq.days} dias.</p><p className="hint">Só rende quando a torcida enche o estádio: hoje a ocupação típica é {Math.round(occupancy * 100)}%. Vitórias, títulos e acesso aumentam a torcida.</p></>
+        : <><p>Levar o CT ao <b>nível {cq!.level}</b> por <b>{money(cq!.cost)}</b>. Fica pronto em {cq!.days} dias.</p><p className="hint">CT melhor acelera a evolução nos treinos e faz subir juniores mais fortes.</p></>,
+      confirmLabel: `Pagar ${moneyShort(cost)}`,
+    }).then((ok) => { if (ok) { act((c) => startWork(c, kind)); track('work_started', { kind, cost }); } });
+  };
+  return (
+    <div className="works-box">
+      <h4>Estrutura</h4>
+      <div className="work-row">
+        <div>
+          <b>Estádio</b> <span className="hint">{club.stadium.toLocaleString('pt-BR')} lugares</span>
+          {sq.busy
+            ? <p className="hint">🏗 +{(sq.busy.seats ?? 0).toLocaleString('pt-BR')} lugares em obra · faltam {daysLeft(career.date, sq.busy.doneOn)} dias</p>
+            : <p className="hint">+{sq.seats.toLocaleString('pt-BR')} lugares · {money(sq.cost)} · {sq.days} dias</p>}
+        </div>
+        {!sq.busy && <button className="btn sm" disabled={club.budget < sq.cost} onClick={() => ask('stadium')}>Ampliar</button>}
+      </div>
+      <div className="work-row">
+        <div>
+          <b>Centro de treinamento</b> <Stars n={club.trainingCenter} />
+          {cq?.busy
+            ? <p className="hint">🏗 nível {cq.busy.level} em obra · faltam {daysLeft(career.date, cq.busy.doneOn)} dias</p>
+            : cq
+              ? <p className="hint">nível {cq.level} · {money(cq.cost)} · {cq.days} dias</p>
+              : <p className="hint">Nível máximo.</p>}
+        </div>
+        {cq && !cq.busy && <button className="btn sm" disabled={club.budget < cq.cost} onClick={() => ask('ct')}>Melhorar</button>}
+      </div>
+    </div>
+  );
+}
+
+/** Artilharia da temporada em andamento na divisão escolhida. */
+function Scorers({ career, division }: { career: Career; division: number }) {
+  const me = myClubId(career);
+  const list = career.season.divisions[division]!.teamIds
+    .flatMap((id) => career.clubs[id]!.players.map((p) => ({ p, club: career.clubs[id]! })))
+    .filter((x) => x.p.stats.goals > 0)
+    .sort((a, b) => b.p.stats.goals - a.p.stats.goals || a.p.stats.apps - b.p.stats.apps)
+    .slice(0, 10);
+  return (
+    <>
+      <h4>Artilharia · Divisão {division + 1}</h4>
+      {list.length === 0
+        ? <p className="hint">Ninguém marcou ainda nesta temporada.</p>
+        : (
+          <table className="grid-table compact scorers">
+            <tbody>
+              {list.map(({ p, club }, i) => (
+                <tr key={p.id} className={club.id === me ? 'me' : ''}>
+                  <td>{i + 1}</td>
+                  <td className="name">{p.name}</td>
+                  <td className="hint">{club.name}</td>
+                  <td><b>{p.stats.goals}</b> <span className="hint">em {p.stats.apps} j</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+    </>
   );
 }
 
