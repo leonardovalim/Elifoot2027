@@ -700,7 +700,7 @@ export function marketListings(c: Career, limit = 50): Listing[] {
   const me = myClubId(c);
   for (const club of Object.values(c.clubs)) {
     if (club.id === me) continue;
-    for (const p of club.players) all.push({ player: p, clubId: club.id, price: askingPrice(p) });
+    for (const p of club.players) if (!p.clubLocked) all.push({ player: p, clubId: club.id, price: askingPrice(p) });
   }
   return rng.shuffle(all).slice(0, limit).sort((a, b) => overall(b.player) - overall(a.player));
 }
@@ -710,6 +710,7 @@ export function buyPlayer(c: Career, playerId: string, fromClubId: string): stri
   const seller = c.clubs[fromClubId];
   const p = seller?.players.find((x) => x.id === playerId);
   if (!seller || !p) return 'Atleta indisponível.';
+  if (p.clubLocked) return `${p.name} não sai do ${seller.name} por dinheiro nenhum.`;
   if (me.players.length >= 28) return 'Elenco cheio (máx. 28).';
   if (seller.players.filter((x) => x.position === p.position).length <= (p.position === 'GK' ? 1 : 3))
     return `${seller.name} não libera: está sem reposição nessa posição.`;
@@ -738,6 +739,7 @@ export function sellPlayer(c: Career, playerId: string): string | null {
   const me = c.clubs[myClubId(c)]!;
   const p = me.players.find((x) => x.id === playerId);
   if (!p) return 'Atleta não encontrado.';
+  if (p.clubLocked) return `${p.name} é ídolo do ${me.name} e não pode ser vendido.`;
   if (me.players.length <= 16) return 'Elenco mínimo é 16.';
   if (p.position === 'GK' && me.players.filter((x) => x.position === 'GK').length <= 1) return 'Você precisa de um goleiro.';
   const price = Math.round(playerValue(p) * 0.85 / 1000) * 1000;

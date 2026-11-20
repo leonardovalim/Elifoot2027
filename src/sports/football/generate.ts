@@ -69,7 +69,9 @@ export function playerValue(p: Player): number {
   const best = positionRating(p);
   const ageMult = p.age <= 23 ? 1.4 : p.age <= 28 ? 1.15 : p.age <= 31 ? 0.85 : 0.5;
   const potBonus = p.age <= 23 ? 1 + Math.max(0, p.potential - best) / 60 : 1;
-  return Math.round((best ** 3 * 4 * ageMult * potBonus) / 1000) * 1000;
+  // ídolo do clube: vale muito mais que qualquer outro (é o mais caro do jogo)
+  const idol = p.clubLocked ? 2.5 : 1;
+  return Math.round((best ** 3 * 4 * ageMult * potBonus * idol) / 1000) * 1000;
 }
 
 /** Salário mensal. */
@@ -109,18 +111,67 @@ export const DIVISIONS = 4;
 export const PER_DIVISION = 12;
 export const divisionLevel = (d: number) => 72 - d * 9;
 
+/** Clube fixo de toda carreira: o mais forte da 1ª divisão, escudo laranja. */
+export const NOVA_IGUACU_ID = 'c-nova-iguacu';
+/** O craque do jogo: o melhor e mais caro, e só joga no Nova Iguaçu. */
+export const ANDRE_ELIAS_ID = 'p-andre-elias';
+
+function andreElias(rng: Rng, contractYear: number): Player {
+  const p = generatePlayer(rng, 'FW', 90, 26, contractYear);
+  p.id = ANDRE_ELIAS_ID;
+  p.name = 'André Elias';
+  p.attrs = {
+    pace: 98, strength: 94, stamina: 94, passing: 92, finishing: 99, firstTouch: 99,
+    tackling: 48, decisions: 98, positioning: 98, concentration: 95, goalkeeping: 9,
+  };
+  p.aggression = 40;
+  p.potential = 99;
+  p.condition = 100;
+  p.contractUntil = contractYear + 4;
+  p.clubLocked = true;
+  p.wage = wageFor(p);
+  return p;
+}
+
+function novaIguacu(rng: Rng): Club {
+  // laranja forte no escudo; laranja claro no símbolo e na sigla
+  const club = generateClub(rng, 'Nova Iguaçu', divisionLevel(0) + 12, ['#e5762a', '#ffb04d']);
+  club.id = NOVA_IGUACU_ID;
+  club.name = 'Nova Iguaçu';
+  club.short = 'NIG';
+  club.stadiumName = 'Estádio de Nova Iguaçu';
+  club.reputation = 95;
+  club.fans = Math.round(club.fans * 1.3);
+  // o craque entra no lugar do último atacante gerado
+  const lastFw = club.players.map((p) => p.position).lastIndexOf('FW');
+  club.players[lastFw] = andreElias(rng, 2027);
+  return club;
+}
+
 export function generateWorld(rng: Rng): Club[][] {
   const names = rng.shuffle(CITIES).slice(0, DIVISIONS * PER_DIVISION);
   const result: Club[][] = [];
   for (let d = 0; d < DIVISIONS; d++) {
     const clubs: Club[] = [];
     for (let i = 0; i < PER_DIVISION; i++) {
+      if (d === 0 && i === 0) { clubs.push(novaIguacu(rng)); continue; }
       const level = divisionLevel(d) + rng.gaussian() * 3;
       clubs.push(generateClub(rng, names[d * PER_DIVISION + i]!, level, rng.pick(COLORS)));
     }
     result.push(clubs);
   }
+  // ninguém começa perto do André Elias: o teto dos outros é 95 de habilidade
+  for (const p of result.flat().flatMap((c) => c.players)) {
+    if (p.clubLocked) continue;
+    const excess = positionRating(p) - STAR_CAP;
+    if (excess <= 0) continue;
+    for (const k of Object.keys(WEIGHTS[p.position]) as AttrKey[]) p.attrs[k] = clamp(p.attrs[k] - excess - 1);
+    p.potential = Math.min(p.potential, STAR_CAP);
+    p.wage = wageFor(p);
+  }
   return result;
 }
+
+const STAR_CAP = 95;
 
 export const FIRST_NAMES = FIRST;

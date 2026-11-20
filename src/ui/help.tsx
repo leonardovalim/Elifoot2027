@@ -10,7 +10,7 @@ import { Modal } from './util';
  * O `<HelpHost />` fica uma vez na raiz do app, como o `<ConfirmHost />`.
  */
 export type HelpTopic = 'jogo' | 'tempo' | 'partida' | 'elenco' | 'mercado' | 'financas' | 'temporada' | 'selos';
-export type TagKind = 'novo' | 'susp' | 'posicao' | 'joia' | 'fim-contrato' | 'sai' | 'titular' | 'racudo' | 'fairplay';
+export type TagKind = 'novo' | 'susp' | 'posicao' | 'joia' | 'fim-contrato' | 'sai' | 'titular' | 'racudo' | 'fairplay' | 'idolo';
 
 type Request = { topic: HelpTopic; tag?: TagKind };
 let show: ((r: Request) => void) | null = null;
@@ -33,7 +33,7 @@ const TOPICS: { id: HelpTopic; label: string }[] = [
 
 /** Classe visual de cada selo (a mesma usada nas tabelas). */
 const TAG_CLASS: Record<TagKind, string> = {
-  novo: 'new', susp: 'bad', posicao: 'warn', joia: 'good', 'fim-contrato': 'warn', sai: 'bad', titular: 'good', racudo: 'racudo', fairplay: 'fairplay',
+  novo: 'new', susp: 'bad', posicao: 'warn', joia: 'good', 'fim-contrato': 'warn', sai: 'bad', titular: 'good', racudo: 'racudo', fairplay: 'fairplay', idolo: 'idol',
 };
 
 /** Selo de atleta que explica a si mesmo: tocar abre a ajuda no verbete dele. */
@@ -67,6 +67,7 @@ const T = ({ kind, children }: { kind: TagKind; children: ReactNode }) => <span 
 const SELOS: { kind: TagKind; tag: ReactNode; text: ReactNode }[] = [
   { kind: 'racudo', tag: <T kind="racudo">raçudo</T>, text: <>Chega junto. <b>Desarma mais</b> (deixa a defesa mais forte), mas <b>comete mais faltas e leva mais cartões</b>, e expulsão dá suspensão no jogo seguinte. Um time com muitos raçudos faz quase o dobro de faltas de um time fair play.</> },
   { kind: 'fairplay', tag: <T kind="fairplay">fair play</T>, text: <>Joga limpo. <b>Raramente leva cartão</b> e quase nunca é expulso, mas <b>desarma um pouco menos</b>. Bom para quem não quer perder titulares por suspensão.</> },
+  { kind: 'idolo', tag: <T kind="idolo">ídolo</T>, text: <>O <b>ídolo do clube</b>: o melhor e mais caro atleta do jogo, preso ao clube. Não vai ao mercado, não recebe propostas, não é vendido e não se aposenta.</> },
   { kind: 'joia', tag: <T kind="joia">joia</T>, text: <>Jovem (até 21 anos) com <b>potencial pelo menos 8 pontos acima</b> da habilidade atual. Evolui com treino e jogos; vale dar minutos e segurar quando chegar proposta.</> },
   { kind: 'novo', tag: <T kind="novo">novo</T>, text: <>Contratado há menos de 30 dias.</> },
   { kind: 'fim-contrato', tag: <T kind="fim-contrato">fim contr.</T>, text: <>O contrato <b>termina no fim desta temporada</b>. A partir de agosto ele pede renovação, com um salário que sobe se estiver insatisfeito: você renova ou deixa sair.</> },

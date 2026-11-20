@@ -560,3 +560,71 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .help-tags dt .tag { margin-left: 0; }
 .help-tags dd { margin: 0; }
 @media (max-width: 560px) { .help-tags > div { grid-template-columns: 74px 1fr; gap: 8px; } }
+
+/* ---------- mercado: altura e lista no celular ---------- */
+/* Desktop: a janela cabe na tela; a lista e a ficha rolam por dentro, sem rolagem fora. */
+@media (min-width: 901px) {
+  .overlay .window.menu-mercado { display: flex; flex-direction: column; max-height: calc((100dvh - 48px) / var(--z, 1) - 2 * var(--px)); }
+  .menu-mercado > .window-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .menu-mercado .market { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .menu-mercado .market-split { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .menu-mercado .market-split .scroll.tall { max-height: none; min-height: 0; overflow: auto; }
+  .menu-mercado .market-split .card { max-height: 100%; overflow-y: auto; }
+}
+/* Celular: cada atleta em duas linhas, sem rolagem lateral; a ficha abre embaixo dele. */
+.market-list { list-style: none; margin: 0; padding: 0; }
+.market-list > li { border-bottom: 2px dotted var(--paper-2); }
+.market-list > li.open { background: var(--paper-3); box-shadow: 0 0 0 2px var(--ink); margin: 6px 0; scroll-margin-top: 8px; }
+.market-list > li.empty-row { padding: 18px 8px; text-align: center; border: 0; }
+.mrow {
+  appearance: none; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  width: 100%; min-height: 52px; padding: 6px 4px;
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 36px 62px; gap: 8px; align-items: center;
+}
+.mrow:focus-visible { outline: 2px dashed var(--tomato); outline-offset: -2px; }
+.market-list > li.open .mrow { background: rgba(228, 86, 60, 0.2); }
+.mrow-main { display: flex; flex-direction: column; min-width: 0; }
+.mrow-name, .mrow-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow-name { font-weight: 700; font-size: 15px; }
+.mrow-name .tag { margin-left: 4px; }
+.mrow-sub { font-size: 12px; color: var(--muted); }
+.mrow-num { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.mrow-num b { font-size: 16px; }
+.mrow-num > span { font-size: 12px; }
+.mrow-detail { padding: 4px 10px 12px; }
+.market-bought { margin-bottom: 8px; }
+@media (max-width: 560px) {
+  .market-filters label { flex: 1 1 calc(50% - 7px); min-width: 0; flex-direction: column; align-items: stretch; gap: 2px; font-size: 12px; }
+  .market-filters select { width: 100%; min-width: 0; }
+}
+
+/* ---------- som ---------- */
+.speed .sound-toggle { margin-left: 6px; box-shadow: -2px 0 0 0 var(--paper-2); }
+.controls .sound-toggle { min-width: 40px; }
+
+/* ---------- jogos da rodada (placar ao vivo) ---------- */
+.round-board { margin-top: 14px; padding-top: 10px; border-top: 2px solid var(--ink); }
+.post .round-board, .two-col .round-board { margin-top: 12px; }
+.rb-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 6px; }
+.rb-head h4 { margin: 0; }
+.rb-div h5 { margin: 8px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.rb-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 18px; }
+.two-col .rb-list { grid-template-columns: minmax(0, 1fr); }
+.rb-row { display: grid; grid-template-columns: minmax(0, 1fr) 54px minmax(0, 1fr); gap: 6px; align-items: center; padding: 3px 4px; border-bottom: 2px dotted var(--paper-2); font-size: 14px; }
+.rb-row.me { background: rgba(242, 182, 50, 0.32); font-weight: 700; }
+.rb-team { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-team.home { text-align: right; }
+.rb-score { text-align: center; font-variant-numeric: tabular-nums; }
+.rb-row.fresh .rb-score { background: var(--mustard); color: var(--ink); animation: rb-blink .5s steps(2) 4; }
+.rb-team.scored { font-weight: 800; }
+@keyframes rb-blink { 50% { background: var(--tomato); color: var(--paper); } }
+@media (prefers-reduced-motion: reduce) { .rb-row.fresh .rb-score { animation: none; } }
+.sound-toggle { display: inline-flex; align-items: center; justify-content: center; }
+.live-main { min-width: 0; }
+.live-main .round-board { margin-top: 10px; }
+/* a narração cede espaço para o placar da rodada caber na tela */
+@media (min-width: 901px) { .match-window .match .live-main .feed { height: max(260px, calc(100vh / var(--z) - 560px)); } }
+
+/* ---------- ídolo preso ao clube (André Elias) ---------- */
+.tag.idol { background: #e5762a; color: var(--ink); font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+.idol-note { margin: 8px 0 0; font-weight: 700; }

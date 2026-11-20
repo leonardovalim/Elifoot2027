@@ -4,6 +4,8 @@
  * Reputação alta ganha borda dupla e faixa com o ano de fundação.
  */
 
+import { NOVA_IGUACU_ID } from '../sports/football/generate';
+
 export const CREST_SHAPES = ['classico', 'redondo', 'triangulo', 'flamula', 'hexagono', 'chanfrado'] as const;
 export const CREST_PATTERNS = ['liso', 'listras', 'diagonal', 'metades', 'xadrez', 'cruz'] as const;
 export const CREST_SYMBOLS = ['estrela', 'bola', 'coroa', 'castelo', 'fera', 'aguia'] as const;
@@ -59,8 +61,24 @@ export function hashId(s: string) {
   return h >>> 0;
 }
 
+/** Escudos fixos (não sorteados): Nova Iguaçu é laranja liso com estrela laranja. */
+const FIXED: Record<string, Pick<CrestSpec, 'shape' | 'pattern' | 'symbol' | 'flip'>> = {
+  [NOVA_IGUACU_ID]: { shape: 'classico', pattern: 'liso', symbol: 'estrela', flip: false },
+};
+
 export function crestSpec(club: CrestClub): CrestSpec {
   const h = hashId(club.id);
+  const fixed = FIXED[club.id];
+  if (fixed) {
+    return {
+      ...fixed,
+      elite: club.reputation >= ELITE_REPUTATION,
+      primary: club.colors[0],
+      secondary: club.colors[1],
+      short: normalizeShort(club.short),
+      founded: club.founded,
+    };
+  }
   return {
     shape: CREST_SHAPES[h % CREST_SHAPES.length]!,
     pattern: CREST_PATTERNS[(h >>> 5) % CREST_PATTERNS.length]!,
