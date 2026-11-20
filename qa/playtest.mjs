@@ -79,7 +79,10 @@ function pageChecks(isMobile) {
     const txt = (el.innerText || el.getAttribute('aria-label') || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 40);
     return `<${el.tagName.toLowerCase()}${cls}>${txt ? ` "${txt}"` : ''}`;
   };
+  // conteúdo de <details> fechado não está na tela (o Chrome ainda informa posição para ele)
+  const inClosedDetails = (el) => { const d = el.closest('details:not([open])'); return !!d && !el.closest('summary'); };
   const visible = (el) => {
+    if (inClosedDetails(el)) return false;
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return false;
     const s = getComputedStyle(el);
@@ -184,7 +187,7 @@ function pageChecks(isMobile) {
 
 /* Lista os controles clicáveis da camada de cima, para o explorador sortear. */
 function clickables() {
-  const visible = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none'; };
+  const visible = (el) => { if (el.closest('details:not([open])') && !el.closest('summary')) return false; const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 1 && r.height > 1 && s.visibility !== 'hidden' && s.display !== 'none'; };
   const dialogs = [...document.querySelectorAll('[role=dialog], [role=alertdialog]')].filter(visible);
   const scope = dialogs.at(-1) ?? document.body;
   document.querySelectorAll('[data-qa-pick]').forEach((el) => el.removeAttribute('data-qa-pick'));
@@ -384,6 +387,14 @@ async function runViewport(browser, vpName, report) {
         await click(page.locator('.dock').getByRole('button', { name: m }));
         await page.getByRole('dialog', { name: m }).waitFor({ timeout: 3000 });
         await check(`menu-${m.toLowerCase()}`);
+        if (m === 'Elenco' && (await page.locator('.squad-list .mrow').count())) {
+          // celular: o atleta abre embaixo do cartão, com os atributos recolhidos
+          await click(page.locator('.squad-list .mrow').nth(2));
+          await page.waitForTimeout(400);
+          await click(page.locator('.attr-details > summary'));
+          await check('menu-elenco-atleta-aberto');
+          await click(page.locator('.squad-list li.open .mrow'));
+        }
         if (m === 'Elenco') {
           // tocar num selo abre a ajuda direto na explicação dele
           const tag = page.getByRole('dialog', { name: m }).locator('.tag-help').first();

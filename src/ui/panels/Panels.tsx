@@ -34,6 +34,7 @@ import { track } from '../analytics';
 import { Morale } from './Decisions';
 import { askConfirm } from '../confirm';
 import { Tag, TemperamentTag } from '../help';
+import { temperament } from '../../sports/football/temperament';
 import { AchievementsSection } from '../achievements';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
 
@@ -72,6 +73,7 @@ function useMedia(query: string) {
 }
 
 const STATUS_LABEL: Record<SquadStatus, string> = { xi: 'Titular', bench: 'Banco', out: 'Fora' };
+const ST_SHORT: Record<SquadStatus, string> = { xi: 'TIT', bench: 'RES', out: '–' };
 
 export function SquadPanel({ career, act }: { career: Career; act: Act }) {
   const club = career.clubs[myClubId(career)]!;
@@ -87,6 +89,34 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
   const selected = club.players.find((p) => p.id === sel);
   const cardRef = useRevealOnMobile(sel);
   const move = (id: string, to: SquadStatus) => act((c) => { applyMove(c.clubs[myClubId(c)]!, id, to); track('lineup_changed', { to }); });
+  // celular: lista em cartões (sem rolagem lateral); ações e ficha abrem embaixo do atleta
+  const narrow = useMedia('(max-width: 760px)');
+  const openRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (narrow && sel) openRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [narrow, sel]);
+  const squadTags = (p: Player, playsAt?: Player['position']) => [
+    p.clubLocked && <Tag key="idolo" kind="idolo">ídolo</Tag>,
+    isNewSigning(p, career.date) && <Tag key="novo" kind="novo">novo</Tag>,
+    p.suspended > 0 && <Tag key="susp" kind="susp">susp.</Tag>,
+    playsAt && playsAt !== p.position && <Tag key="pos" kind="posicao">de {POS_LABEL[playsAt]}</Tag>,
+    isProspect(p) && <Tag key="joia" kind="joia">joia</Tag>,
+    temperament(p) && <TemperamentTag key="temp" p={p} />,
+    p.leaving ? <Tag key="sai" kind="sai">sai</Tag> : expiresThisSeason(p, career.season.year) && <Tag key="fim" kind="fim-contrato" title="Contrato termina no fim da temporada">fim contr.</Tag>,
+  ].filter(Boolean);
+  const detail = (p: Player) => (
+    <>
+      <LineupActions club={club} p={p} current={status[p.id]!} onMove={move} />
+      <PlayerCard p={p} year={career.season.year} isNew={isNewSigning(p, career.date)} compact={narrow} onSell={() => {
+        void askConfirm({
+          title: 'Vender atleta',
+          body: <><p>Vender <b>{p.name}</b> por cerca de <b>{money(Math.round(playerValue(p) * 0.85))}</b>?</p><p className="hint">O clube que pagar mais leva na hora. Para negociar com calma, espere uma proposta chegar.</p></>,
+          confirmLabel: 'Vender',
+          danger: true,
+        }).then((ok) => { if (ok) { act((c) => sellPlayer(c, p.id)); setSel(null); } });
+      }} />
+    </>
+  );
 
   return (
     <div className="squad">
@@ -111,6 +141,30 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
           ? <><span>Escalação <b>sua</b> · suspensos e negociados são repostos pelo banco.</span><button className="btn sm ghost" onClick={() => act((c) => { delete c.clubs[myClubId(c)]!.lineup; })}>Auxiliar escala</button></>
           : <span>Escalação do <b>auxiliar</b> (melhores em forma). Mude qualquer atleta para assumir.</span>}
       </div>
+      {narrow ? (
+        <ul className="market-list squad-list">
+          {players.map((p) => {
+            const st = status[p.id]!;
+            const open = sel === p.id;
+            const tags = squadTags(p, slot.get(p.id));
+            return (
+              <li key={p.id} className={`${open ? 'open' : ''} ${st}`} ref={open ? openRef : undefined}>
+                <button className="mrow srow" aria-expanded={open} onClick={() => setSel(open ? null : p.id)}>
+                  <span className={`st ${st}`}>{ST_SHORT[st]}</span>
+                  <span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span>
+                  <span className="mrow-main">
+                    <span className="mrow-name">{p.name}</span>
+                    <span className="mrow-sub">{p.age} anos · cond. {Math.round(p.condition)}% · {p.stats.apps} jg{p.stats.goals ? ` · ${p.stats.goals} gol${p.stats.goals > 1 ? 's' : ''}` : ''}</span>
+                    {tags.length > 0 && <span className="mrow-tags">{tags}</span>}
+                  </span>
+                  <span className="mrow-num"><b>{overall(p)}</b><Morale p={p} compact /></span>
+                </button>
+                {open && <div className="mrow-detail">{detail(p)}</div>}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
       <div className="split">
         <div className="scroll">
           <table className="grid-table">
@@ -118,20 +172,13 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
             <tbody>
               {players.map((p) => {
                 const st = status[p.id]!;
-                const playsAt = slot.get(p.id);
                 return (
                   <tr key={p.id} className={`${sel === p.id ? 'sel' : ''} ${st}`} onClick={() => setSel(p.id)}>
-                    <td><span className={`st ${st}`}>{st === 'xi' ? 'TIT' : st === 'bench' ? 'RES' : '–'}</span></td>
+                    <td><span className={`st ${st}`}>{ST_SHORT[st]}</span></td>
                     <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
                     <td className="name">
                       <span className="nm">{p.name}</span>
-                      {p.clubLocked && <Tag kind="idolo">ídolo</Tag>}
-                      {isNewSigning(p, career.date) && <Tag kind="novo">novo</Tag>}
-                      {p.suspended > 0 && <Tag kind="susp">susp.</Tag>}
-                      {playsAt && playsAt !== p.position && <Tag kind="posicao">de {POS_LABEL[playsAt]}</Tag>}
-                      {isProspect(p) && <Tag kind="joia">joia</Tag>}
-                      <TemperamentTag p={p} />
-                      {p.leaving ? <Tag kind="sai">sai</Tag> : expiresThisSeason(p, career.season.year) && <Tag kind="fim-contrato" title="Contrato termina no fim da temporada">fim contr.</Tag>}
+                      {squadTags(p, slot.get(p.id))}
                     </td>
                     <td>{p.age}</td>
                     <td><b>{overall(p)}</b></td>
@@ -147,22 +194,10 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
           </table>
         </div>
         <aside className="card" ref={cardRef}>
-          {selected ? (
-            <>
-              <LineupActions club={club} p={selected} current={status[selected.id]!} onMove={move} />
-              <PlayerCard p={selected} year={career.season.year} isNew={isNewSigning(selected, career.date)} onSell={() => {
-                const p = selected;
-                void askConfirm({
-                  title: 'Vender atleta',
-                  body: <><p>Vender <b>{p.name}</b> por cerca de <b>{money(Math.round(playerValue(p) * 0.85))}</b>?</p><p className="hint">O clube que pagar mais leva na hora. Para negociar com calma, espere uma proposta chegar.</p></>,
-                  confirmLabel: 'Vender',
-                  danger: true,
-                }).then((ok) => { if (ok) { act((c) => sellPlayer(c, p.id)); setSel(null); } });
-              }} />
-            </>
-          ) : <p className="hint">Selecione um atleta para ver atributos e mudar a escalação.</p>}
+          {selected ? detail(selected) : <p className="hint">Selecione um atleta para ver atributos e mudar a escalação.</p>}
         </aside>
       </div>
+      )}
     </div>
   );
 }
@@ -189,12 +224,9 @@ function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; cu
   );
 }
 
-function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void; isNew?: boolean; year?: number }) {
-  return (
-    <div className="player-card">
-      <h3>{p.name}{p.clubLocked && <Tag kind="idolo">ídolo</Tag>}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>
-      <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
-      {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
+function PlayerCard({ p, onSell, isNew, year, compact }: { p: Player; onSell?: () => void; isNew?: boolean; year?: number; compact?: boolean }) {
+  const attrs = (
+    <>
       {ATTR_GROUPS.map((g) => (
         <div key={g.label} className="attr-group">
           <span className="attr-title">{g.label}</span>
@@ -204,8 +236,27 @@ function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void
         </div>
       ))}
       {p.position === 'GK' && <div className="attr"><span>GOL</span><Bar value={p.attrs.goalkeeping} max={99} tone="accent" /><b>{p.attrs.goalkeeping}</b></div>}
+    </>
+  );
+  const avg = (keys: AttrKey[]) => Math.round(keys.reduce((a, k) => a + p.attrs[k], 0) / keys.length);
+  return (
+    <div className={`player-card ${compact ? 'compact' : ''}`}>
+      {/* no celular o nome já está na linha do cartão */}
+      {!compact && <h3>{p.name}{p.clubLocked && <Tag kind="idolo">ídolo</Tag>}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>}
+      <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
+      {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
+      {compact ? (
+        // celular: os 11 atributos ficam recolhidos; o resumo mostra a média de cada grupo
+        <details className="attr-details">
+          <summary>
+            <span className="attr-title">Atributos</span>
+            <span className="attr-avgs">{ATTR_GROUPS.map((g) => <span key={g.label}>{g.label} <b>{avg(g.keys)}</b></span>)}</span>
+          </summary>
+          {attrs}
+        </details>
+      ) : attrs}
       <dl className="kv">
-        <dt>Condição</dt><dd>{Math.round(p.condition)}%</dd>
+        {!compact && <><dt>Condição</dt><dd>{Math.round(p.condition)}%</dd></>}
         <dt>Salário</dt><dd>{money(p.wage)}/mês</dd>
         <dt>Valor</dt><dd>{money(playerValue(p))}</dd>
         <dt>Contrato</dt><dd>até {p.contractUntil}{year !== undefined && (p.leaving ? ' · sai no fim da temporada' : expiresThisSeason(p, year) ? ' · termina nesta temporada' : '')}</dd>
@@ -450,13 +501,13 @@ export function TablePanel({ career }: { career: Career }) {
       </div>
       <div className="scroll tall">
         <table className="grid-table">
-          <thead><tr><th>#</th><th>Clube</th><th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead>
+          <thead><tr><th>#</th><th>Clube</th><th>P</th><th>J</th><th className="hide-sm">V</th><th className="hide-sm">E</th><th className="hide-sm">D</th><th>SG</th></tr></thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={r.teamId} className={`${r.teamId === me ? 'me' : ''} ${i < 2 && d > 0 ? 'up' : ''} ${i >= rows.length - 2 && d < last ? 'down' : ''}`}>
                 <td>{i + 1}</td>
                 <td><ClubName club={career.clubs[r.teamId]!} /></td>
-                <td><b>{r.points}</b></td><td>{r.played}</td><td>{r.won}</td><td>{r.drawn}</td><td>{r.lost}</td>
+                <td><b>{r.points}</b></td><td>{r.played}</td><td className="hide-sm">{r.won}</td><td className="hide-sm">{r.drawn}</td><td className="hide-sm">{r.lost}</td>
                 <td>{r.scoreFor - r.scoreAgainst}</td>
               </tr>
             ))}
@@ -489,6 +540,27 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
   const expense = l.wages + l.purchases + l.management + (l.loanPaid ?? 0) + (l.works ?? 0);
   const state = financialState(club);
   const f = monthlyForecast(career);
+  // celular: menos texto; empréstimo e resultado da temporada recolhidos num resumo de uma linha
+  const narrow = useMedia('(max-width: 760px)');
+  const result = income - expense;
+  const seasonTable = (
+    <table className="grid-table compact">
+      <tbody>
+        <tr><td>Bilheteria</td><td className="pos-n">{money(l.gate)}</td></tr>
+        <tr><td>Cotas de TV</td><td className="pos-n">{money(l.tv)}</td></tr>
+        <tr><td>Patrocínio</td><td className="pos-n">{money(l.sponsor ?? 0)}</td></tr>
+        <tr><td>Premiações</td><td className="pos-n">{money(l.prizes)}</td></tr>
+        <tr><td>Venda de atletas</td><td className="pos-n">{money(l.sales)}</td></tr>
+        <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
+        <tr><td>Contratações</td><td className="neg">{money(-l.purchases)}</td></tr>
+        {(l.works ?? 0) > 0 && <tr><td>Obras</td><td className="neg">{money(-(l.works ?? 0))}</td></tr>}
+        <tr><td>Gestão (seu salário)</td><td className="neg">{money(-l.management)}</td></tr>
+        {(l.loanIn ?? 0) > 0 && <tr><td>Empréstimo recebido</td><td className="pos-n">{money(l.loanIn ?? 0)}</td></tr>}
+        {(l.loanPaid ?? 0) > 0 && <tr><td>Parcelas do empréstimo</td><td className="neg">{money(-(l.loanPaid ?? 0))}</td></tr>}
+        <tr className="total"><td>Resultado</td><td className={result < 0 ? 'neg' : 'pos-n'}>{money(result)}</td></tr>
+      </tbody>
+    </table>
+  );
   return (
     <div className="two-col">
       <section>
@@ -517,32 +589,34 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
             <tr className="total"><td>Saldo do mês</td><td className={f.withGame < 0 ? 'neg' : 'pos-n'}>{money(f.withGame)}</td></tr>
           </tbody>
         </table>
-        <p className="hint">Sem jogo em casa (pré-temporada e entressafra) o mês fecha em <b className={f.withoutGame < 0 ? 'neg' : ''}>{money(f.withoutGame)}</b>. Contratações, aumentos e o preço do ingresso mudam esta conta.</p>
+        <p className="hint">Mês sem jogo em casa: <b className={f.withoutGame < 0 ? 'neg' : ''}>{money(f.withoutGame)}</b></p>
         {(career.monthsInRed ?? 0) > 0 && (
-          <p className="red-alert">⚠ {career.monthsInRed} {career.monthsInRed === 1 ? 'mês' : 'meses seguidos'} no vermelho. Se a temporada terminar com o caixa negativo, a diretoria demite você.</p>
+          <p className="red-alert">⚠ {career.monthsInRed} {career.monthsInRed === 1 ? 'mês' : 'meses seguidos'} no vermelho: terminar a temporada assim dá demissão.</p>
         )}
-        <WorksBox career={career} act={act} />
-        <LoanBox career={career} act={act} />
+        {narrow ? (
+          <details className="fold">
+            <summary>Estrutura <span className="hint">estádio e CT</span></summary>
+            <WorksBox career={career} act={act} />
+          </details>
+        ) : <WorksBox career={career} act={act} />}
+        {narrow && !career.loan ? (
+          <details className="fold">
+            <summary>Empréstimo bancário <span className="hint">até {moneyShort(loanLimit(career))}</span></summary>
+            <LoanBox career={career} act={act} />
+          </details>
+        ) : <LoanBox career={career} act={act} />}
       </section>
+      {narrow ? (
+        <details className="fold">
+          <summary>Temporada {career.season.year} <span className={result < 0 ? 'neg' : 'pos-n'}>{money(result)}</span></summary>
+          {seasonTable}
+        </details>
+      ) : (
       <section>
         <h4>Temporada {career.season.year}</h4>
-        <table className="grid-table compact">
-          <tbody>
-            <tr><td>Bilheteria</td><td className="pos-n">{money(l.gate)}</td></tr>
-            <tr><td>Cotas de TV</td><td className="pos-n">{money(l.tv)}</td></tr>
-            <tr><td>Patrocínio</td><td className="pos-n">{money(l.sponsor ?? 0)}</td></tr>
-            <tr><td>Premiações</td><td className="pos-n">{money(l.prizes)}</td></tr>
-            <tr><td>Venda de atletas</td><td className="pos-n">{money(l.sales)}</td></tr>
-            <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
-            <tr><td>Contratações</td><td className="neg">{money(-l.purchases)}</td></tr>
-            {(l.works ?? 0) > 0 && <tr><td>Obras</td><td className="neg">{money(-(l.works ?? 0))}</td></tr>}
-            <tr><td>Gestão (seu salário)</td><td className="neg">{money(-l.management)}</td></tr>
-            {(l.loanIn ?? 0) > 0 && <tr><td>Empréstimo recebido</td><td className="pos-n">{money(l.loanIn ?? 0)}</td></tr>}
-            {(l.loanPaid ?? 0) > 0 && <tr><td>Parcelas do empréstimo</td><td className="neg">{money(-(l.loanPaid ?? 0))}</td></tr>}
-            <tr className="total"><td>Resultado</td><td className={income - expense < 0 ? 'neg' : 'pos-n'}>{money(income - expense)}</td></tr>
-          </tbody>
-        </table>
+        {seasonTable}
       </section>
+      )}
     </div>
   );
 }
