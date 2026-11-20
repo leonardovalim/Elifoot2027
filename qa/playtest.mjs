@@ -195,6 +195,10 @@ const SCENARIOS = {
     plan: (i) => (i % 2 === 0 ? { label: 'elenco 1', team: 'fraco', offers: 'ficar' } : { label: 'elenco 99', team: 'forte', offers: 'ficar' }),
   },
   carrossel: { desc: 'elenco no máximo e aceita toda proposta: troca de clube a cada temporada', plan: () => ({ label: 'elenco 99 + aceita propostas', team: 'forte', offers: 'aceitar' }) },
+  'demissao-caixa': {
+    desc: 'elenco no máximo (cumpre o objetivo) com caixa em -50 milhões: demissão por terminar no vermelho',
+    plan: () => ({ label: 'elenco 99 + caixa -50M', team: 'forte', budget: -50_000_000, offers: 'ficar' }),
+  },
   falencia: { desc: 'caixa do clube em -5 milhões no início de cada temporada', plan: () => ({ label: 'caixa -5M', team: 'normal', budget: -5_000_000, offers: 'ficar' }) },
   caos: {
     desc: 'sorteia por temporada: força do elenco, caixa e o que fazer com propostas',
@@ -237,7 +241,11 @@ function snapshotSave() {
     unemployed: !!c.unemployed, offers: c.offers.length, objective: c.entrepreneur.bonds[0]?.objective ?? null,
     reputation: c.entrepreneur.reputation, cash: c.entrepreneur.cash, budget: c.clubs[me]?.budget ?? null,
     titles: c.clubs[me]?.titles?.length ?? 0, histLen: c.entrepreneur.history.length, lastHistory: c.entrepreneur.history[0] ?? null,
-    squad: c.clubs[me]?.players?.length ?? 0, badNumbers: nums.filter((n) => typeof n !== 'number' || !Number.isFinite(n)).length,
+    squad: c.clubs[me]?.players?.length ?? 0,
+    // regras do caixa negativo: demissão se a temporada fecha no vermelho; -1 de reputação por mês no vermelho
+    brokeFired: c.news.slice(0, 30).some((n) => /demitido/.test(n.text) && /caixa negativo/.test(n.text)),
+    redMonths: c.news.filter((n) => /no vermelho/.test(n.text)).length,
+    badNumbers: nums.filter((n) => typeof n !== 'number' || !Number.isFinite(n)).length,
   };
 }
 
@@ -250,7 +258,7 @@ function businessRules(before, closed, after, plan, action, fired = null) {
     // caminho da demissão: closed já é o novo clube, então confere a demissão a partir do momento "sem clube"
     const h = fired.lastHistory;
     if (!h || fired.histLen !== before.histLen + 1) bad('alta', 'demitido, mas a temporada não entrou no histórico da carreira');
-    else if (h.achieved) bad('alta', `demitido mesmo tendo cumprido o objetivo (${h.position}º)`);
+    else if (h.achieved && !fired.brokeFired) bad('alta', `demitido mesmo tendo cumprido o objetivo (${h.position}º) e sem caixa negativo`);
     if (!fired.unemployed) bad('alta', 'tela "sem clube" apareceu mas o save não marca o jogador como desempregado');
     if (fired.offers === 0) bad('alta', 'demitido sem nenhuma proposta: carreira travada');
     if (closed.unemployed || !closed.club) bad('alta', 'aceitou proposta após demissão e continuou sem clube');
@@ -268,14 +276,15 @@ function businessRules(before, closed, after, plan, action, fired = null) {
   if (plan.team === 'forte' && !plan.sold && !h.achieved && pos > 2) bad('baixa', `elenco todo 99 e objetivo "${h.objective}" não cumprido (${pos}º)`);
   if (plan.team === 'fraco' && pos <= Math.ceil(n / 2)) bad('media', `elenco todo com atributos 1 terminou em ${pos}º de ${n}`);
   const promoted = d > 1 && pos <= 2, relegated = d < 4 && pos > n - 2;
-  if (h.achieved && closed.unemployed) bad('alta', `cumpriu o objetivo (${pos}º) e mesmo assim foi demitido`);
+  // demissão com objetivo cumprido só é válida se a temporada fechou com o caixa negativo (regra do jogo)
+  if (h.achieved && closed.unemployed && !closed.brokeFired) bad('alta', `cumpriu o objetivo (${pos}º) e foi demitido sem caixa negativo`);
   if (closed.unemployed && closed.offers === 0) bad('alta', 'demitido sem nenhuma proposta: carreira travada');
   if (!closed.unemployed) {
     const expected = promoted ? d - 1 : relegated ? d + 1 : d;
     if (closed.div + 1 !== expected) bad('alta', `terminou em ${pos}º na Divisão ${d}${promoted ? ' (acesso)' : relegated ? ' (rebaixamento)' : ''}, mas a nova temporada começou na Divisão ${closed.div + 1} (esperado ${expected})`);
     if (pos === 1 && closed.titles !== before.titles + 1) bad('alta', `campeão da Divisão ${d} mas o título não foi registrado no clube`);
   }
-  if (h.achieved && closed.reputation < before.reputation) bad('media', `cumpriu o objetivo e a reputação caiu (${before.reputation} → ${closed.reputation})`);
+  if (h.achieved && closed.reputation < before.reputation && !closed.brokeFired && closed.redMonths <= before.redMonths) bad('media', `cumpriu o objetivo e a reputação caiu (${before.reputation} → ${closed.reputation})`);
   if (closed.badNumbers || after.badNumbers) bad('alta', 'valores de dinheiro/reputação inválidos (NaN/Infinity) no save');
   if (/aceitou/.test(action)) {
     if (after.unemployed || !after.club) bad('alta', `aceitou proposta e continuou sem clube`);

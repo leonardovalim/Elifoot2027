@@ -143,7 +143,11 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           // acabou de ser demitido: mostra o balanço da temporada antes das propostas
           <Modal title={`Balanço ${c.season.year - 1}`}>
             <SummaryView s={summary} />
-            <p>A diretoria decidiu não renovar.</p>
+            <p>
+              {summary.broke
+                ? <>A diretoria decidiu não renovar: <b className="neg">a temporada terminou com o caixa negativo</b>{summary.achieved ? ', mesmo com o objetivo cumprido' : ''}.</>
+                : 'A diretoria decidiu não renovar.'}
+            </p>
             <h4>Propostas recebidas</h4>
             <OfferList career={c} onAccept={accept} />
             <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
