@@ -266,7 +266,8 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
   position: fixed; inset: 0; z-index: 20; background: rgba(20, 16, 36, 0.72);
   display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto;
 }
-.overlay .window { width: 100%; max-width: 560px; }
+/* a janela tem margem de var(--px) dos dois lados: com width 100% ela ficava 2px mais larga que a tela e o modal "sambava" na horizontal */
+.overlay .window { width: calc(100% - 2 * var(--px)); max-width: 560px; }
 .overlay .window.wide { max-width: 1040px; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -663,3 +664,61 @@ input[aria-invalid="true"] { --b: var(--bad); }
 /* ---------- ídolo preso ao clube (André Elias) ---------- */
 .tag.idol { background: #e5762a; color: var(--ink); font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
 .idol-note { margin: 8px 0 0; font-weight: 700; }
+
+/* ---------- celular: nada rola para os lados, menos aperto ---------- */
+html, body { overflow-x: hidden; }
+@supports (overflow: clip) { html, body { overflow-x: clip; } }
+.overlay { overflow-x: hidden; overscroll-behavior: contain; }
+
+/* Elenco em cartões (mesmo padrão do Mercado no celular) */
+.squad-list .srow { grid-template-columns: auto auto minmax(0, 1fr) 40px; }
+.squad-list .srow .st { min-width: 34px; text-align: center; }
+.squad-list > li.out .mrow-name { color: var(--muted); }
+.mrow-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.mrow-tags .tag { margin-left: 0; display: inline-block; line-height: 14px; padding: 2px 5px; }
+.mrow-tags .tag-help::after { inset: -4px -2px; }
+.squad-list .mrow-num { gap: 2px; align-items: center; }
+.squad-list .mrow-detail .lineup-actions { margin-bottom: 8px; }
+
+/* ficha compacta: atributos recolhidos com a média de cada grupo */
+.attr-details { margin: 6px 0 10px; }
+.attr-details > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 8px 10px; background: var(--paper-2); }
+.attr-details > summary::-webkit-details-marker { display: none; }
+.attr-details > summary::after { content: '▾'; margin-left: auto; font-weight: 900; }
+.attr-details[open] > summary::after { content: '▴'; }
+.attr-avgs { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); }
+.attr-avgs b { color: var(--ink); }
+.attr-details[open] > summary { margin-bottom: 8px; }
+
+/* blocos recolhíveis (Finanças no celular) */
+.fold { margin: 12px 0 0; background: var(--paper-3); box-shadow: 0 0 0 2px var(--paper-2); }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 10px 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; font-size: 13px; color: var(--tomato-dk); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary .hint, .fold > summary .neg, .fold > summary .pos-n { text-transform: none; letter-spacing: 0; font-weight: 700; margin-left: auto; }
+.fold > summary::after { content: '▾'; color: var(--ink); }
+.fold[open] > summary::after { content: '▴'; }
+.fold > :not(summary) { padding: 0 12px 12px; }
+.fold .loan-box { margin: 0; box-shadow: none; background: transparent; }
+.fold .loan-box > h4:first-child { display: none; }
+
+@media (max-width: 560px) {
+  .hide-sm { display: none; }
+  .overlay { padding: 8px 4px; }
+  .window-body { padding: 10px; }
+  .paused-badge { font-size: 13px; padding: 7px 12px; }
+  .toolbar { gap: 8px 12px; }
+}
+
+/* ficha aberta no cartão do Elenco: ações de escalação lado a lado e dados em duas colunas */
+.squad-list .lineup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.squad-list .lineup-actions > .attr-title, .squad-list .lineup-actions > .hint { grid-column: 1 / -1; }
+.squad-list .lineup-actions .btn { margin: 0; padding: 6px 8px; font-size: 13px; min-height: 44px; text-align: left; }
+.squad-list .lineup-actions .swap { font-size: 11px; }
+.player-card.compact .kv { grid-template-columns: auto 1fr; font-size: 14px; }
+.player-card.compact > .hint { margin: 4px 0 6px; }
+@media (max-width: 560px) {
+  .paused-badge { white-space: nowrap; }
+  /* data numa linha só: "Seg 4 Jan 2027 · Pré-temporada 2027" */
+  .hud-date { flex-direction: row !important; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  .hud-date .hud-kicker { display: none; }
+}

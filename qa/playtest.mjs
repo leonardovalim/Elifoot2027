@@ -384,6 +384,14 @@ async function runViewport(browser, vpName, report) {
         await click(page.locator('.dock').getByRole('button', { name: m }));
         await page.getByRole('dialog', { name: m }).waitFor({ timeout: 3000 });
         await check(`menu-${m.toLowerCase()}`);
+        if (m === 'Elenco' && (await page.locator('.squad-list .mrow').count())) {
+          // celular: o atleta abre embaixo do cartão, com os atributos recolhidos
+          await click(page.locator('.squad-list .mrow').nth(2));
+          await page.waitForTimeout(400);
+          await click(page.locator('.attr-details > summary'));
+          await check('menu-elenco-atleta-aberto');
+          await click(page.locator('.squad-list li.open .mrow'));
+        }
         if (m === 'Elenco') {
           // tocar num selo abre a ajuda direto na explicação dele
           const tag = page.getByRole('dialog', { name: m }).locator('.tag-help').first();
