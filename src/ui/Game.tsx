@@ -8,9 +8,11 @@ import {
   advanceDay,
   closeSeason,
   completeRound,
+  decide,
   divisionOf,
   isMatchDay,
   myClubId,
+  pendingDecision,
   prepareRound,
   seasonSummary,
   simulateRound,
@@ -22,6 +24,7 @@ import {
 import { ATTR_SHORT } from '../sports/football/development';
 import { football, type FootballOutcome } from '../sports/football/engine';
 import { MatchDay } from './match/MatchDay';
+import { DecisionModal } from './panels/Decisions';
 import { CareerPanel, FinancePanel, MarketPanel, SquadPanel, TablePanel, type Act } from './panels/Panels';
 import { CtScene, type SceneGain } from './scene/CtScene';
 import { track } from './analytics';
@@ -54,7 +57,8 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const resumeSpeed = useRef(1);
 
   const save = useCallback(() => saveCareer(ref.current), []);
-  const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary;
+  const decision = pendingDecision(c);
+  const blocking = !!menu || !!prep || c.phase === 'encerramento' || c.unemployed || !!summary || !!decision;
   const running = speed > 0 && !blocking;
 
   const pause = () => { if (speed > 0) resumeSpeed.current = speed; setSpeed(0); };
@@ -296,6 +300,13 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             </>
           )}
         </Modal>
+      )}
+
+      {decision && !menu && !prep && !summary && c.phase !== 'encerramento' && (
+        <DecisionModal career={c} decision={decision} onChoose={(choice) => {
+          track('market_decision', { kind: decision.kind, choice });
+          act((career) => decide(career, decision.id, choice));
+        }} />
       )}
 
       {toast && <div className="toast">{toast}</div>}

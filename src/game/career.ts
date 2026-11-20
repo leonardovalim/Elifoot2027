@@ -14,6 +14,7 @@ import { createMatch, football, runToEnd, toOutcome, type FootballOutcome, type 
 import { DIVISIONS, divisionLevel, generateWorld, playerValue } from '../sports/football/generate';
 import { overall, pickLineup, starters } from '../sports/football/lineup';
 import type { Club, Player } from '../sports/football/types';
+import { marketDay, moraleAfterMatch, releaseLeavers, resolveDecision, type Decision, type DecisionChoice, type MarketCtx } from './market';
 
 export const SAVE_VERSION = 2;
 const SPORT = 'football';
@@ -82,6 +83,8 @@ export interface Career {
   awards: SeasonAward[];
   /** Assistente faz substituições por cansaço na partida do jogador (delegação simples, GDD 2.3). */
   autoSubs: boolean;
+  /** Mercado vivo: propostas, pedidos de aumento e renovações esperando resposta (ausente em saves antigos). */
+  decisions?: Decision[];
 }
 
 // ---------------------------------------------------------------- criação
@@ -116,6 +119,7 @@ export function newWorld(seed: number, entrepreneurName = 'Você'): Career {
     unemployed: true,
     awards: [],
     autoSubs: true,
+    decisions: [],
   };
 }
 
@@ -176,6 +180,7 @@ export function acceptOffer(c: Career, offer: Offer) {
   c.entrepreneur.bonds = [bond];
   c.unemployed = false;
   c.offers = [];
+  c.decisions = [];
   c.ledger = emptyLedger();
   push(c, 'good', `Você assumiu o ${club.name}. Objetivo da diretoria: ${OBJECTIVE_LABEL[offer.objective].toLowerCase()}.`);
 }
@@ -198,6 +203,34 @@ export const myClubId = (c: Career): string => activeBond(c)?.orgId ?? '';
 function push(c: Career, kind: NewsKind, text: string) {
   c.news.unshift({ date: c.date, kind, text });
   if (c.news.length > 200) c.news.length = 200;
+}
+
+// ---------------------------------------------------------------- mercado vivo
+
+function marketCtx(c: Career): MarketCtx {
+  c.decisions ??= [];
+  return {
+    date: c.date,
+    year: c.season.year,
+    phase: c.phase,
+    clubs: c.clubs,
+    me: myClubId(c),
+    decisions: c.decisions,
+    push: (kind, text) => push(c, kind, text),
+    addSale: (fee) => { c.ledger.sales += fee; },
+  };
+}
+
+/** Decisão pendente mais antiga (propostas, aumento, renovação). A interface pausa o tempo enquanto houver. */
+export function pendingDecision(c: Career): Decision | undefined {
+  const club = c.clubs[myClubId(c)];
+  // descarta decisões sobre atletas que já saíram
+  if (c.decisions && club) c.decisions = c.decisions.filter((d) => club.players.some((p) => p.id === d.playerId));
+  return c.decisions?.[0];
+}
+
+export function decide(c: Career, id: string, choice: DecisionChoice): string | null {
+  return resolveDecision(marketCtx(c), id, choice);
 }
 
 // ---------------------------------------------------------------- tempo
@@ -239,6 +272,7 @@ export function advanceDay(c: Career): DayReport {
   }
 
   if (dayOf(c.date) === 1) monthly(c);
+  marketDay(marketCtx(c), rng);
   if (c.phase === 'pre-temporada' && c.date >= addDays(c.roundDates[0]!, -6)) {
     c.phase = 'temporada';
     push(c, 'info', `Começa a temporada ${c.season.year}! Primeira rodada: ${formatDate(c.roundDates[0]!)}.`);
@@ -345,8 +379,8 @@ export function completeRound(c: Career, prep: PreparedRound, mine: FootballOutc
     const home = c.clubs[m.home]!, away = c.clubs[m.away]!;
     const gh = applyMatch(home, o.played.home, o.ratings, o.conditionAfter, o.sentOff, goals, rng);
     const ga = applyMatch(away, o.played.away, o.ratings, o.conditionAfter, o.sentOff, goals, rng);
-    if (home.id === me) myGains = gh;
-    if (away.id === me) myGains = ga;
+    if (home.id === me) { myGains = gh; moraleAfterMatch(home, o.played.home); }
+    if (away.id === me) { myGains = ga; moraleAfterMatch(away, o.played.away); }
     gate(c, home, away, m.divisionIndex, me);
   }
   c.season.divisions.forEach((d, i) => d.results.push(byDiv[i]!));
@@ -481,6 +515,10 @@ export function closeSeason(c: Career): SeasonSummary {
 
   // acesso e rebaixamento
   const next = promoteAndRelegate(c.season, football.points);
+  // quem não renovou sai de graça antes da renovação automática
+  const gone = releaseLeavers(c.clubs, me, year, rng);
+  if (gone.length) push(c, 'info', `Fim de contrato, deixaram o clube: ${gone.join(', ')}.`);
+  c.decisions = [];
   // evolução de fim de ciclo
   c.season.divisions.forEach((d, di) => {
     for (const id of d.teamIds) {
