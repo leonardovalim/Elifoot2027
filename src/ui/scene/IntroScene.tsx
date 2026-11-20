@@ -9,10 +9,29 @@ import { drawPlayer, lookFor, SPRITE_H } from './sprites';
 const W = 240;
 const H = 135;
 const TOWERS = [18, 78, 162, 222];
-const GOAL = { x: 206, top: 92, bottom: 120, depth: 20 };
+type Pt = { x: number; y: number };
+
+/*
+ * Gol do lado direito visto pela câmera de TV (lateral, do alto).
+ * Quanto mais longe da câmera, mais alto na tela, menor e mais perto do centro:
+ * a linha de fundo sobe inclinada, o poste do fundo é mais baixo que o da
+ * frente e a rede se estende para a direita, atrás da linha.
+ */
+const POST_NEAR = { base: { x: 198, y: 121 }, top: { x: 198, y: 100 } };
+const POST_FAR = { base: { x: 190, y: 99 }, top: { x: 190, y: 85 } };
+const NET_NEAR = { base: { x: 210, y: 121 }, top: { x: 207, y: 106 } };
+const NET_FAR = { base: { x: 200, y: 99 }, top: { x: 198, y: 90 } };
+/** Inclinação da linha de fundo: dx por pixel de y. */
+const END_SLOPE = (POST_NEAR.base.x - POST_FAR.base.x) / (POST_NEAR.base.y - POST_FAR.base.y);
+const endLineX = (y: number) => POST_NEAR.base.x + (y - POST_NEAR.base.y) * END_SLOPE;
+
 const BALL_START = { x: 96, y: 118 };
-const BALL_CTRL = { x: 152, y: 58 };
-const BALL_END = { x: 210, y: 96 };
+const BALL_CTRL = { x: 150, y: 52 };
+/** Ângulo do fundo: rente ao travessão, perto do poste mais distante. */
+const BALL_END = { x: 193, y: 89 };
+/** Chão sob o ponto de chegada (entre a linha da frente e a do fundo). */
+const GROUND_END = 108;
+const BALL_REST = { x: 201, y: 106 };
 
 const HOME = lookFor('intro-kicker', '#e4563c', '#ffffff');
 const KEEPER = lookFor('intro-keeper', '#3a9a4b', '#1d2340');
@@ -36,12 +55,36 @@ const STARS = Array.from({ length: 36 }, () => ({ x: Math.floor(r() * W), y: Mat
 const FLAGS = Array.from({ length: 9 }, (_, i) => ({ x: 12 + i * 26 + Math.floor(r() * 8), row: Math.floor(r() * 4), color: i % 2 ? '#e4563c' : '#f2b632' }));
 const CONFETTI = Array.from({ length: 70 }, () => ({ x: r() * W, vx: (r() - 0.5) * 30, vy: -20 - r() * 40, color: CROWD_COLORS[Math.floor(r() * CROWD_COLORS.length)]! }));
 
+const lerp = (a: Pt, b: Pt, t: number): Pt => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+
+/** Linha pixelada (Bresenham), sem antisserrilhado. */
+function line(c: CanvasRenderingContext2D, a: Pt, b: Pt, w = 1) {
+  let x0 = Math.round(a.x), y0 = Math.round(a.y);
+  const x1 = Math.round(b.x), y1 = Math.round(b.y);
+  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  for (;;) {
+    c.fillRect(x0, y0, w, w);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+
+/** Malha da rede num quadrilátero (a->b uma borda, d->cc a oposta), com balanço opcional. */
+function mesh(c: CanvasRenderingContext2D, a: Pt, b: Pt, cc: Pt, d: Pt, nu: number, nv: number, sway: (p: Pt) => Pt) {
+  for (let i = 0; i <= nu; i++) line(c, sway(lerp(a, b, i / nu)), sway(lerp(d, cc, i / nu)));
+  for (let j = 0; j <= nv; j++) line(c, sway(lerp(a, d, j / nv)), sway(lerp(b, cc, j / nv)));
+}
+
 function bezier(t: number) {
   const a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
   return { x: a * BALL_START.x + b * BALL_CTRL.x + c * BALL_END.x, y: a * BALL_START.y + b * BALL_CTRL.y + c * BALL_END.y };
 }
 
-function draw(c: CanvasRenderingContext2D, s: IntroState, time: number) {
+export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: number) {
   const lit = s.lightsOn / 4;
   const cheering = s.sinceGoal >= 0 && s.sinceGoal < 2.4;
 
@@ -93,40 +136,63 @@ function draw(c: CanvasRenderingContext2D, s: IntroState, time: number) {
 
   // gramado
   for (let i = 0; i < 9; i++) { c.fillStyle = i % 2 ? '#3f8f3c' : '#4aa045'; c.fillRect(0, 78 + i * 7, W, 7); }
-  c.fillStyle = '#e8f0e4'; c.fillRect(0, 122, W, 1);
+  // marcações: linha lateral próxima, linha de fundo e áreas em perspectiva
+  c.fillStyle = 'rgba(232,240,228,0.85)';
+  c.fillRect(0, 130, Math.round(endLineX(130)), 1);
+  line(c, { x: endLineX(78), y: 78 }, { x: endLineX(H), y: H });
+  const area = (near: number, far: number, depth: number, shrink: number) => {
+    const a = { x: endLineX(near) - depth, y: near };
+    const b = { x: endLineX(far) - depth * shrink, y: far };
+    line(c, a, { x: endLineX(near), y: near });
+    line(c, b, { x: endLineX(far), y: far });
+    line(c, a, b);
+  };
+  area(131, 86, 34, 0.82);
+  area(114, 95, 12, 0.88);
 
-  // gol (visão lateral) com rede que balança após o gol
+  // gol: fundo da rede, lateral distante e teto (atrás de tudo)
   const ripple = s.sinceGoal >= 0 ? Math.max(0, 1 - s.sinceGoal / 1.6) : 0;
-  c.fillStyle = 'rgba(240,240,240,0.55)';
-  for (let y = GOAL.top + 2; y < GOAL.bottom; y += 3) {
-    for (let x = GOAL.x + 2; x < GOAL.x + GOAL.depth; x += 3) {
-      const dx = ripple ? Math.round(Math.sin(time * 30 + y * 0.6) * ripple * 2) : 0;
-      c.fillRect(x + dx, y, 1, 1);
-    }
-  }
-  c.fillStyle = '#ffffff';
-  c.fillRect(GOAL.x, GOAL.top, GOAL.depth + 1, 2);
-  c.fillRect(GOAL.x, GOAL.top, 2, GOAL.bottom - GOAL.top);
-  c.fillRect(GOAL.x + GOAL.depth, GOAL.top, 1, GOAL.bottom - GOAL.top);
+  const sway = (p: Pt): Pt => (ripple && p.x > POST_FAR.base.x + 2
+    ? { x: p.x + Math.sin(time * 28 + p.y * 0.5) * ripple * 1.6, y: p.y }
+    : p);
+  c.fillStyle = 'rgba(20,40,20,0.18)';
+  c.beginPath();
+  c.moveTo(POST_FAR.base.x, POST_FAR.base.y); c.lineTo(NET_FAR.base.x, NET_FAR.base.y);
+  c.lineTo(NET_NEAR.base.x, NET_NEAR.base.y); c.lineTo(POST_NEAR.base.x, POST_NEAR.base.y);
+  c.closePath(); c.fill();
+  c.fillStyle = 'rgba(236,240,236,0.38)';
+  mesh(c, NET_FAR.base, NET_NEAR.base, NET_NEAR.top, NET_FAR.top, 7, 4, sway);
+  mesh(c, POST_FAR.base, NET_FAR.base, NET_FAR.top, POST_FAR.top, 3, 4, sway);
+  mesh(c, POST_FAR.top, NET_FAR.top, NET_NEAR.top, POST_NEAR.top, 3, 7, sway);
+  // poste do fundo (mais fino e sombreado)
+  c.fillStyle = '#d8dce4'; line(c, POST_FAR.base, POST_FAR.top);
 
   // barreira
   const wallJump = s.flight > 0 && s.flight < 0.6 ? -Math.round(Math.sin(s.flight / 0.6 * Math.PI) * 5) : 0;
-  WALL.forEach((look, i) => drawPlayer(c, look, 138 + i * 9, 107 + wallJump, 0, true));
+  WALL.forEach((look, i) => drawPlayer(c, look, 142 + i * 9, 104 + wallJump, 0, true));
 
-  // goleiro: salta em direção ao ângulo e não alcança
+  // goleiro: na linha, salta para o ângulo do fundo e não alcança
   const dive = s.flight > 0.45 ? Math.min(1, (s.flight - 0.45) / 0.4) : 0;
-  const keeperY = 107 - Math.round(dive * 9) + (s.sinceGoal > 0.3 ? Math.min(9, Math.round((s.sinceGoal - 0.3) * 20)) : 0);
-  drawPlayer(c, KEEPER, 214 - Math.round(dive * 4), Math.min(107, keeperY), 0, true);
+  const keeperBase = 97;
+  const keeperY = keeperBase - Math.round(dive * 10) + (s.sinceGoal > 0.3 ? Math.min(10, Math.round((s.sinceGoal - 0.3) * 20)) : 0);
+  drawPlayer(c, KEEPER, 184 - Math.round(dive * 2), Math.min(keeperBase, keeperY), 0, true);
 
   // cobrador
   const kx = Math.round(58 + s.run * 28);
   const celebrating = s.sinceGoal >= 0;
   drawPlayer(c, HOME, celebrating ? kx + Math.round(Math.min(1, s.sinceGoal) * 10) : kx, 107 - (celebrating && Math.sin(time * 10) > 0 ? 3 : 0), s.run > 0 && s.run < 1 ? Math.floor(time * 10) : 0, false);
 
-  // bola
-  let bx = BALL_START.x, by = BALL_START.y;
-  if (s.sinceGoal >= 0) { bx = 216; by = Math.min(118, BALL_END.y + s.sinceGoal * 40); }
-  else if (s.flight > 0) ({ x: bx, y: by } = bezier(s.flight));
+  // bola: curva até o ângulo, estufa a rede e cai dentro do gol
+  let bx = BALL_START.x, by = BALL_START.y, ground = BALL_START.y + 2;
+  if (s.sinceGoal >= 0) {
+    const k = Math.min(1, s.sinceGoal / 0.25);
+    bx = BALL_END.x + (BALL_REST.x - BALL_END.x) * k;
+    by = Math.min(BALL_REST.y, BALL_END.y + 3 * k + Math.max(0, s.sinceGoal - 0.2) ** 2 * 120);
+    ground = BALL_REST.y + 2;
+  } else if (s.flight > 0) {
+    ({ x: bx, y: by } = bezier(s.flight));
+    ground = BALL_START.y + 2 + (GROUND_END - BALL_START.y - 2) * s.flight;
+  }
   if (s.flight > 0 && s.sinceGoal < 0) {
     // rastro
     for (let k = 1; k <= 3; k++) {
@@ -134,9 +200,20 @@ function draw(c: CanvasRenderingContext2D, s: IntroState, time: number) {
       c.fillStyle = `rgba(255,255,255,${0.35 - k * 0.1})`; c.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
     }
   }
-  c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(Math.round(bx), 120, 3, 1);
+  c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(Math.round(bx), Math.round(ground), 3, 1);
   c.fillStyle = '#ffffff'; c.fillRect(Math.round(bx), Math.round(by), 3, 3);
   c.fillStyle = '#1a1420'; c.fillRect(Math.round(bx) + 1, Math.round(by) + 1, 1, 1);
+
+  // gol: lateral próxima da rede, poste da frente e travessão (na frente da bola)
+  c.fillStyle = 'rgba(236,240,236,0.45)';
+  mesh(c, POST_NEAR.base, NET_NEAR.base, NET_NEAR.top, POST_NEAR.top, 3, 4, sway);
+  c.fillStyle = 'rgba(0,0,0,0.25)';
+  line(c, { x: POST_NEAR.base.x + 1, y: POST_NEAR.base.y }, { x: POST_NEAR.base.x + 6, y: POST_NEAR.base.y });
+  c.fillStyle = '#ffffff';
+  line(c, POST_FAR.top, POST_NEAR.top, 2);
+  c.fillRect(POST_NEAR.top.x, POST_NEAR.top.y, 2, POST_NEAR.base.y - POST_NEAR.top.y + 1);
+  c.fillStyle = '#c9ced8';
+  c.fillRect(POST_NEAR.top.x + 1, POST_NEAR.top.y + 2, 1, POST_NEAR.base.y - POST_NEAR.top.y - 1);
 
   // escuridão antes dos refletores + cones de luz
   if (lit < 1) { c.fillStyle = `rgba(8,10,24,${0.62 * (1 - lit)})`; c.fillRect(0, 30, W, H - 30); }
@@ -181,7 +258,7 @@ export function IntroScene({ skip, onReveal }: Props) {
     const tick = (now: number) => {
       const t = (now - start) / 1000 + offset.current;
       const st = introState(t);
-      draw(ctx, st, reduced ? 0 : t);
+      drawIntro(ctx, st, reduced ? 0 : t);
       if (st.revealed && !revealed.current) { revealed.current = true; reveal.current(); }
       if (!reduced) raf = requestAnimationFrame(tick);
     };
