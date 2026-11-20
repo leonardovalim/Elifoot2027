@@ -102,7 +102,7 @@ export function endOfSeason(club: Club, level: number, year: number, rng: Rng): 
   for (const p of club.players) {
     p.age++;
     p.stats = { apps: 0, goals: 0, ratingSum: 0 };
-    const retire = p.age >= 37 || (p.age >= 33 && rng.chance((p.age - 32) * 0.18));
+    const retire = !p.clubLocked && (p.age >= 37 || (p.age >= 33 && rng.chance((p.age - 32) * 0.18)));
     if (retire) { retired.push(p); continue; }
     if (p.contractUntil < year + 1) p.contractUntil = year + 1 + rng.int(0, 2);
     p.wage = wageFor(p);
