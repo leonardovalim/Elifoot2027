@@ -6,10 +6,13 @@ import {
   clubStrength,
   divisionOf,
   myClubId,
+  MAX_MANAGERS,
   newWorld,
   startCareer,
+  startMultiCareer,
   type Career,
   type ChallengeType,
+  type NewManager,
 } from '../game/career';
 import { Game } from './Game';
 import { clearCareer, loadCareer, saveCareer } from './storage';
@@ -29,7 +32,7 @@ function markIntroSeen() {
   try { sessionStorage.setItem(INTRO_KEY, '1'); } catch { /* sem storage: a abertura repete */ }
 }
 
-type Screen = 'title' | 'create' | 'game';
+type Screen = 'title' | 'create' | 'create-multi' | 'game';
 
 const SPORTS = [
   { id: 'futebol', name: 'Futebol', icon: '⚽', ready: true, pitch: '' },
@@ -71,9 +74,10 @@ export function App() {
     );
   }
 
-  if (screen === 'create') {
+  if (screen === 'create' || screen === 'create-multi') {
     return (
       <Create
+        multi={screen === 'create-multi'}
         onBack={() => setScreen('title')}
         onStart={(c) => { saveCareer(c); setCareer(c); setScreen('game'); }}
       />
@@ -91,19 +95,11 @@ export function App() {
       <div className="menu">
         {career && <button className="btn primary big" onClick={() => setScreen('game')}>Continuar carreira</button>}
         <button className={`btn big ${career ? '' : 'primary'}`} onClick={async () => {
-          if (career) {
-            const club = career.clubs[myClubId(career)];
-            const ok = await askConfirm({
-              title: 'Nova carreira',
-              body: <><p>Você já tem uma carreira salva{club ? <> com o <b>{club.name}</b></> : null}, temporada {career.season.year}.</p><p>Começar outra apaga essa de vez.</p></>,
-              confirmLabel: 'Apagar e começar outra',
-              cancelLabel: 'Manter a atual',
-              danger: true,
-            });
-            if (!ok) return;
-          }
-          setScreen('create');
+          if (await confirmReplace(career)) setScreen('create');
         }}>Nova carreira</button>
+        <button className="btn big" onClick={async () => {
+          if (await confirmReplace(career)) setScreen('create-multi');
+        }}>Multijogador local</button>
         <button className="btn" onClick={() => openHelp()}>Como jogar</button>
       </div>
       <p className="hint foot">Versão de testes</p>
@@ -111,7 +107,22 @@ export function App() {
   );
 }
 
-function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) => void }) {
+/** Já existe carreira salva: confirma antes de apagar para começar outra. */
+async function confirmReplace(career: Career | null): Promise<boolean> {
+  if (!career) return true;
+  const club = career.clubs[myClubId(career)];
+  return askConfirm({
+    title: 'Nova carreira',
+    body: <><p>Você já tem uma carreira salva{club ? <> com o <b>{club.name}</b></> : null}, temporada {career.season.year}.</p><p>Começar outra apaga essa de vez.</p></>,
+    confirmLabel: 'Apagar e começar outra',
+    cancelLabel: 'Manter a atual',
+    danger: true,
+  });
+}
+
+function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: Career) => void; multi: boolean }) {
+  // multijogador: cada técnico passa pelo mesmo assistente; os escolhidos ficam aqui
+  const [picked, setPicked] = useState<NewManager[]>([]);
   const [seed, setSeed] = useState(() => (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
   const [name, setName] = useState('');
   const [type, setType] = useState<ChallengeType | null>(null);
@@ -122,7 +133,12 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
   const [voting, setVoting] = useState<Sport | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const world = useMemo(() => newWorld(seed), [seed]);
-  const options = useMemo(() => (type ? challengeOptions(world, type) : []), [world, type]);
+  const options = useMemo(() => (type ? challengeOptions(world, type, multi ? 8 : 4) : []), [world, type, multi]);
+  const takenBy = (clubId: string) => picked.find((x) => x.clubId === clubId)?.name;
+  const startAll = (list: NewManager[]) => {
+    track('career_created', { multiplayer: list.length });
+    onStart(startMultiCareer(seed, list));
+  };
   const nextStep = () => {
     const next = nextWizardStep(step, { name, hasChallenge: !!type });
     if (next === step) {
@@ -142,7 +158,7 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
       <header className="create-head">
         <button className="btn ghost" onClick={step === 1 ? onBack : previousStep}>‹ {step === 1 ? 'Voltar' : 'Anterior'}</button>
         <div>
-          <h2>Nova carreira</h2>
+          <h2>{multi ? `Multijogador · técnico ${picked.length + 1}` : 'Nova carreira'}</h2>
         </div>
         <nav className="wizard-progress" aria-label="Etapas da nova carreira">
           {(['Você', 'Desafio', 'Oportunidades'] as const).map((label, i) => {
@@ -153,10 +169,34 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
         </nav>
       </header>
 
+      {multi && (
+        <section className="window wizard-card mp-roster" aria-label="Técnicos escolhidos">
+          <header className="window-title"><span>Multijogador local · até {MAX_MANAGERS} técnicos no mesmo aparelho</span></header>
+          <div className="window-body">
+            {picked.length === 0
+              ? <p className="hint">Cada técnico escolhe nome, desafio e clube. Depois vocês revezam a vez: cada um cuida do seu clube e joga a sua partida.</p>
+              : (
+                <ul className="mp-list">
+                  {picked.map((x, i) => (
+                    <li key={x.clubId}>
+                      <Badge club={world.clubs[x.clubId]!} size="sm" />
+                      <b>{x.name}</b> · {world.clubs[x.clubId]!.name}
+                      <button className="btn sm ghost" aria-label={`Tirar ${x.name}`} onClick={() => setPicked(picked.filter((_, j) => j !== i))}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            {picked.length >= 2 && (
+              <div className="wizard-actions"><button className="btn primary" onClick={() => startAll(picked)}>Começar com {picked.length} técnicos ›</button></div>
+            )}
+          </div>
+        </section>
+      )}
+
       {step === 1 && <section className="window wizard-card">
         <header className="window-title"><span>1/3 · Seu perfil</span></header>
         <div className="window-body">
-          <label className="field">Seu nome
+          <label className="field">{multi ? `Nome do técnico ${picked.length + 1}` : 'Seu nome'}
             <input ref={nameRef} value={name} maxLength={24} autoFocus autoComplete="name" aria-invalid={nameError}
               onChange={(e) => { setName(e.target.value); setNameError(false); }} />
             {nameError && <span className="field-error">Digite seu nome para continuar.</span>}
@@ -195,14 +235,15 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
         <section className="window wizard-card offer-step">
           <header className="window-title">
             <span>3/3 · Oportunidades</span>
-            <button className="btn sm ghost" onClick={() => setSeed((seed * 1103515245 + 12345) >>> 0)}>↻ outro universo</button>
+            {picked.length === 0 && <button className="btn sm ghost" onClick={() => setSeed((seed * 1103515245 + 12345) >>> 0)}>↻ outro universo</button>}
           </header>
           <div className="window-body">
             <div className="offers">
             {options.map((o) => {
               const club = world.clubs[o.clubId]!;
+              const taken = takenBy(o.clubId);
               return (
-                <div key={o.clubId} className="offer">
+                <div key={o.clubId} className={`offer ${taken ? 'taken' : ''}`}>
                   <div className="offer-head"><Badge club={club} size="lg" /><div><span className="offer-name">{club.name}</span><span className="hint"><span className="nw">Divisão {divisionOf(world, club.id) + 1}</span> · <span className="nw">desde {club.founded}</span></span></div></div>
                   <dl className="kv">
                     <dt>Orçamento</dt><dd>{money(club.budget)}</dd>
@@ -212,12 +253,19 @@ function Create({ onBack, onStart }: { onBack: () => void; onStart: (c: Career) 
                     <dt>Seu salário</dt><dd>{money(o.monthlySalary)}/mês</dd>
                   </dl>
                   <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
-                  <button className="btn primary" onClick={() => {
+                  <button className="btn primary" disabled={!!taken} onClick={() => {
                     if (!name.trim()) { setNameError(true); setStep(1); nameRef.current?.focus(); return; }
+                    if (multi) {
+                      const list = [...picked, { name: name.trim(), type, clubId: o.clubId }];
+                      if (list.length >= MAX_MANAGERS) { startAll(list); return; }
+                      setPicked(list);
+                      setName(''); setType(null); setStep(1);
+                      return;
+                    }
                     track('career_created', { challenge: type, division: divisionOf(world, club.id) + 1, objective: o.objective, club_reputation: club.reputation });
                     onStart(startCareer(seed, name.trim(), type, o.clubId));
                   }}>
-                    Assumir o desafio
+                    {taken ? `Clube de ${taken}` : multi ? 'Escolher este clube' : 'Assumir o desafio'}
                   </button>
                 </div>
               );

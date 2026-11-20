@@ -157,6 +157,8 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - [ ] Outros eventos com escolha (crise, oportunidade)
 - [ ] PWA instalável
 
+**Multijogador local** (feito): 2 a 4 técnicos no mesmo aparelho, cada um com nome, desafio e clube próprios. Caixa, patrimônio, decisões, empréstimo, balanço e notícias são de cada um; o mundo é compartilhado. A vez passa pelo botão "Vez de X" ou sozinha quando outro técnico tem decisão, janela ou emprego esperando (tela de "passe o aparelho"). No dia de jogo cada técnico joga a sua partida em seguida; confronto entre dois humanos é comandado pelo mandante. A IA não compra nem vende atletas de clube humano.
+
 **Fase 2: online**, backend leve e **sem Supabase** (decisão do produto)
 - Fase 1 continua 100% local (save no navegador). Próximo passo local: trocar o `localStorage` por IndexedDB, para ter vários saves e passar do limite de ~5 MB.
 - Para o online, a recomendação é **PocketBase**: um binário só, SQLite embutido, auth e realtime prontos, rodando numa VM pequena (Fly.io ou Railway). Alternativa serverless: **Turso** (SQLite/libSQL gerenciado) + funções na Vercel.

@@ -775,3 +775,14 @@ html, body { overflow-x: hidden; }
 /* ---------- bandeiras ---------- */
 .flag { display: inline-block; vertical-align: -1px; margin-right: 4px; flex: none; }
 .cup .rb-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); }
+
+/* ---------- multijogador local ---------- */
+.hud-manager { display: block; font-size: 12px; }
+.pass-turn { white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.handoff .handoff-name { font-size: 22px; text-align: center; margin: 8px 0 4px; }
+.handoff .hint.center { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.mp-roster { margin-bottom: 12px; }
+.mp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.mp-list li { display: flex; align-items: center; gap: 8px; }
+.mp-list li .btn { margin-left: auto; }
+.offer.taken { opacity: 0.55; }

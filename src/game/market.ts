@@ -28,6 +28,8 @@ export interface MarketCtx {
   phase: string;
   clubs: Record<string, Club>;
   me: string;
+  /** Clubes de técnicos humanos (multijogador): a IA não compra deles nem eles entram como comprador. */
+  humans?: string[];
   decisions: Decision[];
   push: (kind: 'good' | 'bad' | 'money' | 'info', text: string) => void;
   addSale: (fee: number) => void;
@@ -94,7 +96,7 @@ function maybeBid(ctx: MarketCtx, club: Club, rng: Rng) {
   const p = rng.weighted(pool, (x) => playerValue(x) * (moraleOf(x) < 25 ? 3 : 1));
   const fee = round1000(playerValue(p) * (0.9 + rng.next() * 0.55));
   if (fee <= 0) return;
-  const buyers = Object.values(ctx.clubs).filter((c) => c.id !== club.id && c.budget > fee * 1.2 && c.players.length < 28);
+  const buyers = Object.values(ctx.clubs).filter((c) => c.id !== club.id && !ctx.humans?.includes(c.id) && c.budget > fee * 1.2 && c.players.length < 28);
   if (!buyers.length) return;
   const buyer = rng.weighted(buyers, (c) => Math.max(1, c.reputation - club.reputation + 30));
   const wage = round100(Math.max(p.wage, wageFor(p)) * (1.25 + rng.next() * 0.45));
@@ -238,7 +240,7 @@ export interface AuctionResult { name: string; fee: number; buyer: string | null
  * Fim de temporada, antes de renovar contratos: quem não renovou vai a leilão
  * (como no Elifoot). Rende pouco: 25% a 45% do valor, pago pelo clube que leva.
  */
-export function releaseLeavers(clubs: Record<string, Club>, me: string, year: number, rng: Rng): AuctionResult[] {
+export function releaseLeavers(clubs: Record<string, Club>, me: string, year: number, rng: Rng, humans: string[] = [me]): AuctionResult[] {
   const club = clubs[me];
   if (!club) return [];
   const out: AuctionResult[] = [];
@@ -248,7 +250,7 @@ export function releaseLeavers(clubs: Record<string, Club>, me: string, year: nu
     if (club.lineup) club.lineup = { xi: club.lineup.xi.filter((x) => x !== p.id), bench: club.lineup.bench.filter((x) => x !== p.id) };
     delete p.morale; delete p.raiseAskedOn; delete p.renewalAsked; delete p.leaving;
     const fee = round1000(playerValue(p) * (0.25 + rng.next() * 0.2));
-    const bidders = Object.values(clubs).filter((c) => c.id !== me && c.players.length < 28 && c.budget >= fee * 1.2);
+    const bidders = Object.values(clubs).filter((c) => !humans.includes(c.id) && c.players.length < 28 && c.budget >= fee * 1.2);
     if (fee > 0 && bidders.length) {
       const buyer = rng.weighted(bidders, (c) => c.reputation + 10);
       buyer.budget -= fee;
@@ -259,7 +261,7 @@ export function releaseLeavers(clubs: Record<string, Club>, me: string, year: nu
       continue;
     }
     // ninguém deu lance: sai de graça para quem tiver vaga
-    const dest = Object.values(clubs).filter((c) => c.id !== me && c.players.length < 28);
+    const dest = Object.values(clubs).filter((c) => !humans.includes(c.id) && c.players.length < 28);
     if (dest.length) rng.pick(dest).players.push(p);
     out.push({ name: p.name, fee: 0, buyer: null });
   }
@@ -302,7 +304,7 @@ export function weakestSpot(club: Club): { position: Position; ovr: number } {
 export function aiTransferDay(ctx: MarketCtx, rng: Rng): AiTransfer | null {
   if (ctx.phase !== 'pre-temporada' && ctx.phase !== 'temporada') return null;
   if (!rng.chance(ctx.phase === 'pre-temporada' ? 0.3 : 0.06)) return null;
-  const ai = Object.values(ctx.clubs).filter((c) => c.id !== ctx.me);
+  const ai = Object.values(ctx.clubs).filter((c) => c.id !== ctx.me && !ctx.humans?.includes(c.id));
   const buyers = ai.filter((c) => c.budget > 60000 && c.players.length < 28);
   if (!buyers.length) return null;
   const buyer = rng.weighted(buyers, (c) => c.budget);

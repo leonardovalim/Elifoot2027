@@ -27,6 +27,8 @@ export interface News {
   date: IsoDate;
   kind: NewsKind;
   text: string;
+  /** Multijogador: de qual técnico é a notícia (ausente = de todos). */
+  owner?: number;
 }
 
 export interface PlayedMatch {
@@ -135,6 +137,13 @@ export interface Career {
   monthsInRed?: number;
   /** Janela do meio do campeonato (fim do 1º turno), ausente fora dela. */
   midSeason?: MidSeasonWindow;
+  /**
+   * Multijogador local: estado guardado de cada técnico. O técnico da vez (`active`)
+   * fica "carregado" nos campos de cima (entrepreneur, ledger, decisions...); os
+   * outros esperam aqui. Ausente = um jogador só.
+   */
+  managers?: Manager[];
+  active?: number;
   /** Copa da temporada (ausente em saves antigos até a próxima temporada). */
   cup?: Cup;
   /** Taça Continental da temporada (ausente em saves antigos até a próxima temporada). */
@@ -260,8 +269,10 @@ export function challengeOptions(c: Career, type: ChallengeType, count = 4): Off
   return pool.slice(0, count).map((club) => ({ clubId: club.id, objective: boardObjective(c, club.id), monthlySalary: salaryFor(club) }));
 }
 
-export function acceptOffer(c: Career, offer: Offer) {
+export function acceptOffer(c: Career, offer: Offer): string | null {
   const club = c.clubs[offer.clubId]!;
+  const owner = managerOf(c, offer.clubId);
+  if (owner >= 0 && owner !== activeIndex(c)) return `O ${club.name} já tem técnico.`;
   // a dívida é do clube antigo: o saldo restante é cobrado dele de uma vez
   const old = c.clubs[myClubId(c)];
   if (c.loan && old) old.budget -= c.loan.installment * c.loan.monthsLeft;
@@ -282,6 +293,7 @@ export function acceptOffer(c: Career, offer: Offer) {
   c.decisions = [];
   c.ledger = emptyLedger();
   push(c, 'good', `Você assumiu o ${club.name}. Objetivo da diretoria: ${OBJECTIVE_LABEL[offer.objective].toLowerCase()}.`);
+  return null;
 }
 
 export function startCareer(seed: number, name: string, type: ChallengeType, clubId: string): Career {
@@ -299,8 +311,128 @@ export function startCareer(seed: number, name: string, type: ChallengeType, clu
 export const activeBond = (c: Career): Bond | undefined => c.entrepreneur.bonds[0];
 export const myClubId = (c: Career): string => activeBond(c)?.orgId ?? '';
 
+// ---------------------------------------------------------------- multijogador local
+
+/** O que é de cada técnico (o resto do mundo é compartilhado). */
+export interface Manager {
+  entrepreneur: Entrepreneur;
+  ledger: Ledger;
+  offers: Offer[];
+  unemployed: boolean;
+  autoSubs: boolean;
+  decisions?: Decision[];
+  loan?: Loan;
+  monthsInRed?: number;
+  midSeason?: MidSeasonWindow;
+}
+
+const MANAGER_KEYS = ['entrepreneur', 'ledger', 'offers', 'unemployed', 'autoSubs', 'decisions', 'loan', 'monthsInRed', 'midSeason'] as const;
+export const MAX_MANAGERS = 4;
+
+function snapshotManager(c: Career): Manager {
+  const m = {} as Record<string, unknown>;
+  for (const k of MANAGER_KEYS) if (c[k] !== undefined) m[k] = c[k];
+  return m as unknown as Manager;
+}
+
+function loadManager(c: Career, m: Manager) {
+  const target = c as unknown as Record<string, unknown>;
+  for (const k of MANAGER_KEYS) {
+    const v = (m as unknown as Record<string, unknown>)[k];
+    if (v === undefined) delete target[k]; else target[k] = v;
+  }
+}
+
+export const managerCount = (c: Career) => c.managers?.length ?? 1;
+export const isMultiplayer = (c: Career) => managerCount(c) > 1;
+export const activeIndex = (c: Career) => c.active ?? 0;
+
+/** Passa a vez: guarda o técnico atual e carrega o técnico `i`. */
+export function switchManager(c: Career, i: number) {
+  if (!c.managers || i === activeIndex(c)) return;
+  c.managers[activeIndex(c)] = snapshotManager(c);
+  loadManager(c, c.managers[i]!);
+  c.active = i;
+}
+
+/** Estado de um técnico sem trocar a vez (o da vez vem dos campos de cima). */
+export function managerState(c: Career, i: number): Manager {
+  return i === activeIndex(c) || !c.managers ? snapshotManager(c) : c.managers[i]!;
+}
+
+/** Clube de cada técnico ('' = sem clube). */
+export function managerClubs(c: Career): string[] {
+  return Array.from({ length: managerCount(c) }, (_, i) => managerState(c, i).entrepreneur.bonds[0]?.orgId ?? '');
+}
+
+/** Índice do técnico humano que dirige o clube, ou -1 (IA). */
+export const managerOf = (c: Career, clubId: string) => (clubId ? managerClubs(c).indexOf(clubId) : -1);
+export const isHumanClub = (c: Career, clubId: string) => managerOf(c, clubId) >= 0;
+
+/** De quem são as notícias publicadas agora: índice, null (todos) ou undefined (o da vez). */
+let newsOwner: number | null | undefined;
+
+/** Roda `fn` como se fosse a vez do técnico `i` e volta para quem estava. */
+export function withManager<T>(c: Career, i: number, fn: () => T): T {
+  const prev = activeIndex(c);
+  const prevOwner = newsOwner;
+  switchManager(c, i);
+  newsOwner = i;
+  try { return fn(); } finally { newsOwner = prevOwner; switchManager(c, prev); }
+}
+
+/** Roda `fn` para cada técnico humano, na vez de cada um. */
+export function forEachManager(c: Career, fn: (i: number) => void) {
+  for (let i = 0; i < managerCount(c); i++) withManager(c, i, () => fn(i));
+}
+
+/** Notícias publicadas dentro de `fn` são de todos (resultados gerais, campeões...). */
+function asGlobal<T>(fn: () => T): T {
+  const prev = newsOwner;
+  newsOwner = null;
+  try { return fn(); } finally { newsOwner = prev; }
+}
+
+/** Notícias que o técnico da vez enxerga: as dele e as de todos. */
+export function visibleNews(c: Career): News[] {
+  const me = activeIndex(c);
+  return c.news.filter((n) => n.owner === undefined || n.owner === me);
+}
+
+/** Algum técnico precisa decidir algo (proposta, janela, emprego)? Devolve o índice. */
+export function managerNeedingAttention(c: Career): number {
+  for (let i = 0; i < managerCount(c); i++) {
+    const need = withManager(c, i, () => c.unemployed || !!c.midSeason?.open || !!pendingDecision(c));
+    if (need) return i;
+  }
+  return -1;
+}
+
+export interface NewManager { name: string; type: ChallengeType; clubId: string }
+
+/** Carreira com 2 a 4 técnicos no mesmo aparelho, cada um no seu clube. */
+export function startMultiCareer(seed: number, players: NewManager[]): Career {
+  if (players.length < 1 || players.length > MAX_MANAGERS) throw new Error('De 1 a 4 técnicos');
+  if (new Set(players.map((x) => x.clubId)).size !== players.length) throw new Error('Cada técnico precisa de um clube diferente');
+  const c = newWorld(seed, players[0]!.name);
+  c.managers = players.map((pl) => ({
+    entrepreneur: { name: pl.name, cash: 50000, reputation: CHALLENGES[pl.type].reputation, experience: 0, bonds: [], history: [] },
+    ledger: emptyLedger(), offers: [], unemployed: true, autoSubs: true, decisions: [],
+  }));
+  c.active = 0;
+  loadManager(c, c.managers[0]!);
+  players.forEach((pl, i) => withManager(c, i, () => {
+    const offer = challengeOptions(c, pl.type, 12).find((o) => o.clubId === pl.clubId) ?? {
+      clubId: pl.clubId, objective: boardObjective(c, pl.clubId), monthlySalary: salaryFor(c.clubs[pl.clubId]!),
+    };
+    acceptOffer(c, offer);
+  }));
+  return c;
+}
+
 function push(c: Career, kind: NewsKind, text: string) {
-  c.news.unshift({ date: c.date, kind, text });
+  const owner = !isMultiplayer(c) ? undefined : newsOwner === undefined ? activeIndex(c) : newsOwner ?? undefined;
+  c.news.unshift(owner === undefined ? { date: c.date, kind, text } : { date: c.date, kind, text, owner });
   if (c.news.length > 200) c.news.length = 200;
 }
 
@@ -314,6 +446,7 @@ function marketCtx(c: Career): MarketCtx {
     phase: c.phase,
     clubs: c.clubs,
     me: myClubId(c),
+    humans: managerClubs(c).filter(Boolean),
     decisions: c.decisions,
     push: (kind, text) => push(c, kind, text),
     addSale: (fee) => { c.ledger.sales += fee; },
@@ -347,12 +480,13 @@ export interface DayReport {
 export const cupsOf = (c: Career): Cup[] => [c.cup, c.continental].filter((x): x is Cup => !!x);
 /** Competição de mata-mata com jogos hoje (as datas nunca coincidem). */
 export const cupToday = (c: Career): Cup | undefined => (c.phase === 'temporada' ? cupsOf(c).find((x) => isCupDate(x, c.date)) : undefined);
-export const isCupDay = (c: Career) => { const cup = cupToday(c); return !!cup && aliveInCup(cup, myClubId(c)); };
+/** Dia de copa com algum técnico humano vivo (senão os jogos rodam sozinhos). */
+export const isCupDay = (c: Career) => { const cup = cupToday(c); return !!cup && managerClubs(c).some((id) => aliveInCup(cup, id)); };
 const cupByKind = (c: Career, kind: CupKind | undefined) => (kind === 'continental' ? c.continental : c.cup)!;
 
 /** Próximo jogo de mata-mata do seu clube (a copa que vier primeiro). */
 export function nextCupMatch(c: Career): { cup: Cup; tie: CupTie; date: IsoDate } | undefined {
-  if (c.phase === 'encerramento') return undefined;
+  if (c.phase === 'encerramento' || c.unemployed) return undefined;
   const me = myClubId(c);
   return cupsOf(c)
     .filter((cup) => aliveInCup(cup, me))
@@ -366,47 +500,57 @@ export const isMatchDay = (c: Career) => (c.phase === 'temporada' && c.roundDate
  * (ou simular) a rodada via `prepareRound` + `completeRound`.
  */
 export function advanceDay(c: Career): DayReport {
-  if (c.unemployed) return { date: c.date, gains: [], news: [], pause: 'unemployed' };
+  if (anyUnemployed(c)) return { date: c.date, gains: [], news: [], pause: 'unemployed' };
   if (c.phase === 'encerramento') return { date: c.date, gains: [], news: [], pause: 'season-end' };
   if (isMatchDay(c)) return { date: c.date, gains: [], news: [], pause: 'match' };
+  return asGlobal(() => {
+    const before = c.news.length;
+    const rng = new Rng(c.rngState);
+    c.date = addDays(c.date, 1);
+    const me = myClubId(c);
+    const humans = managerClubs(c);
+    const gainsBy: Record<string, TrainingGain[]> = {};
 
-  const before = c.news.length;
-  const rng = new Rng(c.rngState);
-  c.date = addDays(c.date, 1);
-  const me = myClubId(c);
-  let gains: TrainingGain[] = [];
+    for (const club of Object.values(c.clubs)) {
+      const g = dailyTraining(club, rng);
+      if (humans.includes(club.id)) gainsBy[club.id] = g;
+    }
+    forEachManager(c, () => {
+      const mine = myClubId(c);
+      for (const g of gainsBy[mine] ?? []) {
+        // destaques raros viram notícia; o resto aparece só como "+1" no CT
+        const p = c.clubs[mine]!.players.find((x) => x.id === g.playerId);
+        if (p && p.age <= 21 && overall(p) >= 65 && rng.chance(0.15)) push(c, 'training', `${p.name} (${p.age}) se destaca nos treinos.`);
+      }
+    });
 
-  for (const club of Object.values(c.clubs)) {
-    const g = dailyTraining(club, rng);
-    if (club.id === me) gains = g;
-  }
-  for (const g of gains) {
-    // destaques raros viram notícia; o resto aparece só como "+1" no CT
-    const p = c.clubs[me]!.players.find((x) => x.id === g.playerId);
-    if (p && p.age <= 21 && overall(p) >= 65 && rng.chance(0.15)) push(c, 'training', `${p.name} (${p.age}) se destaca nos treinos.`);
-  }
+    if (dayOf(c.date) === 1) monthly(c);
+    finishWorks(c);
+    // copa sem nenhum técnico humano vivo: a fase roda sozinha e vira notícia
+    const today = cupToday(c);
+    if (today && !humans.some((id) => aliveInCup(today, id))) finishCupRound(c, today, currentTies(today).map((t) => playAiCup(c, t, rng)), rng);
+    forEachManager(c, () => marketDay(marketCtx(c), rng));
+    const t = aiTransferDay(marketCtx(c), rng);
+    if (t) logTransfer(c, t);
+    if (c.phase === 'pre-temporada' && c.date >= addDays(c.roundDates[0]!, -6)) {
+      c.phase = 'temporada';
+      push(c, 'info', `Começa a temporada ${c.season.year}! Primeira rodada: ${formatDate(c.roundDates[0]!)}.`);
+    }
+    if (c.phase === 'entressafra' && c.date >= `${c.season.year}-01-01`) {
+      c.phase = 'pre-temporada';
+      push(c, 'info', `Pré-temporada ${c.season.year}: hora de reforçar o elenco.`);
+    }
 
-  if (dayOf(c.date) === 1) monthly(c);
-  finishWorks(c);
-  // copa sem o seu clube: a fase roda sozinha e vira notícia
-  const today = cupToday(c);
-  if (today && !aliveInCup(today, me)) finishCupRound(c, today, currentTies(today).map((t) => playAiCup(c, t, rng)), rng);
-  const ctx = marketCtx(c);
-  marketDay(ctx, rng);
-  const t = aiTransferDay(ctx, rng);
-  if (t) logTransfer(c, t);
-  if (c.phase === 'pre-temporada' && c.date >= addDays(c.roundDates[0]!, -6)) {
-    c.phase = 'temporada';
-    push(c, 'info', `Começa a temporada ${c.season.year}! Primeira rodada: ${formatDate(c.roundDates[0]!)}.`);
-  }
-  if (c.phase === 'entressafra' && c.date >= `${c.season.year}-01-01`) {
-    c.phase = 'pre-temporada';
-    push(c, 'info', `Pré-temporada ${c.season.year}: hora de reforçar o elenco.`);
-  }
+    c.rngState = rng.snapshot;
+    const fresh = c.news.slice(0, c.news.length - before);
+    return { date: c.date, gains: gainsBy[me] ?? [], news: fresh, pause: isMatchDay(c) ? 'match' : undefined };
+  });
+}
 
-  c.rngState = rng.snapshot;
-  const fresh = c.news.slice(0, c.news.length - before);
-  return { date: c.date, gains, news: fresh, pause: isMatchDay(c) ? 'match' : undefined };
+/** Algum técnico está sem clube (o tempo espera ele escolher uma proposta). */
+export function anyUnemployed(c: Career): boolean {
+  for (let i = 0; i < managerCount(c); i++) if (managerState(c, i).unemployed) return true;
+  return false;
 }
 
 const TV_MONTHLY = [170000, 85000, 42000, 19000];
@@ -511,12 +655,12 @@ function monthlyLoanAndRed(c: Career, club: Club) {
 }
 
 function monthly(c: Career) {
-  const me = myClubId(c);
   for (const club of Object.values(c.clubs)) {
     const wages = club.players.reduce((a, p) => a + p.wage, 0);
     const { tv, sponsor } = fixedMonthlyIncome(c, club.id);
     club.budget += tv + sponsor - wages;
-    if (club.id === me) {
+    const owner = managerOf(c, club.id);
+    if (owner >= 0) withManager(c, owner, () => {
       const bond = activeBond(c)!;
       club.budget -= bond.monthlySalary;
       c.entrepreneur.cash += bond.monthlySalary;
@@ -527,7 +671,7 @@ function monthly(c: Career) {
       monthlyLoanAndRed(c, club);
       const st = financialState(club);
       if (st === 'atencao') push(c, 'money', `Atenção: o caixa não cobre três meses de folha.`);
-    }
+    });
   }
 }
 
@@ -558,6 +702,48 @@ export interface PreparedRound {
   cupKind?: CupKind;
   /** "Copa Mestres · Oitavas de final", para as telas da partida. */
   cupLabel?: string;
+  /** Multijogador: técnico que comanda `match` (o mandante, se os dois forem humanos). */
+  manager?: number;
+  /** Multijogador: partidas dos outros técnicos, jogadas em seguida, uma de cada vez. */
+  queue?: QueuedMatch[];
+}
+
+export interface QueuedMatch {
+  manager: number;
+  match: MatchState;
+  matchRngState: number;
+  division: number;
+}
+
+/** Partidas com técnico humano: cada uma com seu RNG, comandada por um técnico. */
+function humanMatches(c: Career, fixtures: { home: string; away: string; div: number }[], rng: Rng): QueuedMatch[] {
+  const list = fixtures.map((f) => {
+    const mrng = new Rng(rng.int(0, 2 ** 31));
+    const match = createMatch(c.clubs[f.home]!, c.clubs[f.away]!, mrng);
+    for (const side of ['home', 'away'] as const) {
+      const owner = managerOf(c, match[side].clubId);
+      if (owner >= 0) match[side].autoSubs = managerState(c, owner).autoSubs;
+    }
+    const hm = managerOf(c, f.home);
+    return { manager: hm >= 0 ? hm : managerOf(c, f.away), match, matchRngState: mrng.snapshot, division: f.div };
+  });
+  return list.sort((a, b) => a.manager - b.manager);
+}
+
+function fromQueue(base: PreparedRound, q: QueuedMatch[]): PreparedRound {
+  const [first, ...rest] = q;
+  return { ...base, match: first!.match, matchRngState: first!.matchRngState, myDivision: first!.division, manager: first!.manager, queue: rest };
+}
+
+/**
+ * Multijogador: guarda o resultado da partida que acabou e devolve a próxima da fila
+ * (a vez passa para o técnico dela), ou null quando todas foram jogadas.
+ */
+export function nextQueuedMatch(prep: PreparedRound, outcome: FootballOutcome): PreparedRound | null {
+  if (!prep.queue?.length) return null;
+  const sh = shootoutFor(prep, outcome);
+  const played: PlayedMatch = { divisionIndex: prep.myDivision, home: prep.match.home.clubId, away: prep.match.away.clubId, outcome, pens: sh ? [sh.home, sh.away] : undefined };
+  return fromQueue({ ...prep, others: [...prep.others, played] }, prep.queue);
 }
 
 /** Simula todas as partidas da rodada exceto a do jogador, que fica preparada. */
@@ -566,13 +752,13 @@ export function prepareRound(c: Career): PreparedRound {
   if (isCupDay(c)) return prepareCup(c);
   const rng = new Rng(c.rngState);
   const r = c.season.round;
-  const me = myClubId(c);
+  const humans = managerClubs(c);
   const others: PlayedMatch[] = [];
-  let mine: { home: string; away: string; div: number } | undefined;
+  const mine: { home: string; away: string; div: number }[] = [];
 
   c.season.divisions.forEach((div, di) => {
     for (const f of div.rounds[r] ?? []) {
-      if (f.home === me || f.away === me) { mine = { ...f, div: di }; continue; }
+      if (humans.includes(f.home) || humans.includes(f.away)) { mine.push({ ...f, div: di }); continue; }
       const home = c.clubs[f.home]!, away = c.clubs[f.away]!;
       aiPrepare(home); aiPrepare(away);
       const m = createMatch(home, away, rng);
@@ -580,47 +766,46 @@ export function prepareRound(c: Career): PreparedRound {
       others.push({ divisionIndex: di, home: f.home, away: f.away, outcome: toOutcome(m) });
     }
   });
-  if (!mine) throw new Error('Clube do jogador sem partida na rodada');
-  const mrng = new Rng(rng.int(0, 2 ** 31));
+  if (!mine.length) throw new Error('Clube do jogador sem partida na rodada');
+  const q = humanMatches(c, mine, rng);
   c.rngState = rng.snapshot;
-  const match = createMatch(c.clubs[mine.home]!, c.clubs[mine.away]!, mrng);
-  const side = mine.home === me ? 'home' : 'away';
-  match[side].autoSubs = c.autoSubs;
-  return { round: r, match, matchRngState: mrng.snapshot, myDivision: mine.div, others };
+  return fromQueue({ round: r, match: q[0]!.match, matchRngState: 0, myDivision: 0, others }, q);
 }
 
 /** Consolida a rodada: resultados, finanças, condição, suspensões e avança o dia. */
 export function completeRound(c: Career, prep: PreparedRound, mine: FootballOutcome): RoundRecord {
+  if (prep.queue?.length) throw new Error('Ainda há partidas de outros técnicos para jogar');
   if (prep.cup !== undefined) return completeCup(c, prep, mine);
-  const me = myClubId(c);
-  const all: PlayedMatch[] = [
-    ...prep.others,
-    { divisionIndex: prep.myDivision, home: prep.match.home.clubId, away: prep.match.away.clubId, outcome: mine },
-  ];
-  const byDiv: Result[][] = c.season.divisions.map(() => []);
-  const rng = new Rng(c.rngState);
-  let myGains: TrainingGain[] = [];
-  for (const m of all) {
-    const o = m.outcome;
-    byDiv[m.divisionIndex]!.push({ home: m.home, away: m.away, homeScore: o.homeScore, awayScore: o.awayScore });
-    myGains = matchEffects(c, m, rng, me, true) ?? myGains;
-  }
-  c.season.divisions.forEach((d, i) => d.results.push(byDiv[i]!));
-  c.rngState = rng.snapshot;
+  return asGlobal(() => {
+    const all: PlayedMatch[] = [
+      ...prep.others,
+      { divisionIndex: prep.myDivision, home: prep.match.home.clubId, away: prep.match.away.clubId, outcome: mine },
+    ];
+    const byDiv: Result[][] = c.season.divisions.map(() => []);
+    const rng = new Rng(c.rngState);
+    const gainsBy: Record<string, TrainingGain[]> = {};
+    for (const m of all) {
+      const o = m.outcome;
+      byDiv[m.divisionIndex]!.push({ home: m.home, away: m.away, homeScore: o.homeScore, awayScore: o.awayScore });
+      Object.assign(gainsBy, matchEffects(c, m, rng, true));
+    }
+    c.season.divisions.forEach((d, i) => d.results.push(byDiv[i]!));
+    c.rngState = rng.snapshot;
 
-  const record: RoundRecord = { round: prep.round + 1, date: c.date, matches: all };
-  pushMyResult(c, all, myGains, '');
+    const record: RoundRecord = { round: prep.round + 1, date: c.date, matches: all };
+    forEachManager(c, () => pushMyResult(c, all, gainsBy[myClubId(c)] ?? [], ''));
 
-  c.season.round++;
-  c.lastRound = record;
-  if (c.season.round === Math.floor(c.roundDates.length / 2)) openMidSeasonWindow(c);
-  if (c.season.round >= c.roundDates.length) {
-    c.phase = 'encerramento';
-    push(c, 'info', 'Fim da temporada! Hora do balanço.');
-  } else {
-    c.date = addDays(c.date, 1);
-  }
-  return record;
+    c.season.round++;
+    c.lastRound = record;
+    if (c.season.round === Math.floor(c.roundDates.length / 2)) forEachManager(c, () => openMidSeasonWindow(c));
+    if (c.season.round >= c.roundDates.length) {
+      c.phase = 'encerramento';
+      push(c, 'info', 'Fim da temporada! Hora do balanço.');
+    } else {
+      c.date = addDays(c.date, 1);
+    }
+    return record;
+  });
 }
 
 /** Notícia do resultado do jogador e dos atletas que cresceram com a atuação. */
@@ -641,32 +826,38 @@ function pushMyResult(c: Career, all: PlayedMatch[], myGains: TrainingGain[], pr
  * bilheteria e torcida. Na copa (`league = false`) não conta para as estatísticas.
  * Devolve os ganhos de treino do clube do jogador, se ele jogou.
  */
-function matchEffects(c: Career, m: PlayedMatch, rng: Rng, me: string, league: boolean): TrainingGain[] | null {
-  let myGains: TrainingGain[] | null = null;
-  {
-    const o = m.outcome;
-    const goals: Record<string, number> = {};
-    for (const e of o.events) if (e.type === 'goal') goals[e.playerId] = (goals[e.playerId] ?? 0) + 1;
-    const home = c.clubs[m.home]!, away = c.clubs[m.away]!;
-    const injuries = o.injuries ?? {};
-    const mine = home.id === me ? home : away.id === me ? away : null;
-    const healing = mine ? mine.players.filter((p) => p.injured === 1 && !injuries[p.id]).map((p) => p.name) : [];
-    const gh = applyMatch(home, o.played.home, o.ratings, o.conditionAfter, o.sentOff, goals, rng, injuries, league);
-    const ga = applyMatch(away, o.played.away, o.ratings, o.conditionAfter, o.sentOff, goals, rng, injuries, league);
-    if (mine) {
-      for (const p of mine.players) {
+function matchEffects(c: Career, m: PlayedMatch, rng: Rng, league: boolean): Record<string, TrainingGain[]> {
+  const gainsBy: Record<string, TrainingGain[]> = {};
+  const o = m.outcome;
+  const goals: Record<string, number> = {};
+  for (const e of o.events) if (e.type === 'goal') goals[e.playerId] = (goals[e.playerId] ?? 0) + 1;
+  const home = c.clubs[m.home]!, away = c.clubs[m.away]!;
+  const injuries = o.injuries ?? {};
+  // quem volta de lesão: medido antes de a partida descontar a rodada
+  const healing = (club: Club) => club.players.filter((p) => p.injured === 1 && !injuries[p.id]).map((p) => p.name);
+  const healed = { home: healing(home), away: healing(away) };
+  const gh = applyMatch(home, o.played.home, o.ratings, o.conditionAfter, o.sentOff, goals, rng, injuries, league);
+  const ga = applyMatch(away, o.played.away, o.ratings, o.conditionAfter, o.sentOff, goals, rng, injuries, league);
+  const income = gate(home, away);
+  for (const side of ['home', 'away'] as const) {
+    const club = side === 'home' ? home : away;
+    const owner = managerOf(c, club.id);
+    if (owner < 0) continue;
+    gainsBy[club.id] = side === 'home' ? gh : ga;
+    withManager(c, owner, () => {
+      for (const p of club.players) {
         const r = injuries[p.id];
         if (r) push(c, 'bad', `${p.name} se lesionou e fica fora por ${r} ${r === 1 ? 'rodada' : 'rodadas'}.`);
       }
-      if (healing.length) push(c, 'good', `Recuperado${healing.length > 1 ? 's' : ''} de lesão: ${healing.join(', ')}.`);
-    }
-    if (home.id === me) { myGains = gh; moraleAfterMatch(home, o.played.home); }
-    if (away.id === me) { myGains = ga; moraleAfterMatch(away, o.played.away); }
-    gate(c, home, away, m.divisionIndex, me);
-    fansAfterMatch(home, o.homeScore - o.awayScore);
-    fansAfterMatch(away, o.awayScore - o.homeScore);
+      const back = healed[side];
+      if (back.length) push(c, 'good', `Recuperado${back.length > 1 ? 's' : ''} de lesão: ${back.join(', ')}.`);
+      moraleAfterMatch(club, o.played[side]);
+      if (side === 'home') c.ledger.gate += income;
+    });
   }
-  return myGains;
+  fansAfterMatch(home, o.homeScore - o.awayScore);
+  fansAfterMatch(away, o.awayScore - o.homeScore);
+  return gainsBy;
 }
 
 // ---------------------------------------------------------------- mercado entre clubes
@@ -678,11 +869,13 @@ const NEWS_FEE = 2500000;
 function logTransfer(c: Career, t: AiTransfer) {
   (c.transfers ??= []).unshift(t);
   c.transfers.length = Math.min(c.transfers.length, TRANSFER_LOG);
-  const d = divisionOf(c, myClubId(c));
-  const mine = d >= 0 && divisionOf(c, t.to) === d;
-  if (t.fee >= NEWS_FEE || mine) {
-    push(c, 'info', `Mercado: o ${c.clubs[t.to]!.name} contratou ${t.playerName} (${t.ovr}) do ${c.clubs[t.from]!.name} por ${fmtMoney(t.fee)}.`);
-  }
+  const text = `Mercado: o ${c.clubs[t.to]!.name} contratou ${t.playerName} (${t.ovr}) do ${c.clubs[t.from]!.name} por ${fmtMoney(t.fee)}.`;
+  if (t.fee >= NEWS_FEE) { push(c, 'info', text); return; }
+  // reforço de um rival da divisão: notícia só para quem disputa com ele
+  forEachManager(c, () => {
+    const d = divisionOf(c, myClubId(c));
+    if (d >= 0 && divisionOf(c, t.to) === d) push(c, 'info', text);
+  });
 }
 
 // ---------------------------------------------------------------- copa
@@ -701,14 +894,15 @@ function playAiCup(c: Career, t: CupTie, rng: Rng): PlayedMatch {
 function prepareCup(c: Career): PreparedRound {
   const cup = cupToday(c)!;
   const rng = new Rng(c.rngState);
-  const me = myClubId(c);
-  const mine = tieOf(cup, me)!;
-  const others = currentTies(cup).filter((t) => t !== mine).map((t) => playAiCup(c, t, rng));
-  const mrng = new Rng(rng.int(0, 2 ** 31));
+  const humans = managerClubs(c);
+  const isMine = (t: CupTie) => humans.includes(t.home) || humans.includes(t.away);
+  const others = currentTies(cup).filter((t) => !isMine(t)).map((t) => playAiCup(c, t, rng));
+  const q = humanMatches(c, currentTies(cup).filter(isMine).map((t) => ({ home: t.home, away: t.away, div: -1 })), rng);
   c.rngState = rng.snapshot;
-  const match = createMatch(c.clubs[mine.home]!, c.clubs[mine.away]!, mrng);
-  match[mine.home === me ? 'home' : 'away'].autoSubs = c.autoSubs;
-  return { round: c.season.round, match, matchRngState: mrng.snapshot, myDivision: -1, others, cup: cup.round, cupKind: cupKind(cup), cupLabel: `${cupName(cup)} · ${stageName(cup, cup.round)}` };
+  return fromQueue({
+    round: c.season.round, match: q[0]!.match, matchRngState: 0, myDivision: -1, others,
+    cup: cup.round, cupKind: cupKind(cup), cupLabel: `${cupName(cup)} · ${stageName(cup, cup.round)}`,
+  }, q);
 }
 
 /**
@@ -716,44 +910,52 @@ function prepareCup(c: Career): PreparedRound {
  * pós-jogo e a consolidação chegam ao mesmo resultado.
  */
 export function myShootout(prep: PreparedRound, o: FootballOutcome): Shootout | null {
+  return shootoutFor(prep, o);
+}
+
+function shootoutFor(prep: PreparedRound, o: FootballOutcome): Shootout | null {
   if (prep.cup === undefined || o.homeScore !== o.awayScore) return null;
   return shootout(prep.match, new Rng((prep.matchRngState ^ 0x9e3779b9) >>> 0));
 }
 
 function completeCup(c: Career, prep: PreparedRound, mine: FootballOutcome): RoundRecord {
-  const sh = myShootout(prep, mine);
-  const own: PlayedMatch = { divisionIndex: -1, home: prep.match.home.clubId, away: prep.match.away.clubId, outcome: mine, pens: sh ? [sh.home, sh.away] : undefined };
-  const all = [...prep.others, own];
-  const rng = new Rng(c.rngState);
-  const cup = cupByKind(c, prep.cupKind);
-  const phase = cup.round;
-  finishCupRound(c, cup, all, rng);
-  c.rngState = rng.snapshot;
-  c.date = addDays(c.date, 1);
-  return { round: prep.round, date: addDays(c.date, -1), matches: all, cup: phase, cupKind: cupKind(cup) };
+  return asGlobal(() => {
+    const sh = shootoutFor(prep, mine);
+    const own: PlayedMatch = { divisionIndex: -1, home: prep.match.home.clubId, away: prep.match.away.clubId, outcome: mine, pens: sh ? [sh.home, sh.away] : undefined };
+    const all = [...prep.others, own];
+    const rng = new Rng(c.rngState);
+    const cup = cupByKind(c, prep.cupKind);
+    const phase = cup.round;
+    finishCupRound(c, cup, all, rng);
+    c.rngState = rng.snapshot;
+    c.date = addDays(c.date, 1);
+    return { round: prep.round, date: addDays(c.date, -1), matches: all, cup: phase, cupKind: cupKind(cup) };
+  });
 }
 
 /** Consolida uma fase da copa: efeitos das partidas, prêmios, notícias e o sorteio seguinte. */
 function finishCupRound(c: Career, cup: Cup, all: PlayedMatch[], rng: Rng) {
-  const me = myClubId(c);
   const phase = cup.round;
   const name = stageName(cup, phase);
   const CUP = cupName(cup);
   const prizes = cupPrizes(cup);
-  let myGains: TrainingGain[] = [];
+  const gainsBy: Record<string, TrainingGain[]> = {};
   for (const m of all) {
-    myGains = matchEffects(c, m, rng, me, false) ?? myGains;
+    Object.assign(gainsBy, matchEffects(c, m, rng, false));
     const t = currentTies(cup).find((x) => x.home === m.home && x.away === m.away)!;
     settleTie(t, m.outcome.homeScore, m.outcome.awayScore, m.pens);
     const prize = prizes[phase]!;
     c.clubs[t.winner!]!.budget += prize;
-    if (t.winner === me) c.ledger.prizes += prize;
+    const owner = managerOf(c, t.winner!);
+    if (owner >= 0) withManager(c, owner, () => { c.ledger.prizes += prize; });
   }
-  const mineTie = currentTies(cup).find((t) => t.home === me || t.away === me);
-  if (mineTie && all.some((m) => m.home === me || m.away === me)) {
+  const last = phase === cupStages(cup).length - 1;
+  forEachManager(c, () => {
+    const me = myClubId(c);
+    const mineTie = currentTies(cup).find((t) => t.home === me || t.away === me);
+    if (!mineTie || !all.some((m) => m.home === me || m.away === me)) return;
     const pens = mineTie.pens ? ` (pênaltis ${mineTie.home === me ? `${mineTie.pens[0]} x ${mineTie.pens[1]}` : `${mineTie.pens[1]} x ${mineTie.pens[0]}`})` : '';
-    pushMyResult(c, all, myGains, `${CUP}, ${name}: `);
-    const last = phase === cupStages(cup).length - 1;
+    pushMyResult(c, all, gainsBy[me] ?? [], `${CUP}, ${name}: `);
     if (mineTie.winner === me) {
       push(c, 'good', last
         ? `🏆 Campeão da ${CUP}${pens}! Prêmio de ${fmtMoney(prizes[phase]!)}.`
@@ -761,26 +963,35 @@ function finishCupRound(c: Career, cup: Cup, all: PlayedMatch[], rng: Rng) {
     } else {
       push(c, 'bad', `Eliminado da ${CUP} ${cupIn(cup, phase)}${pens}.`);
     }
-  }
+  });
   const { finished } = advanceCup(cup, cupKind(cup) === 'copa' ? c.season.divisions.map((d) => d.teamIds) : [], rng);
   if (finished) {
     const champ = c.clubs[cup.championId!]!;
     champ.titles.push({ year: cup.year, competition: CUP });
-    if (champ.id !== me) push(c, 'info', `${champ.name} é campeão da ${CUP} ${cup.year}.`);
+    // o campeão humano já recebeu a notícia dele; os outros ficam sabendo aqui
+    const owner = managerOf(c, champ.id);
+    forEachManager(c, (i) => { if (i !== owner) push(c, 'info', `${champ.name} é campeão da ${CUP} ${cup.year}.`); });
     return;
   }
-  const next = tieOf(cup, me);
-  if (next) {
+  forEachManager(c, () => {
+    const me = myClubId(c);
+    const next = tieOf(cup, me);
+    if (!next) return;
     const opp = c.clubs[next.home === me ? next.away : next.home]!;
     push(c, 'info', `Sorteio da ${CUP}: ${stageName(cup, cup.round)} contra o ${opp.name}, ${next.home === me ? 'em casa' : 'fora'}, em ${formatDate(cup.dates[cup.round]!)}.`);
-  }
+  });
 }
 
 /** Atalho (GD-04): simula a rodada inteira sem assistir. */
 export function simulateRound(c: Career): RoundRecord {
-  const prep = prepareRound(c);
-  runToEnd(prep.match, liveRng(prep));
-  return completeRound(c, prep, toOutcome(prep.match));
+  let prep = prepareRound(c);
+  for (;;) {
+    runToEnd(prep.match, liveRng(prep));
+    const o = toOutcome(prep.match);
+    const next = nextQueuedMatch(prep, o);
+    if (!next) return completeRound(c, prep, o);
+    prep = next;
+  }
 }
 
 /** RNG para avançar a partida do jogador ao vivo (mesma sequência do simulateRound). */
@@ -788,13 +999,10 @@ export function liveRng(prep: PreparedRound): Rng {
   return new Rng(prep.matchRngState);
 }
 
-function gate(c: Career, home: Club, away: Club, division: number, me: string) {
-  const demand = home.fans * (1 + (away.fans / (home.fans + away.fans)) * 0.5);
-  const attendance = Math.min(home.stadium, Math.round(demand * (30 / (home.ticketPrice + 20))));
-  const income = attendance * home.ticketPrice;
+function gate(home: Club, away: Club): number {
+  const income = lastAttendance(home, away) * home.ticketPrice;
   home.budget += income;
-  if (home.id === me) c.ledger.gate += income;
-  void division;
+  return income;
 }
 
 export function lastAttendance(home: Club, away: Club): number {
@@ -863,7 +1071,6 @@ export function startWork(c: Career, kind: Work['kind']): string | null {
 }
 
 function finishWorks(c: Career) {
-  const me = myClubId(c);
   for (const club of Object.values(c.clubs)) {
     if (!club.works?.length) continue;
     const done = club.works.filter((w) => w.doneOn <= c.date);
@@ -872,11 +1079,10 @@ function finishWorks(c: Career) {
     for (const w of done) {
       if (w.kind === 'stadium') club.stadium += w.seats ?? 0;
       else club.trainingCenter = Math.max(club.trainingCenter, w.level ?? club.trainingCenter);
-      if (club.id === me) {
-        push(c, 'good', w.kind === 'stadium'
-          ? `Obra concluída: o ${club.stadiumName} agora tem ${club.stadium.toLocaleString('pt-BR')} lugares.`
-          : `Obra concluída: CT nível ${club.trainingCenter}. Treinos e base melhoram.`);
-      }
+      const owner = managerOf(c, club.id);
+      if (owner >= 0) withManager(c, owner, () => push(c, 'good', w.kind === 'stadium'
+        ? `Obra concluída: o ${club.stadiumName} agora tem ${club.stadium.toLocaleString('pt-BR')} lugares.`
+        : `Obra concluída: CT nível ${club.trainingCenter}. Treinos e base melhoram.`));
     }
   }
 }
@@ -925,104 +1131,129 @@ export function seasonSummary(c: Career): SeasonSummary {
 
 /** Fecha a temporada: premiação, avaliação, acesso/queda, envelhecimento, nova tabela e ofertas. */
 export function closeSeason(c: Career): SeasonSummary {
-  c.midSeason = undefined;
-  const sum = seasonSummary(c);
-  const rng = new Rng(c.rngState);
-  const me = myClubId(c);
-  const myClub = c.clubs[me]!;
-  const year = c.season.year;
-  const e = c.entrepreneur;
+  return closeSeasonAll(c)[activeIndex(c)]!;
+}
 
-  // premiação e campeões
-  c.season.divisions.forEach((d, di) => {
-    const table = divisionStandings(d, football.points);
-    table.forEach((row, i) => {
-      const prize = PRIZE[di]?.[i] ?? 0;
-      c.clubs[row.teamId]!.budget += prize;
-      const club = c.clubs[row.teamId]!;
-      club.reputation = Math.max(1, Math.min(99, club.reputation + (i < 2 ? 2 : i >= table.length - 2 ? -2 : 0)));
-      const swing = i === 0 ? 1.12 : i < 2 ? 1.07 : i >= table.length - 2 ? 0.9 : 1;
-      club.fans = Math.max(MIN_FANS, Math.round(club.fans * swing));
+/**
+ * Fecha a temporada: premiação, avaliação de cada técnico, acesso/queda,
+ * envelhecimento, nova tabela, copas e ofertas. Devolve o balanço de cada técnico
+ * (sem clube = sem balanço; o índice segue o dos técnicos).
+ */
+export function closeSeasonAll(c: Career): SeasonSummary[] {
+  return asGlobal(() => {
+    const sums: SeasonSummary[] = [];
+    forEachManager(c, (i) => { c.midSeason = undefined; if (!c.unemployed) sums[i] = seasonSummary(c); });
+    const rng = new Rng(c.rngState);
+    const year = c.season.year;
+    const humanDivs = new Set(sums.filter(Boolean).map((x) => x.division));
+
+    // premiação e campeões
+    c.season.divisions.forEach((d, di) => {
+      const table = divisionStandings(d, football.points);
+      table.forEach((row, i) => {
+        const prize = PRIZE[di]?.[i] ?? 0;
+        c.clubs[row.teamId]!.budget += prize;
+        const club = c.clubs[row.teamId]!;
+        club.reputation = Math.max(1, Math.min(99, club.reputation + (i < 2 ? 2 : i >= table.length - 2 ? -2 : 0)));
+        const swing = i === 0 ? 1.12 : i < 2 ? 1.07 : i >= table.length - 2 ? 0.9 : 1;
+        club.fans = Math.max(MIN_FANS, Math.round(club.fans * swing));
+      });
+      const champ = c.clubs[table[0]!.teamId]!;
+      champ.titles.push({ year, competition: `Divisão ${di + 1}` });
+      const scorer = d.teamIds
+        .flatMap((id) => c.clubs[id]!.players.map((p) => ({ p, club: c.clubs[id]!.name })))
+        .sort((a, b) => b.p.stats.goals - a.p.stats.goals)[0];
+      c.awards.unshift({
+        year, division: di + 1, championId: champ.id, championName: champ.name,
+        topScorer: scorer && scorer.p.stats.goals > 0 ? { name: scorer.p.name, club: scorer.club, goals: scorer.p.stats.goals } : undefined,
+      });
+      push(c, humanDivs.has(di) ? 'good' : 'info', `${year}: ${champ.name} é campeão da Divisão ${di + 1}.`);
     });
-    const champ = c.clubs[table[0]!.teamId]!;
-    champ.titles.push({ year, competition: `Divisão ${di + 1}` });
-    const scorer = d.teamIds
-      .flatMap((id) => c.clubs[id]!.players.map((p) => ({ p, club: c.clubs[id]!.name })))
-      .sort((a, b) => b.p.stats.goals - a.p.stats.goals)[0];
-    c.awards.unshift({
-      year, division: di + 1, championId: champ.id, championName: champ.name,
-      topScorer: scorer && scorer.p.stats.goals > 0 ? { name: scorer.p.name, club: scorer.club, goals: scorer.p.stats.goals } : undefined,
+
+    // avaliação de cada técnico
+    forEachManager(c, (i) => {
+      const sum = sums[i];
+      if (!sum) return;
+      const e = c.entrepreneur;
+      c.ledger.prizes += sum.prize;
+      e.history.unshift({ year, orgName: c.clubs[myClubId(c)]!.name, division: sum.division + 1, position: sum.position, objective: sum.objective, achieved: sum.achieved });
+      e.reputation = Math.max(0, Math.min(100, e.reputation + sum.reputationDelta));
+      e.experience = Math.min(100, e.experience + 6 + (sum.achieved ? 4 : 0));
+      if (sum.achieved) {
+        const bonus = activeBond(c)!.monthlySalary * 3;
+        e.cash += bonus;
+        push(c, 'good', `Objetivo cumprido! Bônus de ${fmtMoney(bonus)} no seu patrimônio.`);
+      } else if (!sum.fired) {
+        push(c, 'bad', 'Objetivo não cumprido. A diretoria mantém você, mas a pressão aumenta.');
+      }
     });
-    push(c, di === sum.division ? 'good' : 'info', `${year}: ${champ.name} é campeão da Divisão ${di + 1}.`);
-  });
-  c.ledger.prizes += sum.prize;
 
-  // avaliação do empreendedor
-  e.history.unshift({ year, orgName: myClub.name, division: sum.division + 1, position: sum.position, objective: sum.objective, achieved: sum.achieved });
-  e.reputation = Math.max(0, Math.min(100, e.reputation + sum.reputationDelta));
-  e.experience = Math.min(100, e.experience + 6 + (sum.achieved ? 4 : 0));
-  if (sum.achieved) {
-    const bonus = activeBond(c)!.monthlySalary * 3;
-    e.cash += bonus;
-    push(c, 'good', `Objetivo cumprido! Bônus de ${fmtMoney(bonus)} no seu patrimônio.`);
-  } else if (!sum.fired) {
-    push(c, 'bad', 'Objetivo não cumprido. A diretoria mantém você, mas a pressão aumenta.');
-  }
-
-  // os 4 primeiros da elite vão à Taça Continental do ano que vem
-  const elite = divisionStandings(c.season.divisions[0]!, football.points).map((r) => r.teamId);
-  // acesso e rebaixamento
-  const next = promoteAndRelegate(c.season, football.points);
-  // quem não renovou vai a leilão antes da renovação automática
-  for (const a of releaseLeavers(c.clubs, me, year, rng)) {
-    if (a.buyer) {
-      c.ledger.sales += a.fee;
-      push(c, 'money', `Leilão: ${a.name} foi arrematado pelo ${a.buyer} por ${fmtMoney(a.fee)}.`);
-    } else {
-      push(c, 'info', `Leilão sem lances: ${a.name} saiu de graça.`);
+    // os 4 primeiros da elite vão à Taça Continental do ano que vem
+    const elite = divisionStandings(c.season.divisions[0]!, football.points).map((r) => r.teamId);
+    // acesso e rebaixamento
+    const next = promoteAndRelegate(c.season, football.points);
+    // quem não renovou vai a leilão antes da renovação automática
+    const humans = managerClubs(c).filter(Boolean);
+    forEachManager(c, () => {
+      for (const a of releaseLeavers(c.clubs, myClubId(c), year, rng, humans)) {
+        if (a.buyer) {
+          c.ledger.sales += a.fee;
+          push(c, 'money', `Leilão: ${a.name} foi arrematado pelo ${a.buyer} por ${fmtMoney(a.fee)}.`);
+        } else {
+          push(c, 'info', `Leilão sem lances: ${a.name} saiu de graça.`);
+        }
+      }
+      c.decisions = [];
+    });
+    // evolução de fim de ciclo
+    c.season.divisions.forEach((d, di) => {
+      for (const id of d.teamIds) {
+        const { youth } = endOfSeason(c.clubs[id]!, divisionLevel(di), year, rng);
+        const owner = managerOf(c, id);
+        if (owner >= 0 && youth.length) withManager(c, owner, () => push(c, 'training', `Subiram da base: ${youth.map((p) => p.name).join(', ')}.`));
+      }
+    });
+    // estrangeiros também envelhecem e renovam; a base deles é do próprio país
+    for (const club of Object.values(c.clubs)) {
+      if (!club.country) continue;
+      const { youth } = endOfSeason(club, divisionLevel(0) - 1, year, rng);
+      for (const p of youth) naturalize(p, club.country, rng);
     }
-  }
-  c.decisions = [];
-  // evolução de fim de ciclo
-  c.season.divisions.forEach((d, di) => {
-    for (const id of d.teamIds) {
-      const { youth } = endOfSeason(c.clubs[id]!, divisionLevel(di), year, rng);
-      if (id === me && youth.length) push(c, 'training', `Subiram da base: ${youth.map((p) => p.name).join(', ')}.`);
+
+    c.season = createSeason(year + 1, next);
+    c.roundDates = roundDates(year + 1);
+    c.cup = createCup(year + 1, next, c.clubs, c.roundDates, cupRng(c.seed, year + 1));
+    if (!Object.values(c.clubs).some((x) => x.country)) {
+      // save antigo: os estrangeiros chegam agora
+      for (const f of generateForeignClubs(new Rng((c.seed ^ 0x2f6b) >>> 0))) c.clubs[f.id] = f;
     }
+    c.continental = createContinental(year + 1, continentalEntrants(c.clubs, elite), c.roundDates, cupRng(c.seed, year + 8));
+    const qualified = elite.slice(0, CONTINENTAL_SPOTS);
+    push(c, qualified.some((id) => humans.includes(id)) ? 'good' : 'info', `Classificados para a Taça Continental ${year + 1}: ${qualified.map((id) => c.clubs[id]!.name).join(', ')}.`);
+    c.phase = 'entressafra';
+    c.date = addDays(c.date, 1);
+    c.lastRound = undefined;
+    c.rngState = rng.snapshot;
+
+    // demissões primeiro, ofertas depois: assim ninguém recebe proposta do clube de outro técnico
+    forEachManager(c, (i) => {
+      c.ledger = emptyLedger();
+      const sum = sums[i];
+      if (!sum?.fired) return;
+      const club = c.clubs[myClubId(c)]!;
+      push(c, 'bad', sum.broke ? `Você foi demitido do ${club.name}: a temporada terminou com o caixa negativo.` : `Você foi demitido do ${club.name}.`);
+      c.entrepreneur.bonds = [];
+      c.unemployed = true;
+    });
+    forEachManager(c, (i) => {
+      const sum = sums[i];
+      if (sum && !sum.fired) activeBond(c)!.objective = boardObjective(c, myClubId(c));
+      // sem clube desde antes (demitido e ainda escolhendo) também recebe propostas novas
+      c.offers = generateOffers(c, !sum || sum.fired ? 3 : sum.achieved ? 2 : 0);
+      if (c.offers.length && sum && !sum.fired) push(c, 'good', `Você recebeu ${c.offers.length} proposta(s) de outros clubes.`);
+    });
+    return sums;
   });
-  // estrangeiros também envelhecem e renovam; a base deles é do próprio país
-  for (const club of Object.values(c.clubs)) {
-    if (!club.country) continue;
-    const { youth } = endOfSeason(club, divisionLevel(0) - 1, year, rng);
-    for (const p of youth) naturalize(p, club.country, rng);
-  }
-
-  c.season = createSeason(year + 1, next);
-  c.roundDates = roundDates(year + 1);
-  c.cup = createCup(year + 1, next, c.clubs, c.roundDates, cupRng(c.seed, year + 1));
-  if (!Object.values(c.clubs).some((x) => x.country)) {
-    // save antigo: os estrangeiros chegam agora
-    for (const f of generateForeignClubs(new Rng((c.seed ^ 0x2f6b) >>> 0))) c.clubs[f.id] = f;
-  }
-  c.continental = createContinental(year + 1, continentalEntrants(c.clubs, elite), c.roundDates, cupRng(c.seed, year + 8));
-  const qualified = elite.slice(0, CONTINENTAL_SPOTS);
-  push(c, qualified.includes(me) ? 'good' : 'info', `Classificados para a Taça Continental ${year + 1}: ${qualified.map((id) => c.clubs[id]!.name).join(', ')}.`);
-  c.phase = 'entressafra';
-  c.date = addDays(c.date, 1);
-  c.lastRound = undefined;
-  c.ledger = emptyLedger();
-  c.rngState = rng.snapshot;
-
-  if (sum.fired) {
-    push(c, 'bad', sum.broke ? `Você foi demitido do ${myClub.name}: a temporada terminou com o caixa negativo.` : `Você foi demitido do ${myClub.name}.`);
-    c.entrepreneur.bonds = [];
-    c.unemployed = true;
-  } else {
-    activeBond(c)!.objective = boardObjective(c, me);
-  }
-  c.offers = generateOffers(c, sum.fired ? 3 : sum.achieved ? 2 : 0);
-  if (c.offers.length && !sum.fired) push(c, 'good', `Você recebeu ${c.offers.length} proposta(s) de outros clubes.`);
-  return sum;
 }
 
 // ---------------------------------------------------------------- janela do meio do campeonato
@@ -1053,7 +1284,7 @@ export function openMidSeasonWindow(c: Career) {
   if (position <= 3) {
     // "clube maior" de verdade: de divisão acima; quem já está na 1ª recebe de um rival maior da metade de cima
     const bigger = Object.values(c.clubs)
-      .filter((cl) => cl.id !== me && !cl.country && cl.reputation <= rep + 25 && (d > 0
+      .filter((cl) => cl.id !== me && !cl.country && !isHumanClub(c, cl.id) && cl.reputation <= rep + 25 && (d > 0
         ? divisionOf(c, cl.id) < d
         : cl.reputation > mine.reputation && positionIn(c, cl.id) <= 6))
       .sort((a, b) => a.reputation - b.reputation)
@@ -1068,7 +1299,7 @@ export function openMidSeasonWindow(c: Career) {
     if (di >= DIVISIONS - 1) return []; // a última divisão não tem rebaixamento
     const rows = divisionStandings(div, football.points);
     return rows.slice(-2).map((r) => r.teamId);
-  }).filter((id) => id !== me && c.clubs[id]!.reputation <= rep + 18);
+  }).filter((id) => id !== me && !isHumanClub(c, id) && c.clubs[id]!.reputation <= rep + 18);
   if (inDanger.length && rng.chance(0.3)) { // ~1 em 3 carreiras: convite de crise é evento, não rotina
     const cl = c.clubs[inDanger[rng.int(0, inDanger.length - 1)]!]!;
     offers.push({ clubId: cl.id, objective: 'permanencia', monthlySalary: raise(cl, 1.25), reason: 'crise', clubPosition: positionIn(c, cl.id) });
@@ -1108,7 +1339,7 @@ export function generateOffers(c: Career, count: number): Offer[] {
   const me = myClubId(c);
   const rep = c.entrepreneur.reputation;
   return Object.values(c.clubs)
-    .filter((cl) => cl.id !== me && !cl.country && cl.reputation <= rep + 18)
+    .filter((cl) => cl.id !== me && !cl.country && !isHumanClub(c, cl.id) && cl.reputation <= rep + 18)
     .sort((a, b) => Math.abs(a.reputation - (rep + 8)) - Math.abs(b.reputation - (rep + 8)))
     .slice(0, count)
     .map((cl) => ({ clubId: cl.id, objective: boardObjective(c, cl.id), monthlySalary: salaryFor(cl) }));
@@ -1128,7 +1359,7 @@ export function marketListings(c: Career, limit = 50): Listing[] {
   const all: Listing[] = [];
   const me = myClubId(c);
   for (const club of Object.values(c.clubs)) {
-    if (club.id === me) continue;
+    if (club.id === me || isHumanClub(c, club.id)) continue; // outro técnico humano não vende sem querer
     for (const p of club.players) if (!p.clubLocked) all.push({ player: p, clubId: club.id, price: askingPrice(p) });
   }
   return rng.shuffle(all).slice(0, limit).sort((a, b) => overall(b.player) - overall(a.player));
@@ -1139,6 +1370,7 @@ export function buyPlayer(c: Career, playerId: string, fromClubId: string): stri
   const seller = c.clubs[fromClubId];
   const p = seller?.players.find((x) => x.id === playerId);
   if (!seller || !p) return 'Atleta indisponível.';
+  if (isHumanClub(c, fromClubId)) return `O ${seller.name} é de outro técnico.`;
   if (p.clubLocked) return `${p.name} não sai do ${seller.name} por dinheiro nenhum.`;
   if (me.players.length >= 28) return 'Elenco cheio (máx. 28).';
   if (seller.players.filter((x) => x.position === p.position).length <= (p.position === 'GK' ? 1 : 3))
@@ -1174,7 +1406,7 @@ export function sellPlayer(c: Career, playerId: string): string | null {
   const price = Math.round(playerValue(p) * 0.85 / 1000) * 1000;
   // GD-10: a IA respeita o próprio caixa
   const buyer = Object.values(c.clubs)
-    .filter((cl) => cl.id !== me.id && cl.budget > price * 1.5 && cl.players.length < 28)
+    .filter((cl) => cl.id !== me.id && !isHumanClub(c, cl.id) && cl.budget > price * 1.5 && cl.players.length < 28)
     .sort((a, b) => b.reputation - a.reputation)[0];
   if (!buyer) return 'Nenhum clube pode pagar.';
   me.budget += price;
