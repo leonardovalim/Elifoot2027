@@ -32,6 +32,11 @@ export const TUNING = {
   possessionExponent: 1.1,
   yellowPerMinute: 0.0035,
   directRedPerMinute: 0.000025,
+  /**
+   * Agressividade no desarme: ±5% na defesa de quem marca (DF inteiro e o desarme do MF),
+   * de agressividade 1 a 99. É o lado bom do raçudo (ver `temperament.ts`).
+   */
+  aggressionTackle: 0.05,
   fatiguePerMinute: 0.2,
   maxSubs: 5,
   autoSubCondition: 70,
@@ -86,9 +91,21 @@ function eff(s: SideState, p: Player, pos: Position) {
 
 const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
 
+/** Fator de desarme pela agressividade: 1 na média (50), até ±aggressionTackle nos extremos. */
+const bite = (p: Player) => 1 + (TUNING.aggressionTackle * (p.aggression - 50)) / 50;
+
+/**
+ * Quantas faltas/cartões o time comete em relação à média: média de agressividade
+ * 50 → 1,0; time só de raçudos (~75) → ~1,25; só de fair play (~25) → ~0,75.
+ */
+export function foulRate(players: Pick<Player, 'aggression'>[]): number {
+  if (!players.length) return 1;
+  return (sum(players.map((p) => p.aggression)) / players.length + 50) / 100;
+}
+
 export function sectorPower(s: SideState): SectorPower {
   return {
-    defense: sum(s.DF.map((p) => eff(s, p, 'DF'))) + 0.35 * sum(s.MF.map((p) => p.attrs.tackling * conditionFactor(s.condition[p.id]!))),
+    defense: sum(s.DF.map((p) => eff(s, p, 'DF') * bite(p))) + 0.35 * sum(s.MF.map((p) => p.attrs.tackling * bite(p) * conditionFactor(s.condition[p.id]!))),
     midfield:
       sum(s.MF.map((p) => eff(s, p, 'MF'))) +
       0.25 * sum(s.DF.map((p) => p.attrs.passing)) +
@@ -253,7 +270,9 @@ export function stepMinute(m: MatchState, rng: Rng) {
     const s = m[side];
     const field = outfield(s);
     if (field.length === 0) continue;
-    if (rng.chance(TUNING.yellowPerMinute * field.length * 0.5)) {
+    // time mais agressivo comete mais faltas e leva mais cartões (mesmo número de sorteios: o placar segue determinístico)
+    const rate = foulRate(field);
+    if (rng.chance(TUNING.yellowPerMinute * field.length * 0.5 * rate)) {
       const p = rng.weighted(field, (x) => (x.aggression + 60) * (s.yellows.includes(x.id) ? 0.3 : 1));
       s.stats.fouls++;
       if (s.yellows.includes(p.id)) {
@@ -266,14 +285,14 @@ export function stepMinute(m: MatchState, rng: Rng) {
         bump(s, p.id, -0.3);
         m.events.push({ minute, type: 'yellow', side, playerId: p.id, playerName: p.name });
       }
-    } else if (rng.chance(TUNING.directRedPerMinute * field.length)) {
+    } else if (rng.chance(TUNING.directRedPerMinute * field.length * rate)) {
       const p = rng.weighted(field, (x) => x.aggression ** 2);
       s.stats.fouls++;
       m.events.push({ minute, type: 'red', side, playerId: p.id, playerName: p.name });
       s.sentOff.push(p.id);
       bump(s, p.id, -1.5);
       removeFromPitch(s, p.id);
-    } else if (rng.chance(0.06)) {
+    } else if (rng.chance(0.06 * rate)) {
       s.stats.fouls++;
     }
   }

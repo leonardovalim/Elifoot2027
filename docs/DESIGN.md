@@ -41,7 +41,7 @@ A cada minuto:
 2. **Posse**: decidida pela força do meio-campo, com bônus de mando.
 3. **Chance**: o time com a bola finaliza com probabilidade proporcional a `ataque / (ataque + defesa adversária)`, modulada pela postura dos dois times.
 4. **Finalização**: o finalizador é sorteado (atacantes pesam mais); a conversão compara a finalização dele com o goleiro. Há assistência em ~70% dos gols.
-5. **Disciplina**: o amarelo é ponderado pela agressividade; quem já tem amarelo joga com cautela.
+5. **Disciplina**: o ritmo de faltas e cartões do time cresce com a agressividade média da linha (`foulRate`: média 50 → 1,0; só raçudos ~1,25; só fair play ~0,75). Quem recebe o cartão é sorteado pela agressividade, e quem já tem amarelo joga com cautela. A agressividade também dá até ±5% no desarme (`aggressionTackle`).
 6. **Notas**: começam em 6,0 e sobem ou descem com gols, assistências, defesas, cartões e o resultado. O destaque da partida é a maior nota.
 
 ### Lições do Elifoot 98 (estudo de engenharia reversa)
@@ -65,7 +65,7 @@ O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da 
 | Evolução ±1 pela avaliação da partida | Nota ≥ 7,3 → 50% de chance de +1 num atributo da posição, com notícia; nota ≤ 5 → 15% de chance de −1 |
 | Goleiro evolui mais devagar (sorteio extra de 50%) | Goleiro evolui na metade do ritmo (treino e atuação) |
 | Jogador só evolui dentro de ±5 do nível do time | Acima de nível do time + 5, o ritmo cai para 40% (fator suave, não trava) |
-| Mitos confirmados: agressividade não desarma, torcida é só financeira, não existe moral | Mantidos: agressividade só afeta cartões, e o público só afeta a bilheteria |
+| Mitos confirmados: agressividade não desarma, torcida é só financeira, não existe moral | **Revisto (nov/2026):** a agressividade agora desarma um pouco (±5%) e aumenta as faltas e os cartões do time, para o selo **raçudo** (≥ 70) ser uma troca e não só desvantagem; **fair play** (≤ 30) é o oposto. O público continua afetando só a bilheteria. |
 | Bônus de +3 por titular da mesma nacionalidade | **Não adotado**: o mundo é fictício e o bônus era arbitrário |
 | Sem posse de bola → 5-0-5 dominante | **Corrigido**: a posse vem do meio-campo |
 
@@ -77,6 +77,7 @@ O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da 
 | Vitória mandante / empate | ~44% / ~24% | Elifoot: "mando de campo gigante" |
 | Zebra (time 15 pts mais fraco vence fora) | ~16% | lances de sorte do Elifoot |
 | Amarelos / vermelhos por jogo | ~3,1 / ~0,13 | 3–4 / 0,1–0,2 |
+| Raçudo × fair play (linhas inteiras, mesmo nível) | amarelos 2,1 × 1,1 · vermelhos 0,11 × 0,03 · faltas 9,7 × 4,7 · gols sofridos 1,42 × 1,42 · pts/jogo 1,40 × 1,35 | troca, sem perfil dominante (`tests/balance.test.ts`) |
 | Spread de pts/jogo entre formações | < 0,35 | sem dominante |
 | Nível médio por divisão em 5 temporadas | +2 a +3 | sem inflação (`tests/drift.test.ts`) |
 
@@ -102,6 +103,12 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - **Renovação**: a partir de agosto, até 2 por mês (em novembro, todos os que faltam). O salário pedido sobe com a insatisfação (×1,05 / ×1,2 / ×1,45). Quem é liberado sai de graça no fim da temporada; quem nunca foi consultado renova automaticamente.
 - **Satisfação** (0–100, padrão 70): +3 por jogo disputado, −5 para quem está entre os 13 melhores e fica de fora, −1 para os demais; −3 por mês se mal pago; volta 10% por mês para perto de 60. Por enquanto afeta só as negociações.
 - Medição (5 seeds × 3 desafios, recusando tudo): 0–15 propostas, 0–4 aumentos e 1–6 renovações por temporada.
+
+## Ajuda e selos
+
+- **Como jogar** (`ui/help.tsx`): botão **?** no topo do jogo e **Como jogar** na tela inicial. Assuntos: o jogo, tempo, partida, elenco, mercado, finanças, temporada e selos.
+- **Selos clicáveis**: tocar em qualquer selo de atleta (raçudo, fair play, joia, novo, fim contr., sai, susp., fora de posição, titular) abre a ajuda direto na explicação dele. A área de toque é ampliada por CSS sem mudar o visual.
+- Os textos da ajuda descrevem regras reais do código; ao mudar uma regra, revise o verbete correspondente.
 
 ## Referências e propriedade intelectual
 

@@ -29,6 +29,7 @@ import { expiresThisSeason } from '../../game/market';
 import { track } from '../analytics';
 import { Morale } from './Decisions';
 import { askConfirm } from '../confirm';
+import { Tag, TemperamentTag } from '../help';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -104,12 +105,13 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
                     <td><span className={`st ${st}`}>{st === 'xi' ? 'TIT' : st === 'bench' ? 'RES' : '–'}</span></td>
                     <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
                     <td className="name">
-                      {p.name}
-                      {isNewSigning(p, career.date) && <span className="tag new">novo</span>}
-                      {p.suspended > 0 && <span className="tag bad">susp.</span>}
-                      {playsAt && playsAt !== p.position && <span className="tag warn">de {POS_LABEL[playsAt]}</span>}
-                      {p.age <= 21 && p.potential - overall(p) >= 8 && <span className="tag good">joia</span>}
-                      {p.leaving ? <span className="tag bad">sai</span> : expiresThisSeason(p, career.season.year) && <span className="tag warn" title="Contrato termina no fim da temporada">fim contr.</span>}
+                      <span className="nm">{p.name}</span>
+                      {isNewSigning(p, career.date) && <Tag kind="novo">novo</Tag>}
+                      {p.suspended > 0 && <Tag kind="susp">susp.</Tag>}
+                      {playsAt && playsAt !== p.position && <Tag kind="posicao">de {POS_LABEL[playsAt]}</Tag>}
+                      {isProspect(p) && <Tag kind="joia">joia</Tag>}
+                      <TemperamentTag p={p} />
+                      {p.leaving ? <Tag kind="sai">sai</Tag> : expiresThisSeason(p, career.season.year) && <Tag kind="fim-contrato" title="Contrato termina no fim da temporada">fim contr.</Tag>}
                     </td>
                     <td>{p.age}</td>
                     <td><b>{overall(p)}</b></td>
@@ -170,7 +172,7 @@ function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; cu
 function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void; isNew?: boolean; year?: number }) {
   return (
     <div className="player-card">
-      <h3>{p.name}{isNew && <span className="tag new">novo</span>}</h3>
+      <h3>{p.name}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
       {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
       {ATTR_GROUPS.map((g) => (
@@ -287,7 +289,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                 return (
                   <tr key={l.player.id} className={sel === l.player.id ? 'sel' : ''} onClick={() => { setSel(l.player.id); setBought(null); }}>
                     <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
-                    <td className="name">{l.player.name}{isProspect(l.player) && <span className="tag good">joia</span>}</td>
+                    <td className="name"><span className="nm">{l.player.name}</span>{isProspect(l.player) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={l.player} /></td>
                     <td>{l.player.age}</td>
                     <td><b>{overall(l.player)}</b></td>
                     <td className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{d > 0 ? `+${d}` : d}</td>
@@ -305,7 +307,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
           {selected
             ? <CompareCard key={selected.player.id} listing={selected} club={club} career={career} onBuy={() => buy(selected)} />
             : bought
-              ? <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <span className="tag new">novo</span>.</p>
+              ? <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <Tag kind="novo">novo</Tag>.</p>
               : <p className="hint">Selecione um atleta para ver os atributos lado a lado com os seus.</p>}
         </aside>
       </div>
@@ -326,11 +328,11 @@ function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; cl
 
   return (
     <div className="player-card compare-card">
-      <h3>{p.name}</h3>
+      <h3>{p.name}<TemperamentTag p={p} /></h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · {career.clubs[l.clubId]?.name} · potencial ~{p.potential}</p>
       <p className="verdict">
         Hab <b>{overall(p)}</b> · seria o <b>{ORDINAL[rank] ?? `${rank + 1}º`}</b> {POS_LABEL[p.position]} do elenco
-        {rank === 0 && mine.length > 0 && <span className="tag good">titular</span>}
+        {rank === 0 && mine.length > 0 && <Tag kind="titular">titular</Tag>}
       </p>
       {mine.length > 0 && other && (
         <label className="vs">Comparar com

@@ -29,6 +29,7 @@ import { CareerPanel, FinancePanel, MarketPanel, SquadPanel, TablePanel, type Ac
 import { CtScene, type SceneGain } from './scene/CtScene';
 import { track } from './analytics';
 import { saveCareer } from './storage';
+import { openHelp } from './help';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
 
 type Menu = 'elenco' | 'mercado' | 'tabela' | 'financas' | 'carreira';
@@ -206,6 +207,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             <button key={i} className={`btn sm ${speed === i ? 'on' : ''}`} aria-label={i === 0 ? 'Pausar' : `Velocidade ${i}`} aria-pressed={speed === i} disabled={blocking && i > 0} onClick={() => { if (i === 0) pause(); else { setSpeed(i); track('time_speed', { speed: i }); } }} title={i === 0 ? 'Pausar (espaço)' : `Velocidade ${i}`}>{s}</button>
           ))}
         </div>
+        <button className="btn sm help-btn" aria-label="Ajuda: como jogar" title="Como jogar" onClick={() => { pause(); openHelp(); }}>?</button>
       </header>
 
       <main className="stage" aria-label="Visão geral da carreira">

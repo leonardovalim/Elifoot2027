@@ -278,7 +278,10 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .grid-table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .grid-table th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 700; padding: 4px 6px; border-bottom: 2px solid var(--ink); white-space: nowrap; position: sticky; top: 0; background: var(--paper); }
 .grid-table td { padding: 4px 6px; border-bottom: 2px dotted var(--paper-2); white-space: nowrap; }
-.grid-table td.name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+/* o nome fica numa linha; os selos descem para a linha de baixo quando não cabem (selo cortado não dá para tocar) */
+.grid-table td.name { white-space: normal; min-width: 150px; }
+.grid-table td.name .nm { white-space: nowrap; }
+.grid-table td.name .tag { display: inline-block; white-space: nowrap; line-height: 1.35; margin-top: 1px; }
 .grid-table td.cond { width: 70px; }
 .grid-table tbody tr { cursor: default; }
 .squad .grid-table tbody tr { cursor: pointer; }
@@ -537,3 +540,23 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .sub-error { margin: 6px 0 0; color: var(--bad); font-weight: 700; font-size: 13px; }
 @media (max-width: 560px) { .confirm-actions .btn { flex: 1 1 100%; } }
+
+/* ---------- selos clicáveis e ajuda ---------- */
+.tag.racudo { background: #a63d17; }
+.tag.fairplay { background: #1f6f6a; }
+.tag-help { cursor: help; position: relative; }
+/* alvo de toque maior sem mudar o visual (o playtest lê data-hitslop) */
+.tag-help::after { content: ''; position: absolute; inset: -6px -3px; }
+.tag-help:hover, .tag-help:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.help-btn { min-width: 32px; min-height: 32px; font-weight: 900; font-size: 16px; }
+.help-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.help-body { max-height: min(62vh, 560px); overflow: auto; line-height: 1.5; padding-right: 4px; }
+.help-body p { margin: 0 0 10px; }
+.help-body ul { padding-left: 18px; margin: 8px 0 12px; }
+.help-body li { margin: 5px 0; }
+.help-tags { display: grid; gap: 4px; margin: 10px 0; }
+.help-tags > div { display: grid; grid-template-columns: 88px 1fr; gap: 10px; align-items: baseline; padding: 6px 8px; }
+.help-tags > div.hl { background: var(--paper-2); box-shadow: inset 4px 0 0 var(--tomato); }
+.help-tags dt .tag { margin-left: 0; }
+.help-tags dd { margin: 0; }
+@media (max-width: 560px) { .help-tags > div { grid-template-columns: 74px 1fr; gap: 8px; } }

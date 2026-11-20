@@ -130,3 +130,45 @@ describe('sabor Elifoot 98', () => {
     for (const t of ['goal', 'save', 'post', 'bar', 'miss']) expect(seen.has(t)).toBe(true);
   });
 });
+
+describe('raçudo × fair play', () => {
+  /** A com toda a linha raçuda (85), B fair play (15), mesmo nível; alterna o mando. */
+  function duel(seed = 3) {
+    const rng = new Rng(seed);
+    const r = { yA: 0, yB: 0, redA: 0, redB: 0, gaA: 0, gaB: 0, ptsA: 0, ptsB: 0, foulsA: 0, foulsB: 0 };
+    for (let i = 0; i < N; i++) {
+      const a = generateClub(rng, 'A', 65, ['#000', '#fff']);
+      const b = generateClub(rng, 'B', 65, ['#000', '#fff']);
+      a.players.forEach((p) => { p.aggression = 85; });
+      b.players.forEach((p) => { p.aggression = 15; });
+      const aHome = i % 2 === 0;
+      const o = aHome ? simulateFootballMatch(a, b, rng) : simulateFootballMatch(b, a, rng);
+      const sideA = aHome ? 'home' : 'away';
+      const [ga, gb] = aHome ? [o.homeScore, o.awayScore] : [o.awayScore, o.homeScore];
+      r.gaA += gb; r.gaB += ga;
+      r.ptsA += ga > gb ? 3 : ga === gb ? 1 : 0;
+      r.ptsB += gb > ga ? 3 : ga === gb ? 1 : 0;
+      for (const e of o.events) {
+        if (!('side' in e)) continue;
+        const mine = e.side === sideA;
+        if (e.type === 'yellow') mine ? r.yA++ : r.yB++;
+        if (e.type === 'red') mine ? r.redA++ : r.redB++;
+      }
+      r.foulsA += (aHome ? o.stats.home : o.stats.away).fouls;
+      r.foulsB += (aHome ? o.stats.away : o.stats.home).fouls;
+    }
+    const per = (x: number) => x / N;
+    return { yA: per(r.yA), yB: per(r.yB), redA: per(r.redA), redB: per(r.redB), gaA: per(r.gaA), gaB: per(r.gaB), ptsA: per(r.ptsA), ptsB: per(r.ptsB), foulsA: per(r.foulsA), foulsB: per(r.foulsB) };
+  }
+
+  it('raçudo faz mais faltas e leva mais cartões, mas o desarme compensa; nenhum perfil domina', () => {
+    const d = duel();
+    console.log('raçudo x fair play', d);
+    expect(d.yA).toBeGreaterThan(d.yB * 1.6); // cartões: raçudo ~1,35× a média, fair play ~0,65×
+    expect(d.foulsA).toBeGreaterThan(d.foulsB * 1.6);
+    expect(d.redA).toBeGreaterThan(d.redB * 2); // e é expulso bem mais
+    // o desarme a mais compensa jogar mais vezes com 10: não sofre mais gols que o fair play
+    expect(d.gaA).toBeLessThan(d.gaB * 1.03);
+    expect(Math.abs(d.ptsA - d.ptsB)).toBeLessThan(0.3); // é troca, não tática dominante
+  });
+});

@@ -147,7 +147,10 @@ function pageChecks(isMobile) {
       }
     }
     // um input dentro de <label> é tocado pela área do label inteiro (ex.: checkbox com texto ao lado)
-    const hit = el.closest('label')?.getBoundingClientRect() ?? r;
+    let hit = el.closest('label')?.getBoundingClientRect() ?? r;
+    // data-hitslop="N": a área de toque foi ampliada N px por CSS (::after) sem mudar o visual
+    const slop = Number(el.dataset?.hitslop || 0);
+    if (slop) hit = { width: hit.width + slop, height: hit.height + 2 * slop }; // CSS: inset -N px na vertical, -N/2 na horizontal
     if (isMobile && (hit.width < 24 || hit.height < 24)) {
       issues.push({ kind: 'alvo-pequeno', severity: 'baixa', el: desc(el), detail: `${Math.round(r.width)}×${Math.round(r.height)}px (mínimo recomendado 24×24 para toque)` });
     }
@@ -369,9 +372,33 @@ async function runViewport(browser, vpName, report) {
         await click(page.locator('.dock').getByRole('button', { name: m }));
         await page.getByRole('dialog', { name: m }).waitFor({ timeout: 3000 });
         await check(`menu-${m.toLowerCase()}`);
+        if (m === 'Elenco') {
+          // tocar num selo abre a ajuda direto na explicação dele
+          const tag = page.getByRole('dialog', { name: m }).locator('.tag-help').first();
+          if (await tag.count()) {
+            const label = (await tag.innerText()).trim();
+            await tag.click({ timeout: 3000 });
+            const help = page.getByRole('dialog', { name: 'Como jogar' });
+            await help.waitFor({ timeout: 3000 });
+            if (!(await help.locator('.help-tags .hl').count())) throw new Error(`tocar no selo "${label}" abriu a ajuda sem destacar a explicação dele`);
+            await check('ajuda-selo');
+            await click(help.getByRole('button', { name: 'Fechar' }));
+          }
+        }
         await click(page.getByRole('dialog', { name: m }).getByRole('button', { name: 'Fechar' }));
       });
     }
+    await step('ajuda', async () => {
+      await click(page.getByRole('button', { name: /Ajuda/ }));
+      const help = page.getByRole('dialog', { name: 'Como jogar' });
+      await help.waitFor({ timeout: 3000 });
+      for (const t of await help.locator('.help-nav button').allInnerTexts()) {
+        await click(help.locator('.help-nav').getByRole('button', { name: t, exact: true }));
+        const slug = t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-');
+        await check(`ajuda-${slug}`);
+      }
+      await click(help.getByRole('button', { name: 'Fechar' }));
+    });
     await step('partida', async () => {
       // até o dia de jogo podem surgir decisões (proposta por atleta, aumento, renovação): responde e segue
       const until = Date.now() + 120_000;
