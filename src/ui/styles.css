@@ -480,3 +480,32 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .overlay .window.match-window { max-width: min(1440px, calc(96vw / var(--z))); }
 .match-window .match .feed { height: max(360px, calc(100vh / var(--z) - 400px)); }
 @media (max-width: 900px) { .match-window .match .feed { height: 300px; } }
+
+/* ---------- mercado vivo ---------- */
+.morale { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+.morale b { font-size: 13px; }
+.morale-face { font-size: 16px; line-height: 1; }
+.grid-table td.sat { text-align: center; }
+.decision { display: flex; flex-direction: column; gap: 12px; }
+.decision p { margin: 0; }
+.decision-head { display: flex; gap: 12px; align-items: center; }
+.athlete-ctx { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: var(--paper-2); box-shadow: inset 4px 0 var(--ink); }
+.ctx-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ctx-top .tag { margin-left: 0; }
+.ctx-name { font-size: 17px; }
+.role-pill { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; padding: 2px 7px; box-shadow: 0 0 0 2px var(--ink); }
+.role-pill.xi { background: var(--good); color: #fff; }
+.role-pill.bench { background: var(--mustard); color: var(--ink); }
+.role-pill.out { background: var(--paper); color: var(--muted); }
+.ctx-read { font-weight: 700; }
+.ctx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin: 2px 0 0; }
+.ctx-grid > div { min-width: 0; }
+.ctx-grid > div.wide { grid-column: 1 / -1; }
+.ctx-grid dt { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.ctx-grid dd { margin: 0; font-size: 14px; }
+.decision-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.decision .kv { margin: 0; }
+@media (max-width: 560px) {
+  .ctx-grid { grid-template-columns: minmax(0, 1fr); }
+  .decision-actions .btn { flex: 1 1 100%; }
+}

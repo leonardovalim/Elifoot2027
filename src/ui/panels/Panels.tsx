@@ -18,7 +18,9 @@ import { football } from '../../sports/football/engine';
 import { playerValue } from '../../sports/football/generate';
 import { FORMATIONS, applyMove, overall, pickLineup, planMove, statusOf, type SquadStatus } from '../../sports/football/lineup';
 import type { AttrKey, Club, Formation, Player, Style } from '../../sports/football/types';
+import { expiresThisSeason } from '../../game/market';
 import { track } from '../analytics';
+import { Morale } from './Decisions';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -84,7 +86,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
       <div className="split">
         <div className="scroll">
           <table className="grid-table">
-            <thead><tr><th>Rel.</th><th>Pos</th><th>Atleta</th><th>Id</th><th>Hab</th><th>Cond.</th><th>Jg</th><th>Gols</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Rel.</th><th>Pos</th><th>Atleta</th><th>Id</th><th>Hab</th><th>Cond.</th><th title="Satisfação">Sat.</th><th>Jg</th><th>Gols</th><th>Nota</th></tr></thead>
             <tbody>
               {players.map((p) => {
                 const st = status[p.id]!;
@@ -99,10 +101,12 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
                       {p.suspended > 0 && <span className="tag bad">susp.</span>}
                       {playsAt && playsAt !== p.position && <span className="tag warn">de {POS_LABEL[playsAt]}</span>}
                       {p.age <= 21 && p.potential - overall(p) >= 8 && <span className="tag good">joia</span>}
+                      {p.leaving ? <span className="tag bad">sai</span> : expiresThisSeason(p, career.season.year) && <span className="tag warn" title="Contrato termina no fim da temporada">fim contr.</span>}
                     </td>
                     <td>{p.age}</td>
                     <td><b>{overall(p)}</b></td>
                     <td className="cond"><Bar value={p.condition} /></td>
+                    <td className="sat"><Morale p={p} compact /></td>
                     <td>{p.stats.apps}</td>
                     <td>{p.stats.goals}</td>
                     <td>{p.stats.apps ? (p.stats.ratingSum / p.stats.apps).toFixed(1) : '–'}</td>
@@ -116,7 +120,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
           {selected ? (
             <>
               <LineupActions club={club} p={selected} current={status[selected.id]!} onMove={move} />
-              <PlayerCard p={selected} isNew={isNewSigning(selected, career.date)} onSell={() => {
+              <PlayerCard p={selected} year={career.season.year} isNew={isNewSigning(selected, career.date)} onSell={() => {
                 if (confirm(`Vender ${selected.name} por ~${money(Math.round(playerValue(selected) * 0.85))}?`)) { act((c) => sellPlayer(c, selected.id)); setSel(null); }
               }} />
             </>
@@ -149,11 +153,12 @@ function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; cu
   );
 }
 
-function PlayerCard({ p, onSell, isNew }: { p: Player; onSell?: () => void; isNew?: boolean }) {
+function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void; isNew?: boolean; year?: number }) {
   return (
     <div className="player-card">
       <h3>{p.name}{isNew && <span className="tag new">novo</span>}</h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
+      {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
       {ATTR_GROUPS.map((g) => (
         <div key={g.label} className="attr-group">
           <span className="attr-title">{g.label}</span>
@@ -167,7 +172,7 @@ function PlayerCard({ p, onSell, isNew }: { p: Player; onSell?: () => void; isNe
         <dt>Condição</dt><dd>{Math.round(p.condition)}%</dd>
         <dt>Salário</dt><dd>{money(p.wage)}/mês</dd>
         <dt>Valor</dt><dd>{money(playerValue(p))}</dd>
-        <dt>Contrato</dt><dd>até {p.contractUntil}</dd>
+        <dt>Contrato</dt><dd>até {p.contractUntil}{year !== undefined && (p.leaving ? ' · sai no fim da temporada' : expiresThisSeason(p, year) ? ' · termina nesta temporada' : '')}</dd>
       </dl>
       {onSell && <button className="btn danger" onClick={onSell}>Vender</button>}
     </div>

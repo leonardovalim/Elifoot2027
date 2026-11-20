@@ -45,6 +45,14 @@ export interface Player {
   stats: SeasonStats;
   /** Data de chegada ao clube atual (contratações) — mostra o selo "novo". */
   joinedOn?: string;
+  /** Satisfação 0–100 (ausente = 70). Só é acompanhada no clube do jogador. */
+  morale?: number;
+  /** Último pedido de aumento (data), para não repetir toda hora. */
+  raiseAskedOn?: string;
+  /** Temporada em que já pediu renovação. */
+  renewalAsked?: number;
+  /** Não renovou: deixa o clube ao fim da temporada. */
+  leaving?: boolean;
 }
 
 export type Formation = '4-4-2' | '4-3-3' | '3-5-2' | '5-3-2' | '4-5-1' | '3-4-3' | '5-4-1';
