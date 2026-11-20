@@ -43,6 +43,8 @@ export interface RoundRecord {
 export interface Ledger {
   gate: number;
   tv: number;
+  /** Patrocínio mensal (ausente em saves antigos). */
+  sponsor?: number;
   prizes: number;
   sales: number;
   wages: number;
@@ -129,7 +131,7 @@ export function roundDates(year: number, rounds = 22): IsoDate[] {
   return Array.from({ length: rounds }, (_, i) => addDays(first, i * 14));
 }
 
-const emptyLedger = (): Ledger => ({ gate: 0, tv: 0, prizes: 0, sales: 0, wages: 0, purchases: 0, management: 0 });
+const emptyLedger = (): Ledger => ({ gate: 0, tv: 0, sponsor: 0, prizes: 0, sales: 0, wages: 0, purchases: 0, management: 0 });
 
 export function divisionOf(c: Career, clubId: string): number {
   return c.season.divisions.findIndex((d) => d.teamIds.includes(clubId));
@@ -288,19 +290,42 @@ export function advanceDay(c: Career): DayReport {
 }
 
 const TV_MONTHLY = [170000, 85000, 42000, 19000];
+/** Patrocínio mensal por divisão: a folga que paga contratações e aumentos nas divisões de baixo. */
+const SPONSOR_MONTHLY = [20000, 26000, 26000, 22000];
+
+/** Receitas fixas do mês (TV + patrocínio) de um clube. */
+export function fixedMonthlyIncome(c: Career, clubId: string) {
+  const d = divisionOf(c, clubId);
+  return { tv: TV_MONTHLY[d] ?? 10000, sponsor: SPONSOR_MONTHLY[d] ?? 15000 };
+}
+
+/**
+ * Previsão de um mês típico de temporada para o clube do jogador:
+ * receitas fixas + um jogo em casa − folha − salário do gestor.
+ */
+export function monthlyForecast(c: Career) {
+  const me = myClubId(c);
+  const club = c.clubs[me]!;
+  const { tv, sponsor } = fixedMonthlyIncome(c, me);
+  const gate = lastAttendance(club, club) * club.ticketPrice;
+  const wages = club.players.reduce((a, p) => a + p.wage, 0);
+  const management = activeBond(c)?.monthlySalary ?? 0;
+  const withGame = tv + sponsor + gate - wages - management;
+  return { tv, sponsor, gate, wages, management, withGame, withoutGame: withGame - gate };
+}
 
 function monthly(c: Career) {
   const me = myClubId(c);
   for (const club of Object.values(c.clubs)) {
-    const d = divisionOf(c, club.id);
     const wages = club.players.reduce((a, p) => a + p.wage, 0);
-    const tv = TV_MONTHLY[d] ?? 10000;
-    club.budget += tv - wages;
+    const { tv, sponsor } = fixedMonthlyIncome(c, club.id);
+    club.budget += tv + sponsor - wages;
     if (club.id === me) {
       const bond = activeBond(c)!;
       club.budget -= bond.monthlySalary;
       c.entrepreneur.cash += bond.monthlySalary;
       c.ledger.tv += tv;
+      c.ledger.sponsor = (c.ledger.sponsor ?? 0) + sponsor;
       c.ledger.wages += wages;
       c.ledger.management += bond.monthlySalary;
       const st = financialState(club);
@@ -606,7 +631,7 @@ export function isNewSigning(p: Player, today: IsoDate): boolean {
 }
 
 /** Preço pedido no mercado (o mesmo cobrado em buyPlayer). */
-export const askingPrice = (p: Player) => Math.round(playerValue(p) * 1.25 / 1000) * 1000;
+export const askingPrice = (p: Player) => Math.round(playerValue(p) * 1.15 / 1000) * 1000;
 
 export function sellPlayer(c: Career, playerId: string): string | null {
   const me = c.clubs[myClubId(c)]!;

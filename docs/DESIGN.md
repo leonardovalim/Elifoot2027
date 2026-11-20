@@ -82,10 +82,14 @@ O estudo `desvendando-elifoot-98` documenta fórmulas, mas **não** os pesos da 
 
 ## Economia
 
-- Mensal: folha salarial (valor ÷ 90), cota de TV por divisão (170k, 85k, 42k e 19k), salário do empreendedor.
+- Mensal: folha salarial (valor ÷ 100), cota de TV por divisão (170k, 85k, 42k e 19k), patrocínio por divisão (20k, 26k, 26k e 22k) e salário do empreendedor.
 - Por jogo em casa: bilheteria = público × ingresso, com público elástico ao preço e limitado pelo estádio.
 - Fim de temporada: premiação por posição.
-- Calibração: a elite fica com leve sobra e as divisões inferiores no aperto. Em 3 temporadas simuladas, a mediana do caixa fica estável.
+- Mercado: preço pedido = valor × 1,15; venda direta = valor × 0,85. Caixa inicial = nível³ × 8.
+- Calibração (6 seeds, ano completo com entressafra, sem nenhuma ação): saldo anual sobre a folha anual, mediana de 21% (div. 4) a 28% (div. 1); os 10% piores ficam entre +3% e +14%. Clubes com folha acima da mediana ainda sobram 15–22%. A folga paga um reforço por temporada nas divisões de baixo; gastar além disso leva ao vermelho.
+- Antes (TV sem patrocínio, salário = valor ÷ 90): divisões 2–4 fechavam entre −9% e +4%, sem espaço para contratar nem dar aumento.
+- O painel de finanças mostra a previsão de um mês típico (com e sem jogo em casa).
+- Teste `tests/economy.test.ts`: clube da divisão 4 sem mexer em nada nunca fica negativo na 1ª temporada.
 
 ## Mercado vivo
 

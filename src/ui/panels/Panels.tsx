@@ -7,6 +7,7 @@ import {
   divisionOf,
   financialState,
   marketListings,
+  monthlyForecast,
   myClubId,
   isNewSigning,
   sellPlayer,
@@ -183,16 +184,48 @@ function PlayerCard({ p, onSell, isNew, year }: { p: Player; onSell?: () => void
 
 const ORDINAL = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º', '9º', '10º'];
 
+type AgeBand = 'ALL' | 'young' | 'prime' | 'vet';
+type MarketSort = 'overall' | 'price' | 'age' | 'value';
+interface MarketFilters { pos: 'ALL' | Player['position']; afford: boolean; upgrade: boolean; prospects: boolean; age: AgeBand; sort: MarketSort }
+const DEFAULT_FILTERS: MarketFilters = { pos: 'ALL', afford: false, upgrade: false, prospects: false, age: 'ALL', sort: 'overall' };
+/** Filtros lembrados enquanto o jogo está aberto (reabrir o mercado não perde a busca). */
+let lastFilters: MarketFilters = DEFAULT_FILTERS;
+const AGE_LABEL: Record<AgeBand, string> = { ALL: 'Todas', young: 'Até 23', prime: '24 a 30', vet: '31+' };
+const SORT_LABEL: Record<MarketSort, string> = { overall: 'Melhor habilidade', price: 'Menor preço', age: 'Mais jovem', value: 'Custo-benefício' };
+const inAgeBand = (p: Player, band: AgeBand) => band === 'ALL' || (band === 'young' ? p.age <= 23 : band === 'prime' ? p.age >= 24 && p.age <= 30 : p.age >= 31);
+const isProspect = (p: Player) => p.age <= 21 && p.potential - overall(p) >= 8;
+
 export function MarketPanel({ career, act }: { career: Career; act: Act }) {
-  const [pos, setPos] = useState<'ALL' | Player['position']>('ALL');
+  const [f, setF] = useState<MarketFilters>(lastFilters);
+  const set = (patch: Partial<MarketFilters>) => setF((x) => { const next = { ...x, ...patch }; lastFilters = next; return next; });
+  const pos = f.pos;
   const [sel, setSel] = useState<string | null>(null);
   const [bought, setBought] = useState<string | null>(null);
   const club = career.clubs[myClubId(career)]!;
   const monthKey = career.date.slice(0, 7);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const listings = useMemo(() => marketListings(career, 60), [monthKey, career.clubs[myClubId(career)]!.players.length]);
-  const shown = listings.filter((l) => pos === 'ALL' || l.player.position === pos).filter((l) => career.clubs[l.clubId]?.players.some((p) => p.id === l.player.id));
+  const listings = useMemo(() => marketListings(career, 120), [monthKey, career.clubs[myClubId(career)]!.players.length]);
   const bestMine = (position: Player['position']) => Math.max(0, ...club.players.filter((p) => p.position === position).map(overall));
+  // titular mais fraco de cada posição: quem supera ele "reforça o time"
+  const lineup = pickLineup(club);
+  const weakestStarter: Record<Player['position'], number> = {
+    GK: overall(lineup.GK),
+    DF: Math.min(...lineup.DF.map(overall)),
+    MF: Math.min(...lineup.MF.map(overall)),
+    FW: Math.min(...lineup.FW.map(overall)),
+  };
+  const available = listings.filter((l) => career.clubs[l.clubId]?.players.some((p) => p.id === l.player.id));
+  const shown = available
+    .filter((l) => pos === 'ALL' || l.player.position === pos)
+    .filter((l) => !f.afford || l.price <= club.budget)
+    .filter((l) => !f.upgrade || overall(l.player) > weakestStarter[l.player.position])
+    .filter((l) => !f.prospects || isProspect(l.player))
+    .filter((l) => inAgeBand(l.player, f.age))
+    .sort((a, b) => f.sort === 'price' ? a.price - b.price
+      : f.sort === 'age' ? a.player.age - b.player.age || overall(b.player) - overall(a.player)
+      : f.sort === 'value' ? overall(b.player) ** 3 / b.price - overall(a.player) ** 3 / a.price
+      : overall(b.player) - overall(a.player));
+  const filtered = f.afford || f.upgrade || f.prospects || f.age !== 'ALL' || pos !== 'ALL' || f.sort !== 'overall';
   const selected = shown.find((l) => l.player.id === sel);
   const cardRef = useRevealOnMobile(sel);
 
@@ -207,10 +240,29 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
       <div className="toolbar">
         <div className="chips">
           {(['ALL', 'GK', 'DF', 'MF', 'FW'] as const).map((p) => (
-            <button key={p} className={`chip ${pos === p ? 'on' : ''}`} onClick={() => setPos(p)}>{p === 'ALL' ? 'Todos' : POS_LABEL[p]}</button>
+            <button key={p} className={`chip ${pos === p ? 'on' : ''}`} onClick={() => set({ pos: p })}>{p === 'ALL' ? 'Todos' : POS_LABEL[p]}</button>
           ))}
         </div>
         <span className="hint">Caixa {money(club.budget)} · elenco {club.players.length}/28</span>
+      </div>
+      <div className="market-filters">
+        <div className="chips">
+          <button className={`chip ${f.afford ? 'on' : ''}`} aria-pressed={f.afford} onClick={() => set({ afford: !f.afford })}>💰 Cabe no caixa</button>
+          <button className={`chip ${f.upgrade ? 'on' : ''}`} aria-pressed={f.upgrade} onClick={() => set({ upgrade: !f.upgrade })} title="Melhor que o seu titular mais fraco da posição">⬆ Reforça o time</button>
+          <button className={`chip ${f.prospects ? 'on' : ''}`} aria-pressed={f.prospects} onClick={() => set({ prospects: !f.prospects })} title="Até 21 anos e com potencial bem acima da habilidade atual">💎 Joias</button>
+        </div>
+        <label>Idade
+          <select value={f.age} onChange={(e) => set({ age: e.target.value as AgeBand })}>
+            {(Object.keys(AGE_LABEL) as AgeBand[]).map((a) => <option key={a} value={a}>{AGE_LABEL[a]}</option>)}
+          </select>
+        </label>
+        <label>Ordenar
+          <select value={f.sort} onChange={(e) => set({ sort: e.target.value as MarketSort })}>
+            {(Object.keys(SORT_LABEL) as MarketSort[]).map((s) => <option key={s} value={s}>{SORT_LABEL[s]}</option>)}
+          </select>
+        </label>
+        <span className="hint count">{shown.length} de {available.length} atletas</span>
+        {filtered && <button className="btn sm ghost" onClick={() => set(DEFAULT_FILTERS)}>Limpar filtros</button>}
       </div>
       <div className="split market-split">
         <div className="scroll tall">
@@ -222,7 +274,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                 return (
                   <tr key={l.player.id} className={sel === l.player.id ? 'sel' : ''} onClick={() => { setSel(l.player.id); setBought(null); }}>
                     <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
-                    <td className="name">{l.player.name}</td>
+                    <td className="name">{l.player.name}{isProspect(l.player) && <span className="tag good">joia</span>}</td>
                     <td>{l.player.age}</td>
                     <td><b>{overall(l.player)}</b></td>
                     <td className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{d > 0 ? `+${d}` : d}</td>
@@ -232,6 +284,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                   </tr>
                 );
               })}
+              {shown.length === 0 && <tr><td colSpan={8} className="hint empty-row">Nenhum atleta com esses filtros neste mês. Tente afrouxar algum filtro; o mercado muda todo mês.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -349,9 +402,10 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
   const club = career.clubs[myClubId(career)]!;
   const wages = club.players.reduce((a, p) => a + p.wage, 0);
   const l = career.ledger;
-  const income = l.gate + l.tv + l.prizes + l.sales;
+  const income = l.gate + l.tv + (l.sponsor ?? 0) + l.prizes + l.sales;
   const expense = l.wages + l.purchases + l.management;
   const state = financialState(club);
+  const f = monthlyForecast(career);
   return (
     <div className="two-col">
       <section>
@@ -369,7 +423,16 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
             <button className="btn sm" onClick={() => act((c) => { c.clubs[myClubId(c)]!.ticketPrice += 1; })}>+</button>
           </dd>
         </dl>
-
+        <h4>Mês típico de temporada</h4>
+        <table className="grid-table compact forecast">
+          <tbody>
+            <tr><td>TV + patrocínio</td><td className="pos-n">{money(f.tv + f.sponsor)}</td></tr>
+            <tr><td>Bilheteria (1 jogo em casa)</td><td className="pos-n">{money(f.gate)}</td></tr>
+            <tr><td>Folha + seu salário</td><td className="neg">{money(-(f.wages + f.management))}</td></tr>
+            <tr className="total"><td>Saldo do mês</td><td className={f.withGame < 0 ? 'neg' : 'pos-n'}>{money(f.withGame)}</td></tr>
+          </tbody>
+        </table>
+        <p className="hint">Sem jogo em casa (pré-temporada e entressafra) o mês fecha em <b className={f.withoutGame < 0 ? 'neg' : ''}>{money(f.withoutGame)}</b>. Contratações, aumentos e o preço do ingresso mudam esta conta.</p>
       </section>
       <section>
         <h4>Temporada {career.season.year}</h4>
@@ -377,6 +440,7 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
           <tbody>
             <tr><td>Bilheteria</td><td className="pos-n">{money(l.gate)}</td></tr>
             <tr><td>Cotas de TV</td><td className="pos-n">{money(l.tv)}</td></tr>
+            <tr><td>Patrocínio</td><td className="pos-n">{money(l.sponsor ?? 0)}</td></tr>
             <tr><td>Premiações</td><td className="pos-n">{money(l.prizes)}</td></tr>
             <tr><td>Venda de atletas</td><td className="pos-n">{money(l.sales)}</td></tr>
             <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
