@@ -99,7 +99,7 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 
 - **Propostas da IA** (pré-temporada e temporada): ~1,6% por dia (3% se houver atleta revoltado), uma por vez. Taxa entre 90% e 145% do valor e salário 25–70% acima. Opções: vender, cobrir o salário (ele fica ganhando o oferecido) ou recusar (satisfação cai, mais se o salário oferecido era bem maior ou o clube é maior).
 - **Pedido de aumento**: checado nos dias 1 e 15 (40%), para quem está mal pago (valor de mercado pede 10% a mais), insatisfeito e acima da mediana, ou em boa fase (média 6,8+ em 5+ jogos). Intervalo mínimo de 120 dias. Negar tira 20 de satisfação.
-- **Renovação**: a partir de agosto, até 2 por mês (em novembro, todos os que faltam). O salário pedido sobe com a insatisfação (×1,05 / ×1,2 / ×1,45). Quem é liberado sai de graça no fim da temporada; quem nunca foi consultado renova automaticamente.
+- **Renovação**: a partir de agosto, até 2 por mês (em novembro, todos os que faltam). O salário pedido sobe com a insatisfação (×1,05 / ×1,2 / ×1,45). Quem é liberado vai a leilão no fim da temporada e rende 25% a 45% do valor (sem lance, sai de graça); quem nunca foi consultado renova automaticamente.
 - **Satisfação** (0–100, padrão 70): +3 por jogo disputado, −5 para quem está entre os 13 melhores e fica de fora, −1 para os demais; −3 por mês se mal pago; volta 10% por mês para perto de 60. Por enquanto afeta só as negociações.
 - Medição (5 seeds × 3 desafios, recusando tudo): 0–15 propostas, 0–4 aumentos e 1–6 renovações por temporada.
 
@@ -117,7 +117,9 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - [ ] IA adversária contratando, vendendo e demitindo técnico, respeitando o próprio caixa (GD-10)
 - [ ] Copa em mata-mata paralela à liga
 - [ ] Lesões
-- [ ] Upgrade de estrutura (CT, estádio) com custo, o "escritório maior" da Game Dev Story
+- [x] Upgrade de estrutura (CT, estádio) com custo, o "escritório maior" da Game Dev Story: obra paga na hora; estádio +15% dos lugares a $150 o lugar (90 dias), CT nível 2–5 por $200k/$400k/$800k/$1,5M (60 dias)
+- [x] Torcida viva: +0,6% por vitória, +0,1% por empate, −0,4% por derrota; campeão +12%, acesso +7%, rebaixamento −10%. Estádios novos nascem com ~70–80% de ocupação, então crescer enche a casa e pede ampliação
+- [x] Artilharia da temporada por divisão (aba Tabela)
 - [ ] Patrocínio simples
 
 **Entrega 3: polimento da experiência**
