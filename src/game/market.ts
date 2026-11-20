@@ -9,7 +9,7 @@ import { dayOf, monthOf, type IsoDate } from '../core/calendar';
 import type { Rng } from '../core/rng';
 import { playerValue, wageFor } from '../sports/football/generate';
 import { overall } from '../sports/football/lineup';
-import type { Club, Player } from '../sports/football/types';
+import type { Club, Player, Position } from '../sports/football/types';
 
 export type Decision =
   | { id: string; kind: 'bid'; date: IsoDate; playerId: string; clubId: string; fee: number; wage: number }
@@ -159,7 +159,7 @@ export function moraleAfterMatch(club: Club, played: string[]) {
   const top = new Set(ranked.slice(0, 13).map((p) => p.id));
   for (const p of club.players) {
     if (played.includes(p.id)) setMorale(p, moraleOf(p) + 3);
-    else if (p.suspended > 0) continue;
+    else if (p.suspended > 0 || (p.injured ?? 0) > 0) continue;
     else setMorale(p, moraleOf(p) - (top.has(p.id) ? 5 : 1));
   }
 }
@@ -264,4 +264,74 @@ export function releaseLeavers(clubs: Record<string, Club>, me: string, year: nu
     out.push({ name: p.name, fee: 0, buyer: null });
   }
   return out;
+}
+
+// ---------------------------------------------------------------- mercado entre clubes da IA
+
+/** Negociação entre dois clubes da IA (registro para a tela de mercado e as notícias). */
+export interface AiTransfer {
+  date: IsoDate;
+  playerName: string;
+  position: Position;
+  ovr: number;
+  age: number;
+  from: string;
+  to: string;
+  fee: number;
+}
+
+/** Quantos titulares cada posição tem num 4-4-2 (referência para achar a carência). */
+const STARTERS: Record<Position, number> = { GK: 1, DF: 4, MF: 4, FW: 2 };
+
+/** Posição mais fraca do time: o pior titular de cada posição, comparado. */
+export function weakestSpot(club: Club): { position: Position; ovr: number } {
+  let worst: { position: Position; ovr: number } = { position: 'FW', ovr: Infinity };
+  for (const pos of ['GK', 'DF', 'MF', 'FW'] as Position[]) {
+    const ovrs = club.players.filter((p) => p.position === pos && !p.leaving).map(overall).sort((a, b) => b - a);
+    const nth = ovrs[STARTERS[pos] - 1] ?? 0;
+    if (nth < worst.ovr) worst = { position: pos, ovr: nth };
+  }
+  return worst;
+}
+
+/**
+ * Clubes da IA também se reforçam: um clube com caixa procura alguém melhor que o
+ * pior titular da posição mais carente e paga o valor de mercado (+0–30%) a outro
+ * clube da IA. Mais movimento na pré-temporada; o clube do jogador fica de fora.
+ */
+export function aiTransferDay(ctx: MarketCtx, rng: Rng): AiTransfer | null {
+  if (ctx.phase !== 'pre-temporada' && ctx.phase !== 'temporada') return null;
+  if (!rng.chance(ctx.phase === 'pre-temporada' ? 0.3 : 0.06)) return null;
+  const ai = Object.values(ctx.clubs).filter((c) => c.id !== ctx.me);
+  const buyers = ai.filter((c) => c.budget > 60000 && c.players.length < 28);
+  if (!buyers.length) return null;
+  const buyer = rng.weighted(buyers, (c) => c.budget);
+  const need = weakestSpot(buyer);
+  const limit = buyer.budget * 0.6;
+  const targets = ai
+    .filter((s) => s.id !== buyer.id)
+    .flatMap((s) => {
+      const atPos = s.players.filter((p) => p.position === need.position).length;
+      if (atPos <= (need.position === 'GK' ? 2 : 3)) return [];
+      return s.players
+        .filter((p) => p.position === need.position && !p.clubLocked && !p.leaving && canLose(s, p) && overall(p) >= need.ovr + 2)
+        .filter((p) => playerValue(p) > 0 && playerValue(p) * 1.15 <= limit)
+        .map((p) => ({ p, s }));
+    });
+  if (!targets.length) return null;
+  // clube grande compra de clube menor; quem está no vermelho vende mais fácil
+  const { p, s } = rng.weighted(targets, ({ p, s }) =>
+    (overall(p) - need.ovr) * (1 + Math.max(0, buyer.reputation - s.reputation) / 20) * (s.budget < 0 ? 2 : 1));
+  const fee = round1000(playerValue(p) * (1 + rng.next() * 0.3));
+  if (fee <= 0 || fee > buyer.budget) return null;
+  buyer.budget -= fee;
+  s.budget += fee;
+  s.players = s.players.filter((x) => x.id !== p.id);
+  if (s.lineup) s.lineup = { xi: s.lineup.xi.filter((x) => x !== p.id), bench: s.lineup.bench.filter((x) => x !== p.id) };
+  p.wage = round100(Math.max(p.wage, wageFor(p)) * 1.1);
+  p.contractUntil = Math.max(p.contractUntil, ctx.year + 2 + rng.int(0, 2));
+  p.joinedOn = ctx.date;
+  delete p.morale; delete p.raiseAskedOn; delete p.renewalAsked;
+  buyer.players.push(p);
+  return { date: ctx.date, playerName: p.name, position: p.position, ovr: overall(p), age: p.age, from: s.id, to: buyer.id, fee };
 }

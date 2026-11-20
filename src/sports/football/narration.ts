@@ -18,6 +18,7 @@ const T = {
   miss: ['{p} chuta para fora.', '{p} isola a bola.'],
   yellow: ['Cartão amarelo para {p}.', '{p} é advertido com o amarelo.'],
   red: ['EXPULSO! {p} recebe o vermelho!', 'Vermelho para {p}! Time com um a menos.'],
+  injury: ['{p} sente a lesão e pede para sair.', 'Lesão! {p} cai no gramado e não tem condição de seguir.', '{p} sai de maca. Preocupação no banco.'],
 } as const;
 
 function hash(s: string) {
@@ -31,7 +32,12 @@ export function narrate(e: MatchEvent): string {
     case 'half': return 'Fim do primeiro tempo.';
     case 'end': return 'Fim de jogo!';
     case 'tactic': return e.text;
-    case 'sub': return `Substituição: sai ${e.playerName}${e.reason === 'cansaço' ? ' (cansado)' : ''}, entra ${e.inName}.`;
+    case 'sub': return `Substituição: sai ${e.playerName}${e.reason === 'cansaço' ? ' (cansado)' : e.reason === 'lesão' ? ' (lesionado)' : ''}, entra ${e.inName}.`;
+    case 'injury': {
+      const list = T.injury;
+      const base = list[hash(e.playerId + e.minute) % list.length]!.replace('{p}', e.playerName);
+      return `${base} Fora por ${e.rounds} ${e.rounds === 1 ? 'rodada' : 'rodadas'}.`;
+    }
     case 'goal': {
       const list = T.goal;
       const base = list[hash(e.playerId + e.minute) % list.length]!.replace('{p}', e.playerName);

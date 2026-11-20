@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
  * Sons do jogo, sintetizados na hora com Web Audio (estilo chiptune, sem arquivos).
  * Liga/desliga fica salvo no navegador; o padrão é ligado.
  */
-export type SoundKind = 'goalFor' | 'goalAgainst' | 'whistle' | 'halfTime' | 'fullTime' | 'alert' | 'card';
+export type SoundKind = 'goalFor' | 'goalAgainst' | 'whistle' | 'halfTime' | 'fullTime' | 'alert' | 'card' | 'injury';
 
 const KEY = 'mde.sound';
 let enabled = read();
@@ -86,6 +86,8 @@ const SOUNDS: Record<SoundKind, Note[]> = {
   // "plim-plom": tem decisão esperando
   alert: [{ f: 988, t: 0, d: 0.12, vol: 0.6 }, { f: 1319, t: 0.13, d: 0.24, vol: 0.6 }],
   card: [{ f: 180, t: 0, d: 0.22, type: 'sawtooth', vol: 0.5 }],
+  // sirene curta: atleta machucado
+  injury: [{ f: 880, t: 0, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 660, t: 0.15, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 880, t: 0.3, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 660, t: 0.45, d: 0.2, type: 'triangle', vol: 0.8 }],
 };
 
 export function play(kind: SoundKind) {

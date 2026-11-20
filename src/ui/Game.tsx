@@ -11,6 +11,7 @@ import {
   decide,
   divisionOf,
   isMatchDay,
+  nextCupMatch,
   myClubId,
   pendingDecision,
   resolveMidSeason,
@@ -38,6 +39,7 @@ import { achieve, useUnlocked } from './achievements';
 import { checkState, onAction, onMatch, onMonth, onSeasonEnd, seasonFacts, snapshotForActions } from '../game/achievements';
 import type { RoundRecord } from '../game/career';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
+import { cupName, stageName } from '../game/cup';
 
 type Menu = 'elenco' | 'mercado' | 'tabela' | 'financas' | 'carreira';
 const MENUS: { id: Menu; label: string; icon: string }[] = [
@@ -215,8 +217,15 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const d = divisionOf(c, me);
   const table = divisionStandings(c.season.divisions[d]!, football.points);
   const pos = table.findIndex((r) => r.teamId === me) + 1;
-  const nextDate = c.roundDates[c.season.round];
-  const nextFixture = c.phase !== 'encerramento' ? c.season.divisions[d]!.rounds[c.season.round]?.find((f) => f.home === me || f.away === me) : undefined;
+  const leagueDate = c.roundDates[c.season.round];
+  const leagueFixture = c.phase !== 'encerramento' ? c.season.divisions[d]!.rounds[c.season.round]?.find((f) => f.home === me || f.away === me) : undefined;
+  // a copa entra no lugar quando o jogo dela vem antes
+  const nextCup = nextCupMatch(c);
+  const cupTie = nextCup?.tie;
+  const cupDate = nextCup?.date;
+  const isCupNext = !!cupDate && (!leagueFixture || !leagueDate || cupDate < leagueDate);
+  const nextDate = isCupNext ? cupDate : leagueDate;
+  const nextFixture = isCupNext ? cupTie : leagueFixture;
   const opp = nextFixture ? c.clubs[nextFixture.home === me ? nextFixture.away : nextFixture.home]! : undefined;
   const daysTo = nextDate ? Math.round((Date.parse(nextDate) - Date.parse(c.date)) / 86400000) : 0;
 
@@ -285,7 +294,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
                     <Badge club={opp} size="lg" />
                     <div>
                       <b>{opp.name}</b>
-                      <span className="hint">{nextFixture.home === me ? 'Em casa' : 'Fora'} · {nextDate && formatDate(nextDate)}</span>
+                      <span className="hint">{isCupNext && nextCup && <>{cupName(nextCup.cup)} · {stageName(nextCup.cup, nextCup.cup.round)}<br /></>}{nextFixture.home === me ? 'Em casa' : 'Fora'} · {nextDate && formatDate(nextDate)}</span>
                     </div>
                   </div>
                   <p className="countdown">{daysTo <= 0 ? 'É HOJE!' : daysTo === 1 ? 'Amanhã' : `em ${daysTo} dias`}</p>

@@ -76,7 +76,7 @@ describe('mercado vivo', () => {
     let denied: { id: string; before: number } | undefined;
     let granted: { id: string; wage: number } | undefined;
     let guard = 0;
-    while ((!denied || !granted) && guard++ < 800) {
+    while ((!denied || !granted) && guard++ < 1500) {
       const d = pendingDecision(c);
       if (d) {
         const p = club(c).players.find((x) => x.id === d.playerId)!;
@@ -85,7 +85,8 @@ describe('mercado vivo', () => {
         decide(c, d.id, d.kind === 'bid' ? 'refuse' : 'accept');
         continue;
       }
-      if (isMatchDay(c)) simulateRound(c); else advanceDay(c);
+      if (c.phase === 'encerramento') closeSeason(c);
+      else if (isMatchDay(c)) simulateRound(c); else advanceDay(c);
     }
     expect(denied && granted).toBeTruthy();
     const pg = club(c).players.find((x) => x.id === granted!.id);

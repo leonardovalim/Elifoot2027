@@ -68,16 +68,22 @@ function growthFactor(p: Player, ovr: number, level: number): number {
  * evolução por desempenho (Elifoot 98: ±1 pela avaliação da partida).
  * Devolve os ganhos para virar notícia.
  */
-export function applyMatch(club: Club, played: string[], ratings: Record<string, number>, conditionAfter: Record<string, number>, sentOff: string[], goals: Record<string, number>, rng: Rng): TrainingGain[] {
+export function applyMatch(club: Club, played: string[], ratings: Record<string, number>, conditionAfter: Record<string, number>, sentOff: string[], goals: Record<string, number>, rng: Rng, injuries: Record<string, number> = {}, countStats = true): TrainingGain[] {
   const gains: TrainingGain[] = [];
   const level = teamLevel(club);
   for (const p of club.players) {
     if (p.suspended > 0 && !played.includes(p.id)) p.suspended--;
+    // cada rodada que passa é uma a menos no departamento médico
+    if (p.injured && p.injured > 0) p.injured--;
+    if (injuries[p.id]) p.injured = injuries[p.id];
     if (played.includes(p.id)) {
       p.condition = conditionAfter[p.id] ?? p.condition;
-      p.stats.apps++;
-      p.stats.ratingSum += ratings[p.id] ?? 6;
-      p.stats.goals += goals[p.id] ?? 0;
+      // copa não entra na artilharia nem na média do campeonato
+      if (countStats) {
+        p.stats.apps++;
+        p.stats.ratingSum += ratings[p.id] ?? 6;
+        p.stats.goals += goals[p.id] ?? 0;
+      }
       const rating = ratings[p.id] ?? 6;
       const ovr = overall(p);
       const keys = Object.keys(WEIGHTS[p.position]) as AttrKey[];
@@ -102,6 +108,7 @@ export function endOfSeason(club: Club, level: number, year: number, rng: Rng): 
   for (const p of club.players) {
     p.age++;
     p.stats = { apps: 0, goals: 0, ratingSum: 0 };
+    p.injured = 0; // as férias curam todo mundo
     const retire = !p.clubLocked && (p.age >= 37 || (p.age >= 33 && rng.chance((p.age - 32) * 0.18)));
     if (retire) { retired.push(p); continue; }
     if (p.contractUntil < year + 1) p.contractUntil = year + 1 + rng.int(0, 2);

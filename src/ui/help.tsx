@@ -12,7 +12,7 @@ import { onHelpTopic } from '../game/achievements';
  * O `<HelpHost />` fica uma vez na raiz do app, como o `<ConfirmHost />`.
  */
 export type HelpTopic = 'jogo' | 'tempo' | 'partida' | 'elenco' | 'mercado' | 'financas' | 'temporada' | 'selos';
-export type TagKind = 'novo' | 'susp' | 'posicao' | 'joia' | 'fim-contrato' | 'sai' | 'titular' | 'racudo' | 'fairplay' | 'idolo';
+export type TagKind = 'novo' | 'susp' | 'posicao' | 'joia' | 'fim-contrato' | 'sai' | 'titular' | 'racudo' | 'fairplay' | 'idolo' | 'lesao';
 
 type Request = { topic: HelpTopic; tag?: TagKind };
 let show: ((r: Request) => void) | null = null;
@@ -35,7 +35,7 @@ const TOPICS: { id: HelpTopic; label: string }[] = [
 
 /** Classe visual de cada selo (a mesma usada nas tabelas). */
 const TAG_CLASS: Record<TagKind, string> = {
-  novo: 'new', susp: 'bad', posicao: 'warn', joia: 'good', 'fim-contrato': 'warn', sai: 'bad', titular: 'good', racudo: 'racudo', fairplay: 'fairplay', idolo: 'idol',
+  novo: 'new', susp: 'bad', posicao: 'warn', joia: 'good', 'fim-contrato': 'warn', sai: 'bad', titular: 'good', racudo: 'racudo', fairplay: 'fairplay', idolo: 'idol', lesao: 'injury',
 };
 
 /** Selo de atleta que explica a si mesmo: tocar abre a ajuda no verbete dele. */
@@ -75,6 +75,7 @@ const SELOS: { kind: TagKind; tag: ReactNode; text: ReactNode }[] = [
   { kind: 'fim-contrato', tag: <T kind="fim-contrato">fim contr.</T>, text: <>O contrato <b>termina no fim desta temporada</b>. A partir de agosto ele pede renovação, com um salário que sobe se estiver insatisfeito: você renova ou deixa sair.</> },
   { kind: 'sai', tag: <T kind="sai">sai</T>, text: <>Você não renovou: ele <b>sai de graça no fim da temporada</b>. Até lá continua jogando.</> },
   { kind: 'susp', tag: <T kind="susp">susp.</T>, text: <>Foi expulso e <b>está suspenso no próximo jogo</b>. O banco repõe automaticamente.</> },
+  { kind: 'lesao', tag: <T kind="lesao">✚ 3r</T>, text: <>Está <b>lesionado</b> e fica fora pelo número de rodadas indicado (no exemplo, 3). Não pode ser escalado nem ir para o banco; as férias de fim de temporada curam todo mundo.</> },
   { kind: 'posicao', tag: <T kind="posicao">de MEI</T>, text: <>Está <b>escalado fora da posição de origem</b> (no exemplo, jogando de meia). Rende menos que na posição dele.</> },
   { kind: 'titular', tag: <T kind="titular">titular</T>, text: <>No mercado: se você contratar, ele <b>seria o melhor da posição</b> no seu elenco.</> },
 ];

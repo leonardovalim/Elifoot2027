@@ -743,3 +743,35 @@ html, body { overflow-x: hidden; }
 .offer.mid-merito { box-shadow: inset 4px 0 0 var(--good); }
 .mid-stay { display: block; width: calc(100% - 2 * var(--px)); white-space: normal; text-align: left; line-height: 1.3; } /* nome de clube longo quebra a linha em vez de vazar */
 .offer-head .mid-why { margin: 4px 0 0; }
+/* ---------- lesões ---------- */
+.tag.injury { background: #fff; color: var(--bad); box-shadow: inset 0 0 0 2px var(--bad); font-weight: 800; }
+.injury-note { color: var(--bad); font-weight: 700; }
+.ev.ev-injury { background: rgba(200, 50, 60, 0.1); }
+.ev.ev-injury .txt { color: var(--bad); font-weight: 700; }
+
+/* ---------- copa ---------- */
+.cup-status { font-weight: 800; margin: 8px 0 4px; }
+.cup-round { margin: 12px 0; }
+.cup-round h5 { margin: 0 0 6px; }
+.rb-team.won { font-weight: 800; }
+.rb-team.lost { opacity: 0.55; }
+.rb-score .pens { display: block; font-size: 10px; font-weight: 700; opacity: 0.8; line-height: 1.1; }
+.cup-note { margin-top: -4px; }
+.shootout { margin: 10px auto; max-width: 560px; padding: 8px 12px; border: 2px solid var(--ink); background: var(--paper); }
+.shootout.won { box-shadow: inset 4px 0 0 var(--good); }
+.shootout.lost { box-shadow: inset 4px 0 0 var(--bad); }
+.shootout h4 { margin: 0 0 6px; }
+.shootout .kicks { display: grid; grid-template-columns: 1fr 1fr; /* mandante à esquerda, visitante à direita */ gap: 2px 12px; margin: 0; padding-left: 22px; font-size: 13px; }
+.shootout .kicks li.out { opacity: 0.6; }
+.shootout .kicks li.mine b { color: var(--good); }
+.shootout .kicks li.mine.out b { color: var(--bad); }
+
+/* ---------- negociações entre clubes da IA ---------- */
+.ai-moves { margin-top: 10px; font-size: 13px; }
+.ai-moves summary { cursor: pointer; font-weight: 800; padding: 4px 0; }
+.ai-moves .list { max-height: 220px; overflow-y: auto; }
+.ai-moves li { padding: 3px 0; }
+
+/* ---------- bandeiras ---------- */
+.flag { display: inline-block; vertical-align: -1px; margin-right: 4px; flex: none; }
+.cup .rb-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr)); }

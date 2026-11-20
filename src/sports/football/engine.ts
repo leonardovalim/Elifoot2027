@@ -40,7 +40,12 @@ export const TUNING = {
   fatiguePerMinute: 0.2,
   maxSubs: 5,
   autoSubCondition: 70,
+  /** Chance de lesão por atleta em campo por minuto, antes do peso do cansaço (~1,5 por time por temporada). */
+  injuryPerMinute: 0.000055,
 };
+
+/** Rodadas fora por lesão: a maioria é curta, algumas tiram o atleta por mais de um mês. */
+const INJURY_ROUNDS = [1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 6];
 
 const STYLE: Record<Style, { own: number; conceded: number; fatigue: number }> = {
   defensive: { own: 0.8, conceded: 0.78, fatigue: 0.9 },
@@ -64,6 +69,8 @@ export interface SideState {
   ratings: Record<string, number>;
   yellows: string[];
   sentOff: string[];
+  /** Lesionados nesta partida: id → rodadas fora. */
+  injured: Record<string, number>;
   played: string[];
   subsLeft: number;
   autoSubs: boolean;
@@ -130,6 +137,7 @@ function makeSide(club: Club): SideState {
     ratings: {},
     yellows: [],
     sentOff: [],
+    injured: {},
     played: [],
     subsLeft: TUNING.maxSubs,
     autoSubs: true,
@@ -181,7 +189,7 @@ function removeFromPitch(s: SideState, id: string) {
 }
 
 /** Substituição. Devolve mensagem de erro ou null. */
-export function substitute(m: MatchState, side: Side, outId: string, inId: string, reason: 'cansaço' | 'tática' = 'tática'): string | null {
+export function substitute(m: MatchState, side: Side, outId: string, inId: string, reason: 'cansaço' | 'tática' | 'lesão' = 'tática'): string | null {
   const s = m[side];
   if (m.finished) return 'Partida encerrada.';
   if (s.subsLeft <= 0) return 'Sem substituições restantes.';
@@ -241,6 +249,22 @@ function autoSubstitutions(m: MatchState, side: Side) {
   if (replacement) substitute(m, side, tired.id, replacement.id, 'cansaço');
 }
 
+/**
+ * Lesão: o atleta sai na hora. Com substituição disponível, entra o melhor reserva
+ * para a função (substituição forçada); sem troca, o time fica com um a menos.
+ */
+function injure(m: MatchState, side: Side, p: Player, minute: number, rng: Rng) {
+  const s = m[side];
+  const rounds = rng.pick(INJURY_ROUNDS);
+  s.injured[p.id] = rounds;
+  m.events.push({ minute, type: 'injury', side, playerId: p.id, playerName: p.name, rounds });
+  const pos: Position = s.GK.id === p.id ? 'GK' : s.DF.includes(p) ? 'DF' : s.MF.includes(p) ? 'MF' : 'FW';
+  const pool = pos === 'GK' ? s.bench.filter((x) => x.position === 'GK') : s.bench.filter((x) => x.position !== 'GK');
+  const replacement = [...pool].sort((a, b) => ratingAt(b, pos) - ratingAt(a, pos))[0];
+  if (s.subsLeft > 0 && replacement) substitute(m, side, p.id, replacement.id, 'lesão');
+  else removeFromPitch(s, p.id);
+}
+
 export function stepMinute(m: MatchState, rng: Rng) {
   if (m.finished) return;
   m.minute++;
@@ -264,6 +288,15 @@ export function stepMinute(m: MatchState, rng: Rng) {
   const possession = hm ** e / (hm ** e + ap.midfield ** e);
   const attacking: Side = rng.chance(possession) ? 'home' : 'away';
   m[attacking].stats.possessionMinutes++;
+
+  // lesões: quem está cansado se machuca mais
+  for (const side of ['home', 'away'] as const) {
+    const s = m[side];
+    const field = onPitch(s);
+    const weight = (p: Player) => (p.position === 'GK' && s.GK.id === p.id ? 0.3 : 1) * (1 + Math.max(0, 80 - s.condition[p.id]!) / 25);
+    const total = field.reduce((a, p) => a + weight(p), 0);
+    if (field.length > 7 && rng.chance(TUNING.injuryPerMinute * total)) injure(m, side, rng.weighted(field, weight), minute, rng);
+  }
 
   // disciplina
   for (const side of ['home', 'away'] as const) {
@@ -383,6 +416,8 @@ export interface FootballOutcome extends MatchOutcome<MatchEvent> {
   played: { home: string[]; away: string[] };
   conditionAfter: Record<string, number>;
   sentOff: string[];
+  /** Lesionados na partida: id → rodadas fora. */
+  injuries: Record<string, number>;
   /** Posse do mandante 0–1. */
   possession: number;
   motm: { playerId: string; side: Side; rating: number };
@@ -411,6 +446,7 @@ export function toOutcome(m: MatchState): FootballOutcome {
     played: { home: m.home.played, away: m.away.played },
     conditionAfter,
     sentOff: [...m.home.sentOff, ...m.away.sentOff],
+    injuries: { ...m.home.injured, ...m.away.injured },
     possession: hp + ap > 0 ? hp / (hp + ap) : 0.5,
     motm,
   };

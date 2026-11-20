@@ -1,5 +1,6 @@
 import type { Rng } from '../../core/rng';
 import { WEIGHTS } from './lineup';
+import { maybeImport } from './nations';
 import type { AttrKey, Attributes, Club, Player, Position } from './types';
 
 // Clubes e atletas 100% fictícios (GDD 1.8).
@@ -161,8 +162,14 @@ export function generateWorld(rng: Rng): Club[][] {
     }
     result.push(clubs);
   }
-  // ninguém começa perto do André Elias: o teto dos outros é 95 de habilidade
-  for (const p of result.flat().flatMap((c) => c.players)) {
+  for (const p of result.flat().flatMap((c) => c.players)) if (!p.clubLocked) maybeImport(p); // uns 8% vêm de fora (não gasta o RNG do mundo)
+  capStars(result.flat().flatMap((c) => c.players));
+  return result;
+}
+
+/** Ninguém começa perto do André Elias: o teto dos outros é 95 de habilidade. */
+export function capStars(players: Player[]) {
+  for (const p of players) {
     if (p.clubLocked) continue;
     const excess = positionRating(p) - STAR_CAP;
     if (excess <= 0) continue;
@@ -170,7 +177,6 @@ export function generateWorld(rng: Rng): Club[][] {
     p.potential = Math.min(p.potential, STAR_CAP);
     p.wage = wageFor(p);
   }
-  return result;
 }
 
 const STAR_CAP = 95;

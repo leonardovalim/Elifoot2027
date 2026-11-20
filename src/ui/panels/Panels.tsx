@@ -36,6 +36,10 @@ import { askConfirm } from '../confirm';
 import { Tag, TemperamentTag } from '../help';
 import { temperament } from '../../sports/football/temperament';
 import { AchievementsSection } from '../achievements';
+import { CupPanel } from './CupPanel';
+import { ForeignFlag } from '../flag';
+import { COUNTRY_NAME, nationalityOf } from '../../sports/football/nations';
+import { CONTINENTAL_NAME, CUP_NAME } from '../../game/cup';
 import { Bar, ClubName, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
@@ -99,6 +103,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
     p.clubLocked && <Tag key="idolo" kind="idolo">ídolo</Tag>,
     isNewSigning(p, career.date) && <Tag key="novo" kind="novo">novo</Tag>,
     p.suspended > 0 && <Tag key="susp" kind="susp">susp.</Tag>,
+    (p.injured ?? 0) > 0 && <Tag key="lesao" kind="lesao" title={`Lesionado: fora por ${p.injured} ${p.injured === 1 ? 'rodada' : 'rodadas'}`}>✚ {p.injured}r</Tag>,
     playsAt && playsAt !== p.position && <Tag key="pos" kind="posicao">de {POS_LABEL[playsAt]}</Tag>,
     isProspect(p) && <Tag key="joia" kind="joia">joia</Tag>,
     temperament(p) && <TemperamentTag key="temp" p={p} />,
@@ -153,7 +158,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
                   <span className={`st ${st}`}>{ST_SHORT[st]}</span>
                   <span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span>
                   <span className="mrow-main">
-                    <span className="mrow-name">{p.name}</span>
+                    <span className="mrow-name"><ForeignFlag p={p} />{p.name}</span>
                     <span className="mrow-sub">{p.age} anos · cond. {Math.round(p.condition)}% · {p.stats.apps} jg{p.stats.goals ? ` · ${p.stats.goals} gol${p.stats.goals > 1 ? 's' : ''}` : ''}</span>
                     {tags.length > 0 && <span className="mrow-tags">{tags}</span>}
                   </span>
@@ -177,7 +182,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
                     <td><span className={`st ${st}`}>{ST_SHORT[st]}</span></td>
                     <td><span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span></td>
                     <td className="name">
-                      <span className="nm">{p.name}</span>
+                      <span className="nm"><ForeignFlag p={p} />{p.name}</span>
                       {squadTags(p, slot.get(p.id))}
                     </td>
                     <td>{p.age}</td>
@@ -203,7 +208,9 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
 }
 
 function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; current: SquadStatus; onMove: (id: string, to: SquadStatus) => void }) {
-  const options = (['xi', 'bench', 'out'] as SquadStatus[]).filter((s) => s !== current);
+  // lesionado ou suspenso não entra na relação: não há o que escalar
+  const blocked = p.suspended > 0 || (p.injured ?? 0) > 0;
+  const options = blocked ? [] : (['xi', 'bench', 'out'] as SquadStatus[]).filter((s) => s !== current);
   return (
     <div className="lineup-actions">
       <span className="attr-title">{STATUS_LABEL[current]}</span>
@@ -220,6 +227,7 @@ function LineupActions({ club, p, current, onMove }: { club: Club; p: Player; cu
         );
       })}
       {p.suspended > 0 && <span className="hint">Suspenso no próximo jogo.</span>}
+      {(p.injured ?? 0) > 0 && <span className="hint injury-note">✚ Lesionado: fora por mais {p.injured} {p.injured === 1 ? 'rodada' : 'rodadas'}.</span>}
     </div>
   );
 }
@@ -242,8 +250,8 @@ function PlayerCard({ p, onSell, isNew, year, compact }: { p: Player; onSell?: (
   return (
     <div className={`player-card ${compact ? 'compact' : ''}`}>
       {/* no celular o nome já está na linha do cartão */}
-      {!compact && <h3>{p.name}{p.clubLocked && <Tag kind="idolo">ídolo</Tag>}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>}
-      <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
+      {!compact && <h3><ForeignFlag p={p} />{p.name}{p.clubLocked && <Tag kind="idolo">ídolo</Tag>}{isNew && <Tag kind="novo">novo</Tag>}<TemperamentTag p={p} /></h3>}
+      <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · {COUNTRY_NAME[nationalityOf(p)]} · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</p>
       {year !== undefined && <div className="attr-group"><span className="attr-title">Satisfação</span><Morale p={p} /></div>}
       {compact ? (
         // celular: os 11 atributos ficam recolhidos; o resumo mostra a média de cada grupo
@@ -374,7 +382,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                   <button className="mrow" aria-expanded={open} onClick={() => { setSel(open ? null : p.id); setBought(null); }}>
                     <span className={`pos ${p.position}`}>{POS_LABEL[p.position]}</span>
                     <span className="mrow-main">
-                      <span className="mrow-name">{p.name}{isProspect(p) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={p} /></span>
+                      <span className="mrow-name"><ForeignFlag p={p} />{p.name}{isProspect(p) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={p} /></span>
                       <span className="mrow-sub">{p.age} anos · {career.clubs[l.clubId]?.name}</span>
                     </span>
                     <span className="mrow-num" title="Habilidade e diferença para o seu melhor da posição">
@@ -408,7 +416,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                 return (
                   <tr key={l.player.id} className={sel === l.player.id ? 'sel' : ''} onClick={() => { setSel(l.player.id); setBought(null); }}>
                     <td><span className={`pos ${l.player.position}`}>{POS_LABEL[l.player.position]}</span></td>
-                    <td className="name"><span className="nm">{l.player.name}</span>{isProspect(l.player) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={l.player} /></td>
+                    <td className="name"><span className="nm"><ForeignFlag p={l.player} />{l.player.name}</span>{isProspect(l.player) && <Tag kind="joia">joia</Tag>}<TemperamentTag p={l.player} /></td>
                     <td>{l.player.age}</td>
                     <td><b>{overall(l.player)}</b></td>
                     <td className={d > 0 ? 'up-n' : d < 0 ? 'down-n' : 'hint'}>{d > 0 ? `+${d}` : d}</td>
@@ -429,7 +437,28 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
         </aside>
       </div>
       )}
+      <AiMoves career={career} />
     </div>
+  );
+}
+
+/** Negociações entre clubes da IA: o mercado se mexe mesmo sem você. */
+function AiMoves({ career }: { career: Career }) {
+  const list = career.transfers ?? [];
+  if (!list.length) return null;
+  const name = (id: string) => career.clubs[id]?.name ?? '—';
+  return (
+    <details className="ai-moves">
+      <summary>Negociações entre clubes ({list.length})</summary>
+      <ul className="list">
+        {list.slice(0, 20).map((t, i) => (
+          <li key={i}>
+            <span className="hint">{t.date.slice(8, 10)}/{t.date.slice(5, 7)}</span>{' '}
+            <span className={`pos ${t.position}`}>{POS_LABEL[t.position]}</span> <b>{t.playerName}</b> ({t.ovr}, {t.age}a): {name(t.from)} → <b>{name(t.to)}</b> · {moneyShort(t.fee)}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -446,7 +475,7 @@ function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; cl
 
   return (
     <div className="player-card compare-card">
-      <h3>{p.name}<TemperamentTag p={p} /></h3>
+      <h3><ForeignFlag p={p} />{p.name}<TemperamentTag p={p} /></h3>
       <p className="hint">{POS_LABEL[p.position]} · {p.age} anos · {career.clubs[l.clubId]?.name} · potencial ~{p.potential}</p>
       <p className="verdict">
         Hab <b>{overall(p)}</b> · seria o <b>{ORDINAL[rank] ?? `${rank + 1}º`}</b> {POS_LABEL[p.position]} do elenco
@@ -489,16 +518,24 @@ function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; cl
 
 export function TablePanel({ career }: { career: Career }) {
   const me = myClubId(career);
-  const [d, setD] = useState(Math.max(0, divisionOf(career, me)));
+  const [view, setView] = useState<number | 'copa' | 'continental'>(Math.max(0, divisionOf(career, me)));
+  const chips = (
+    <div className="chips">
+      {career.season.divisions.map((_, i) => (
+        <button key={i} className={`chip ${i === view ? 'on' : ''}`} onClick={() => setView(i)}>Divisão {i + 1}</button>
+      ))}
+      <button className={`chip ${view === 'copa' ? 'on' : ''}`} onClick={() => setView('copa')}>🏆 {CUP_NAME}</button>
+      <button className={`chip ${view === 'continental' ? 'on' : ''}`} onClick={() => setView('continental')}>🌎 {CONTINENTAL_NAME}</button>
+    </div>
+  );
+  if (view === 'copa') return <div>{chips}<CupPanel career={career} cup={career.cup} title={CUP_NAME} /></div>;
+  if (view === 'continental') return <div>{chips}<CupPanel career={career} cup={career.continental} title={CONTINENTAL_NAME} /></div>;
+  const d = view;
   const rows = divisionStandings(career.season.divisions[d]!, football.points);
   const last = career.season.divisions.length - 1;
   return (
     <div>
-      <div className="chips">
-        {career.season.divisions.map((_, i) => (
-          <button key={i} className={`chip ${i === d ? 'on' : ''}`} onClick={() => setD(i)}>Divisão {i + 1}</button>
-        ))}
-      </div>
+      {chips}
       <div className="scroll tall">
         <table className="grid-table">
           <thead><tr><th>#</th><th>Clube</th><th>P</th><th>J</th><th className="hide-sm">V</th><th className="hide-sm">E</th><th className="hide-sm">D</th><th>SG</th></tr></thead>
