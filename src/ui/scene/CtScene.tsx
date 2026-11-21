@@ -17,7 +17,7 @@ import atlasRects from '../../assets/ct/objetos.json';
  * Folhas de quadros quadrados; `feet`/`cx` alinham o sprite pelos pés.
  */
 const ATHLETE = { size: 40, feet: 37, cx: 20, idle: 0, walk: [1, 8] as const };
-const COACH = { size: 28, feet: 25, cx: 14, frames: 9 };
+const COACH = { size: 36, feet: 33, cx: 18, frames: 9 };
 
 function drawFrame(c: CanvasRenderingContext2D, img: CanvasImageSource, size: number, f: number, x: number, feetY: number, feet: number, cx: number, flip: boolean) {
   const dy = Math.round(feetY - feet);
