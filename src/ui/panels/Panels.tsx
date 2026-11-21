@@ -569,6 +569,14 @@ export function TablePanel({ career }: { career: Career }) {
 
 // ---------------------------------------------------------------- Finanças
 
+type FinTab = 'mes' | 'estadio' | 'temporada' | 'emprestimo';
+const FIN_TABS: [FinTab, string, string][] = [
+  ['mes', 'Mês típico', 'Mês'],
+  ['estadio', 'Estádio e CT', 'Estádio'],
+  ['temporada', 'Temporada', 'Ano'],
+  ['emprestimo', 'Empréstimo', 'Banco'],
+];
+
 export function FinancePanel({ career, act }: { career: Career; act: Act }) {
   const club = career.clubs[myClubId(career)]!;
   const wages = club.players.reduce((a, p) => a + p.wage, 0);
@@ -577,83 +585,78 @@ export function FinancePanel({ career, act }: { career: Career; act: Act }) {
   const expense = l.wages + l.purchases + l.management + (l.loanPaid ?? 0) + (l.works ?? 0);
   const state = financialState(club);
   const f = monthlyForecast(career);
-  // celular: menos texto; empréstimo e resultado da temporada recolhidos num resumo de uma linha
-  const narrow = useMedia('(max-width: 760px)');
   const result = income - expense;
-  const seasonTable = (
-    <table className="grid-table compact">
-      <tbody>
-        <tr><td>Bilheteria</td><td className="pos-n">{money(l.gate)}</td></tr>
-        <tr><td>Cotas de TV</td><td className="pos-n">{money(l.tv)}</td></tr>
-        <tr><td>Patrocínio</td><td className="pos-n">{money(l.sponsor ?? 0)}</td></tr>
-        <tr><td>Premiações</td><td className="pos-n">{money(l.prizes)}</td></tr>
-        <tr><td>Venda de atletas</td><td className="pos-n">{money(l.sales)}</td></tr>
-        <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
-        <tr><td>Contratações</td><td className="neg">{money(-l.purchases)}</td></tr>
-        {(l.works ?? 0) > 0 && <tr><td>Obras</td><td className="neg">{money(-(l.works ?? 0))}</td></tr>}
-        <tr><td>Gestão (seu salário)</td><td className="neg">{money(-l.management)}</td></tr>
-        {(l.loanIn ?? 0) > 0 && <tr><td>Empréstimo recebido</td><td className="pos-n">{money(l.loanIn ?? 0)}</td></tr>}
-        {(l.loanPaid ?? 0) > 0 && <tr><td>Parcelas do empréstimo</td><td className="neg">{money(-(l.loanPaid ?? 0))}</td></tr>}
-        <tr className="total"><td>Resultado</td><td className={result < 0 ? 'neg' : 'pos-n'}>{money(result)}</td></tr>
-      </tbody>
-    </table>
-  );
+  const [tab, setTab] = useState<FinTab>('mes');
+  const tone = (v: number) => (v < 0 ? 'neg' : 'pos-n');
   return (
-    <div className="two-col">
-      <section>
-        <h4>Organização · {club.name}</h4>
+    <div className="fin">
+      {/* o essencial fica sempre à vista; o detalhe vai nas abas */}
+      <div className="fin-kpis">
+        <div className="fin-kpi"><span>Caixa</span><b className={club.budget < 0 ? 'neg' : ''}>{money(club.budget)}</b></div>
+        <div className="fin-kpi"><span>Saldo do mês</span><b className={tone(f.withGame)}>{money(f.withGame)}</b></div>
+        <div className="fin-kpi"><span>Folha mensal</span><b>{money(wages)}</b></div>
         <div className={`state ${state}`}>{{ estavel: 'Estável', atencao: 'Atenção', critica: 'Crítica' }[state]}</div>
-        <dl className="kv">
-          <dt>Caixa</dt><dd className={club.budget < 0 ? 'neg' : ''}>{money(club.budget)}</dd>
-          <dt>Folha mensal</dt><dd>{money(wages)}</dd>
-          <dt>Torcida</dt><dd>{club.fans.toLocaleString('pt-BR')}</dd>
-          <dt>Estádio</dt><dd>{club.stadium.toLocaleString('pt-BR')} lugares</dd>
-          <dt>Público típico</dt><dd><Occupancy club={club} /></dd>
-          <dt>Ingresso</dt>
-          <dd className="row">
-            <button className="btn sm" onClick={() => act((c) => { const x = c.clubs[myClubId(c)]!; x.ticketPrice = Math.max(1, x.ticketPrice - 1); })}>−</button>
-            <b>{money(club.ticketPrice)}</b>
-            <button className="btn sm" onClick={() => act((c) => { c.clubs[myClubId(c)]!.ticketPrice += 1; })}>+</button>
-          </dd>
-        </dl>
-        <h4>Mês típico de temporada</h4>
-        <table className="grid-table compact forecast">
-          <tbody>
-            <tr><td>TV + patrocínio</td><td className="pos-n">{money(f.tv + f.sponsor)}</td></tr>
-            <tr><td>Bilheteria (1 jogo em casa)</td><td className="pos-n">{money(f.gate)}</td></tr>
-            <tr><td>Folha + seu salário</td><td className="neg">{money(-(f.wages + f.management))}</td></tr>
-            {f.loan > 0 && <tr><td>Parcela do empréstimo</td><td className="neg">{money(-f.loan)}</td></tr>}
-            <tr className="total"><td>Saldo do mês</td><td className={f.withGame < 0 ? 'neg' : 'pos-n'}>{money(f.withGame)}</td></tr>
-          </tbody>
-        </table>
-        <p className="hint">Mês sem jogo em casa: <b className={f.withoutGame < 0 ? 'neg' : ''}>{money(f.withoutGame)}</b></p>
-        {(career.monthsInRed ?? 0) > 0 && (
-          <p className="red-alert">⚠ {career.monthsInRed} {career.monthsInRed === 1 ? 'mês' : 'meses seguidos'} no vermelho: terminar a temporada assim dá demissão.</p>
-        )}
-        {narrow ? (
-          <details className="fold">
-            <summary>Estrutura <span className="hint">estádio e CT</span></summary>
-            <WorksBox career={career} act={act} />
-          </details>
-        ) : <WorksBox career={career} act={act} />}
-        {narrow && !career.loan ? (
-          <details className="fold">
-            <summary>Empréstimo bancário <span className="hint">até {moneyShort(loanLimit(career))}</span></summary>
-            <LoanBox career={career} act={act} />
-          </details>
-        ) : <LoanBox career={career} act={act} />}
-      </section>
-      {narrow ? (
-        <details className="fold">
-          <summary>Temporada {career.season.year} <span className={result < 0 ? 'neg' : 'pos-n'}>{money(result)}</span></summary>
-          {seasonTable}
-        </details>
-      ) : (
-      <section>
-        <h4>Temporada {career.season.year}</h4>
-        {seasonTable}
-      </section>
+      </div>
+      {(career.monthsInRed ?? 0) > 0 && (
+        <p className="red-alert">⚠ {career.monthsInRed} {career.monthsInRed === 1 ? 'mês' : 'meses seguidos'} no vermelho: terminar a temporada assim dá demissão.</p>
       )}
+      <div className="tabs" role="tablist" aria-label="Finanças">
+        {FIN_TABS.map(([id, label, short]) => (
+          <button key={id} role="tab" aria-selected={tab === id} aria-label={label} className={`tab ${tab === id ? 'on' : ''}`} onClick={() => setTab(id)}>
+            <span className="tab-full">{label}{id === 'emprestimo' && career.loan ? ' •' : ''}</span><span className="tab-short" aria-hidden="true">{short}</span>
+          </button>
+        ))}
+      </div>
+      <div className="board-panel fin-panel" role="tabpanel" aria-label={FIN_TABS.find((t) => t[0] === tab)![1]}>
+        {tab === 'mes' && (
+          <>
+            <table className="grid-table compact forecast">
+              <tbody>
+                <tr><td>TV + patrocínio</td><td className="pos-n">{money(f.tv + f.sponsor)}</td></tr>
+                <tr><td>Bilheteria <span className="hint">1 jogo em casa</span></td><td className="pos-n">{money(f.gate)}</td></tr>
+                <tr><td>Folha + seu salário</td><td className="neg">{money(-(f.wages + f.management))}</td></tr>
+                {f.loan > 0 && <tr><td>Parcela do empréstimo</td><td className="neg">{money(-f.loan)}</td></tr>}
+                <tr className="total"><td>Saldo do mês</td><td className={tone(f.withGame)}>{money(f.withGame)}</td></tr>
+              </tbody>
+            </table>
+            <p className="hint">Sem jogo em casa: <b className={f.withoutGame < 0 ? 'neg' : ''}>{money(f.withoutGame)}</b></p>
+          </>
+        )}
+        {tab === 'estadio' && (
+          <>
+            <dl className="kv">
+              <dt>Torcida</dt><dd>{club.fans.toLocaleString('pt-BR')}</dd>
+              <dt>Público típico</dt><dd><Occupancy club={club} /></dd>
+              <dt>Ingresso</dt>
+              <dd className="row">
+                <button className="btn sm" aria-label="Baixar ingresso" onClick={() => act((c) => { const x = c.clubs[myClubId(c)]!; x.ticketPrice = Math.max(1, x.ticketPrice - 1); })}>−</button>
+                <b>{money(club.ticketPrice)}</b>
+                <button className="btn sm" aria-label="Subir ingresso" onClick={() => act((c) => { c.clubs[myClubId(c)]!.ticketPrice += 1; })}>+</button>
+              </dd>
+            </dl>
+            <WorksBox career={career} act={act} />
+          </>
+        )}
+        {tab === 'temporada' && (
+          <table className="grid-table compact">
+            <tbody>
+              <tr><td>Bilheteria</td><td className="pos-n">{money(l.gate)}</td></tr>
+              <tr><td>Cotas de TV</td><td className="pos-n">{money(l.tv)}</td></tr>
+              <tr><td>Patrocínio</td><td className="pos-n">{money(l.sponsor ?? 0)}</td></tr>
+              <tr><td>Premiações</td><td className="pos-n">{money(l.prizes)}</td></tr>
+              <tr><td>Venda de atletas</td><td className="pos-n">{money(l.sales)}</td></tr>
+              {(l.loanIn ?? 0) > 0 && <tr><td>Empréstimo recebido</td><td className="pos-n">{money(l.loanIn ?? 0)}</td></tr>}
+              <tr><td>Salários</td><td className="neg">{money(-l.wages)}</td></tr>
+              <tr><td>Contratações</td><td className="neg">{money(-l.purchases)}</td></tr>
+              {(l.works ?? 0) > 0 && <tr><td>Obras</td><td className="neg">{money(-(l.works ?? 0))}</td></tr>}
+              <tr><td>Gestão (seu salário)</td><td className="neg">{money(-l.management)}</td></tr>
+              {(l.loanPaid ?? 0) > 0 && <tr><td>Parcelas do empréstimo</td><td className="neg">{money(-(l.loanPaid ?? 0))}</td></tr>}
+              <tr className="total"><td>Resultado {career.season.year}</td><td className={tone(result)}>{money(result)}</td></tr>
+            </tbody>
+          </table>
+        )}
+        {tab === 'emprestimo' && <LoanBox career={career} act={act} />}
+      </div>
     </div>
   );
 }
@@ -689,7 +692,6 @@ function WorksBox({ career, act }: { career: Career; act: Act }) {
   };
   return (
     <div className="works-box">
-      <h4>Estrutura</h4>
       <div className="work-row">
         <div>
           <b>Estádio</b> <span className="hint">{club.stadium.toLocaleString('pt-BR')} lugares</span>
@@ -756,7 +758,6 @@ function LoanBox({ career, act }: { career: Career; act: Act }) {
     const payoff = loanPayoff(loan);
     return (
       <div className="loan-box">
-        <h4>Empréstimo em aberto</h4>
         <dl className="kv">
           <dt>Valor</dt><dd>{money(loan.principal)} ({Math.round(loan.rate * 100)}% de juros no total)</dd>
           <dt>Parcela</dt><dd>{money(loan.installment)}/mês · faltam {loan.monthsLeft}</dd>
@@ -777,8 +778,7 @@ function LoanBox({ career, act }: { career: Career; act: Act }) {
   const q = loanQuote(principal, months);
   return (
     <div className="loan-box">
-      <h4>Empréstimo bancário</h4>
-      <p className="hint">O banco libera até <b>{money(limit)}</b> (4 meses de receita). Um empréstimo por vez; a parcela sai do caixa todo dia 1.</p>
+      <p className="hint">Até <b>{money(limit)}</b> · um por vez · parcela todo dia 1</p>
       <div className="chips">
         {[0.25, 0.5, 0.75, 1].map((s) => (
           <button key={s} className={`chip ${share === s ? 'on' : ''}`} onClick={() => setShare(s)}>{moneyShort(Math.floor((limit * s) / 10000) * 10000)}</button>
