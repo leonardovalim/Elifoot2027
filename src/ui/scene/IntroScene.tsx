@@ -2,6 +2,9 @@ import { useEffect, useRef } from 'react';
 import { INTRO_END, introState, type IntroState } from './introTimeline';
 import { drawPlayer, lookFor, SPRITE_H } from './sprites';
 import stadiumUrl from '../../assets/intro/estadio.png';
+import kickerUrl from '../../assets/intro/cobrador.png';
+import keeperUrl from '../../assets/intro/goleiro.png';
+import wallUrl from '../../assets/intro/barreira.png';
 
 /**
  * Abertura em pixel art: estádio à noite, refletores acendendo, cobrança de
@@ -175,11 +178,101 @@ const ART_GOAL = { left: 194, right: 222, top: 85, bottom: 108 };
 const ART_LAMPS = [{ x: 6, y: 12 }, { x: 78, y: 19 }, { x: 152, y: 12 }, { x: 230, y: 2 }];
 const ART_STANDS = { top: 56, bottom: 95 };
 const ART_PLAY: PlayLayout = {
-  ballEnd: { x: 216, y: 88 }, ballRest: { x: 210, y: 104 }, groundEnd: 107, ctrl: { x: 160, y: 46 },
-  keeperX: 203, keeperBase: 96, keeperDive: 5,
+  ballEnd: { x: 198, y: 88 }, ballRest: { x: 215, y: 99 }, groundEnd: 100, ctrl: { x: 152, y: 58 },
+  keeperX: 203, keeperBase: 96, keeperDive: -5,
 };
 
-export function drawIntroArt(c: CanvasRenderingContext2D, bg: CanvasImageSource, s: IntroState, time: number) {
+/*
+ * Jogadores gerados no PixelLab (src/assets/intro/*.png): folhas horizontais de
+ * quadros quadrados. `feet` é a linha dos pés dentro do quadro e `cx` o centro
+ * do corpo parado, para alinhar o sprite a um ponto do gramado.
+ */
+export interface Sheet { img: CanvasImageSource; size: number; feet: number; cx: number; anims: Record<string, [number, number]> }
+export interface IntroSprites { kicker: Sheet; keeper: Sheet; wall: Sheet }
+
+export const SHEETS = {
+  kicker: { size: 36, feet: 29, cx: 18, anims: { parado: [0, 1], corrida: [1, 8], chute: [9, 5], comemora: [14, 9] } },
+  keeper: { size: 40, feet: 32, cx: 20, anims: { parado: [0, 1], salto: [1, 5], chao: [6, 3] } },
+  wall: { size: 40, feet: 32, cx: 20, anims: { parado: [0, 1], pulo: [1, 8] } },
+} satisfies Record<keyof IntroSprites, Omit<Sheet, 'img'>>;
+
+function sprite(c: CanvasRenderingContext2D, sh: Sheet, anim: string, i: number, x: number, ground: number) {
+  const [start, n] = sh.anims[anim] ?? [0, 1];
+  const f = start + Math.max(0, Math.min(n - 1, Math.floor(i)));
+  c.drawImage(sh.img, f * sh.size, 0, sh.size, sh.size, Math.round(x - sh.cx), Math.round(ground - sh.feet), sh.size, sh.size);
+}
+
+/** Pedaço de [a, b] já percorrido por v (0–1). */
+const seg = (v: number, a: number, b: number) => Math.max(0, Math.min(1, (v - a) / (b - a)));
+
+const ART_KICK = { from: 60, to: 87, ground: 121 };
+/** Barreira: fila na diagonal do gramado, do mais distante ao mais próximo. */
+const ART_WALL = [{ x: 155, g: 107 }, { x: 147, g: 112 }, { x: 139, g: 117 }];
+const ART_KEEPER = { x: 210, ground: 109, dive: -12 };
+
+function drawBall(c: CanvasRenderingContext2D, s: IntroState, L: PlayLayout) {
+  let bx = BALL_START.x, by = BALL_START.y, ground = BALL_START.y + 3;
+  if (s.sinceGoal >= 0) {
+    const k = Math.min(1, s.sinceGoal / 0.25);
+    bx = L.ballEnd.x + (L.ballRest.x - L.ballEnd.x) * k;
+    by = Math.min(L.ballRest.y, L.ballEnd.y + 3 * k + Math.max(0, s.sinceGoal - 0.2) ** 2 * 120);
+    ground = L.ballRest.y + 3;
+  } else if (s.flight > 0) {
+    ({ x: bx, y: by } = bezier(s.flight, L));
+    ground = BALL_START.y + 3 + (L.groundEnd - BALL_START.y - 3) * s.flight;
+    for (let k = 1; k <= 4; k++) {
+      const p = bezier(Math.max(0, s.flight - k * 0.035), L);
+      c.fillStyle = `rgba(255,255,255,${0.42 - k * 0.09})`; c.fillRect(Math.round(p.x), Math.round(p.y), 3, 3);
+    }
+  }
+  const x = Math.round(bx), y = Math.round(by);
+  // sombra fica menor quanto mais alta a bola
+  const air = Math.max(0, ground - by - 3);
+  const sw = air > 14 ? 2 : 4;
+  c.fillStyle = `rgba(0,0,0,${air > 14 ? 0.18 : 0.32})`; c.fillRect(x + (4 - sw) / 2, Math.round(ground), sw, 1);
+  // bola 4x4 com gomos girando
+  c.fillStyle = '#1a1420'; c.fillRect(x, y + 1, 4, 2); c.fillRect(x + 1, y, 2, 4);
+  c.fillStyle = '#ffffff'; c.fillRect(x + 1, y + 1, 2, 2); c.fillRect(x, y + 1, 1, 1); c.fillRect(x + 3, y + 2, 1, 1); c.fillRect(x + 1, y, 1, 1); c.fillRect(x + 2, y + 3, 1, 1);
+  const spin = s.flight > 0 && s.sinceGoal < 0.6 ? Math.floor(s.flight * 18 + Math.max(0, s.sinceGoal) * 20) % 4 : 0;
+  const dots = [[1, 1], [2, 1], [2, 2], [1, 2]] as const;
+  c.fillStyle = '#1a1420'; c.fillRect(x + dots[spin]![0], y + dots[spin]![1], 1, 1);
+}
+
+function drawPlayArt(c: CanvasRenderingContext2D, s: IntroState, time: number, L: PlayLayout, sp: IntroSprites) {
+  // goleiro: parado, salta para o ângulo (não alcança) e cai no gramado
+  const dive = seg(s.flight, 0.45, 1);
+  const kx = ART_KEEPER.x + ART_KEEPER.dive * dive;
+  if (s.sinceGoal >= 0) sprite(c, sp.keeper, 'chao', s.sinceGoal / 0.18, kx - 9, ART_KEEPER.ground);
+  else if (dive > 0) sprite(c, sp.keeper, 'salto', dive * 5, kx, ART_KEEPER.ground - Math.round(Math.sin(dive * Math.PI) * 3));
+  else sprite(c, sp.keeper, 'parado', 0, kx, ART_KEEPER.ground);
+
+  // barreira: pula quando a bola sai
+  const jump = seg(s.flight, 0, 0.6);
+  ART_WALL.forEach((w, i) => {
+    const j = Math.max(0, Math.min(1, jump - i * 0.04));
+    if (j > 0 && j < 1) sprite(c, sp.wall, 'pulo', j * 8, w.x, w.g);
+    else sprite(c, sp.wall, 'parado', 0, w.x, w.g);
+  });
+
+  // cobrador: espera, corre, chuta e comemora
+  const K = ART_KICK;
+  if (s.sinceGoal >= 0) {
+    const run = Math.min(1, s.sinceGoal / 1.2);
+    sprite(c, sp.kicker, 'comemora', (s.sinceGoal * 12) % 9, K.to + run * 18, K.ground);
+  } else if (s.flight > 0) {
+    const f = s.flight < 0.12 ? 2 : s.flight < 0.3 ? 3 : s.flight < 0.5 ? 4 : -1;
+    if (f >= 0) sprite(c, sp.kicker, 'chute', f, K.to, K.ground);
+    else sprite(c, sp.kicker, 'parado', 0, K.to, K.ground);
+  } else if (s.run > 0) {
+    const x = K.from + (K.to - K.from) * s.run;
+    if (s.run < 0.8) sprite(c, sp.kicker, 'corrida', (time * 14) % 8, x, K.ground);
+    else sprite(c, sp.kicker, 'chute', s.run < 0.9 ? 0 : 1, x, K.ground);
+  } else sprite(c, sp.kicker, 'parado', 0, K.from, K.ground);
+
+  drawBall(c, s, L);
+}
+
+export function drawIntroArt(c: CanvasRenderingContext2D, bg: CanvasImageSource, s: IntroState, time: number, sp?: IntroSprites | null) {
   const lit = s.lightsOn / 4;
   const cheering = s.sinceGoal >= 0 && s.sinceGoal < 2.4;
   c.drawImage(bg, 0, 0);
@@ -200,7 +293,8 @@ export function drawIntroArt(c: CanvasRenderingContext2D, bg: CanvasImageSource,
   c.fillStyle = 'rgba(236,240,236,0.22)';
   mesh(c, { x: g.left + 1, y: g.top + 1 }, { x: g.right - 1, y: g.top + 1 }, { x: g.right - 1, y: g.bottom }, { x: g.left + 1, y: g.bottom }, 9, 7, sway);
 
-  drawPlay(c, s, time, ART_PLAY);
+  if (sp) drawPlayArt(c, s, time, ART_PLAY, sp);
+  else drawPlay(c, s, time, ART_PLAY);
 
   // escuridão antes dos refletores; cada refletor apagado ganha uma sombra sobre lâmpada e facho
   if (lit < 1) {
@@ -350,16 +444,24 @@ export function IntroScene({ skip, onReveal }: Props) {
     if (!ctx) return;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     let bg: HTMLImageElement | null = null;
-    const img = new Image();
+    let sp: IntroSprites | null = null;
+    let alive = true;
+    const load = (src: string) => new Promise<HTMLImageElement>((ok, fail) => {
+      const im = new Image(); im.onload = () => ok(im); im.onerror = fail; im.src = src;
+    });
     // com movimento reduzido só um quadro é desenhado: redesenha quando a arte chegar
-    img.onload = () => { bg = img; if (reduced) raf = requestAnimationFrame(tick); };
-    img.src = stadiumUrl;
+    load(stadiumUrl).then((im) => { if (!alive) return; bg = im; if (reduced) raf = requestAnimationFrame(tick); }).catch(() => {});
+    Promise.all([load(kickerUrl), load(keeperUrl), load(wallUrl)]).then(([k, g, w]) => {
+      if (!alive) return;
+      sp = { kicker: { img: k, ...SHEETS.kicker }, keeper: { img: g, ...SHEETS.keeper }, wall: { img: w, ...SHEETS.wall } };
+      if (reduced) raf = requestAnimationFrame(tick);
+    }).catch(() => {});
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
       const t = (now - start) / 1000 + offset.current;
       const st = introState(t);
-      if (bg) drawIntroArt(ctx, bg, st, reduced ? 0 : t);
+      if (bg) drawIntroArt(ctx, bg, st, reduced ? 0 : t, sp);
       else drawIntro(ctx, st, reduced ? 0 : t);
       if (st.revealed && !revealed.current) { revealed.current = true; reveal.current(); }
       if (!reduced) raf = requestAnimationFrame(tick);
@@ -370,7 +472,7 @@ export function IntroScene({ skip, onReveal }: Props) {
     window.addEventListener('pointerdown', skipNow);
     window.addEventListener('keydown', skipNow);
     return () => {
-      img.onload = null;
+      alive = false;
       cancelAnimationFrame(raf);
       window.removeEventListener('pointerdown', skipNow);
       window.removeEventListener('keydown', skipNow);
