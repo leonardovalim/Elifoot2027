@@ -788,3 +788,57 @@ html, body { overflow-x: hidden; }
 .offer.taken { opacity: 0.55; }
 .mp-count-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
 .mp-roster .window-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+/* ---------- dia de jogo: abas e intervenções ---------- */
+.tabs { display: flex; gap: 0; margin: 0 0 0 2px; position: relative; z-index: 1; }
+.tab {
+  flex: 1 1 0; min-width: 0; border: 0; cursor: pointer; font-weight: 700; font-size: 14px; padding: 8px 10px;
+  background: var(--paper-2); color: var(--text); box-shadow: 0 0 0 2px var(--ink); margin-right: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tab:hover:not(.on) { background: #f3e5c6; }
+.tab.on { background: var(--paper-3); box-shadow: 0 0 0 2px var(--ink), 0 4px 0 0 var(--paper-3); }
+.tab:focus-visible { outline: 2px dashed var(--tomato); outline-offset: -5px; }
+.live-main .feed, .board-panel { margin-top: 2px; }
+.board-panel { background: var(--paper-3); box-shadow: 0 0 0 2px var(--ink); padding: 8px 10px; overflow-y: auto; }
+.board-panel .round-board { margin-top: 0; padding-top: 0; border-top: 0; }
+.board-panel .rb-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
+/* com abas, o painel principal ocupa a altura toda (antes dividia espaço com o placar da rodada) */
+@media (min-width: 901px) {
+  .match-window .match .live-main .feed, .match-window .match .board-panel { height: max(320px, calc(100vh / var(--z) - 330px)); }
+}
+@media (max-width: 900px) {
+  .match-window .match .live-main .feed, .match-window .match .board-panel { height: 320px; }
+}
+
+.side-panel { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.side-panel h4 { margin-top: 0; }
+.iv { display: grid; gap: 10px; }
+.iv h4 { margin: 0; }
+.iv-block { display: grid; gap: 4px; margin: 0; }
+.iv-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; }
+.iv-label em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 700; color: var(--text); }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); box-shadow: 0 0 0 2px var(--ink); background: var(--ink); gap: 2px; }
+.seg button { border: 0; margin: 0; cursor: pointer; padding: 8px 4px; font-weight: 700; font-size: 14px; background: var(--paper-3); color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seg button:hover:not(.on) { background: #fff; }
+.seg button.on { background: var(--mustard); }
+.seg button:focus-visible { outline: 2px dashed var(--tomato); outline-offset: -4px; }
+.iv select { width: calc(100% - 2 * var(--px)); height: 36px; margin: var(--px); }
+.iv-sub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.iv-sub select { width: calc(100% - 2 * var(--px)); min-width: 0; }
+.iv-go { width: calc(100% - 2 * var(--px)); justify-content: center; }
+@media (max-width: 560px) { .iv-sub { grid-template-columns: minmax(0, 1fr); } }
+.tab-short { display: none; }
+@media (max-width: 560px) { .tab-full { display: none; } .tab-short { display: inline; } }
+.side-panel .card { align-self: stretch; }
+
+/* ---------- decisão do mercado: enxuta, ficha recolhida ---------- */
+.ctx-more { margin-top: 6px; }
+.ctx-more summary { cursor: pointer; font-weight: 700; font-size: 13px; color: var(--tomato-dk); padding: 4px 0; list-style: none; }
+.ctx-more summary::-webkit-details-marker { display: none; }
+.ctx-more summary::before { content: '▸ '; }
+.ctx-more[open] summary::before { content: '▾ '; }
+.offer-line { margin: 8px 0 4px; }
+.btn.with-sub { display: flex; flex-direction: column; align-items: center; gap: 1px; line-height: 1.2; white-space: normal; }
+.btn.with-sub small { font-size: 12px; font-weight: 600; opacity: 0.75; }
+.athlete-ctx .morale-face { font-size: 16px; vertical-align: -2px; }

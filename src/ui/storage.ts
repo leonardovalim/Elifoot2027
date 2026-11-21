@@ -1,4 +1,4 @@
-import { SAVE_VERSION, type Career } from '../game/career';
+import { SAVE_VERSION, withNovaIguacu, type Career } from '../game/career';
 
 const KEY = 'mestres-do-esporte.save';
 /** Chave usada antes do rebatismo — lida uma vez para não perder saves antigos. */
@@ -9,7 +9,8 @@ export function loadCareer(): Career | null {
     const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as Career;
-    return c.version === SAVE_VERSION ? c : null;
+    // saves de antes do Nova Iguaçu/André Elias ganham os dois ao abrir
+    return c.version === SAVE_VERSION ? withNovaIguacu(c) : null;
   } catch {
     return null;
   }
