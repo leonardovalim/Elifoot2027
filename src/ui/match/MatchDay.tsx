@@ -9,6 +9,7 @@ import type { Formation, Side, Style, TeamStats } from '../../sports/football/ty
 import { track } from '../analytics';
 import { cheer, play, setCrowd, SoundToggle, startCrowd, stopCrowd, useSoundOn } from '../sound';
 import { crowdLevels, crowdReaction, CUE_PRIORITY, type CrowdCue } from '../crowd';
+import { MatchScene } from './MatchScene';
 import { RoundBoard, type Scope } from './RoundBoard';
 import { Flag } from '../flag';
 import { Badge, Bar, Fold, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
@@ -216,6 +217,15 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       </div>
       <div className="live-grid">
         <div className="live-main">
+        <MatchScene
+          events={m.events}
+          colors={colors}
+          kits={{
+            home: [home.colors[0], home.colors[1]],
+            away: colors.away.bg === away.colors[0] ? [away.colors[0], away.colors[1]] : [colors.away.bg, away.colors[0]],
+          }}
+          shorts={{ home: m.home.short, away: m.away.short }}
+        />
         <div className="tabs" role="tablist" aria-label="O que acompanhar">
           {(p.cup !== undefined
             ? [['lances', 'Lance a lance', 'Lances'], ['div', 'Outros jogos', 'Outros jogos']] as const
