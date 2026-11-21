@@ -8,6 +8,9 @@ Monta uma folha de sprites (strip horizontal) a partir de quadros baixados do Pi
 - quadros: lista opcional "1,3,4,7" (padrão: todos, em ordem).
 - "!" no fim: mantém só a maior mancha conectada de cada quadro (apaga bola/pixels soltos).
 - "rot-west" etc. também servem como animação de 1 quadro.
+- Quadros de tamanhos diferentes (rotação 28px x animação 36px) vão para um quadro do
+  tamanho do maior, alinhados pelos pés e pelo centro do 1º quadro de cada animação
+  (o grupo inteiro recebe o mesmo deslocamento, para a animação não tremer).
 
 Grava <saida.png> e imprime o manifesto JSON {anim: [início, quantidade]} para colar no código.
 Requer Pillow (só no momento de gerar; o jogo não depende dele).
@@ -81,20 +84,33 @@ def frames_for(spec):
     return name, imgs
 
 
+def anchor(im):
+    """(centro x, linha dos pés) da parte opaca."""
+    box = im.getchannel('A').getbbox()
+    if not box:
+        return im.size[0] / 2, im.size[1] - 1
+    return (box[0] + box[2]) / 2, box[3] - 1
+
+
 def main():
     out, specs = sys.argv[1], sys.argv[2:]
     anims = [frames_for(s) for s in specs]
-    fw, fh = anims[0][1][0].size
+    size = max(max(max(im.size) for im in imgs) for _, imgs in anims)
+    feet, cx = size - 3, size // 2
     total = sum(len(f) for _, f in anims)
-    sheet = Image.new('RGBA', (fw * total, fh), (0, 0, 0, 0))
+    sheet = Image.new('RGBA', (size * total, size), (0, 0, 0, 0))
     manifest, i = {}, 0
     for name, imgs in anims:
+        ax, ay = anchor(imgs[0])
+        dx, dy = round(cx - ax), round(feet - ay)
         manifest[name] = [i, len(imgs)]
         for im in imgs:
-            sheet.paste(im, (i * fw, 0))
+            frame = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+            frame.paste(im, (dx, dy), im)
+            sheet.paste(frame, (i * size, 0))
             i += 1
     sheet.save(out, optimize=True)
-    print(json.dumps({'frame': [fw, fh], 'anims': manifest}))
+    print(json.dumps({'size': size, 'feet': feet, 'cx': cx, 'anims': manifest}))
 
 
 if __name__ == '__main__':
