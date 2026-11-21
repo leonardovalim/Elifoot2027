@@ -146,6 +146,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 }
 .logo h1 { font-size: clamp(38px, 8.5vw, 72px); line-height: 0.95; letter-spacing: 4px; color: var(--mustard); text-shadow: 4px 4px 0 var(--tomato-dk), 8px 8px 0 var(--ink); }
 .logo p { margin-top: 18px; color: var(--paper-3); font-size: 19px; font-weight: 700; text-shadow: 2px 2px 0 var(--ink); }
+.emblem { display: block; width: clamp(88px, 14vw, 132px); height: auto; margin: 0 auto 10px; image-rendering: pixelated; filter: drop-shadow(4px 4px 0 rgba(14,17,38,0.75)); }
 .trophy { font-size: 48px; display: block; margin-bottom: 8px; filter: drop-shadow(3px 3px 0 var(--ink)); }
 .title-screen .menu { display: flex; flex-direction: column; gap: 10px; }
 /* celular deitado: pouca altura, logo menor e menu em linha para caber sem rolar */
@@ -153,6 +154,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
   .title-screen { gap: 14px; padding: 10px 16px 28px; }
   .logo h1 { font-size: clamp(28px, 10vh, 46px); letter-spacing: 3px; text-shadow: 3px 3px 0 var(--tomato-dk), 5px 5px 0 var(--ink); }
   .logo p { margin-top: 8px; font-size: 15px; }
+  .emblem { width: clamp(52px, 17vh, 72px); margin-bottom: 4px; }
   .title-screen .menu { flex-direction: row; flex-wrap: wrap; justify-content: center; max-width: 640px; }
   .title-screen .menu .btn.big { font-size: 15px; padding: 10px 16px; }
   .title-screen .foot, .skip-hint { bottom: 6px; }
