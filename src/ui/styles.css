@@ -922,6 +922,50 @@ html, body { overflow-x: hidden; }
 .fold-board .rb-head h4 { display: none; }
 .side-panel .fold, .two-col .fold { margin-top: 10px; }
 
+/* ---------- fim de jogo: uma coluna centralizada, resultado em destaque ---------- */
+.match.post { max-width: 760px; margin: 0 auto; }
+.result-chip { display: table; margin: 4px auto 0; padding: 4px 14px; font-weight: 900; font-size: 15px; letter-spacing: 1.5px; text-transform: uppercase; color: #fff; box-shadow: 0 0 0 2px var(--ink); }
+.result-chip.win { background: var(--good); }
+.result-chip.draw { background: var(--mustard); color: var(--ink); }
+.result-chip.loss { background: var(--bad); }
+.match.post .scoreboard { margin-bottom: 6px; }
+/* gols embaixo de cada time, alinhados com o escudo de cada lado */
+.post-scorers { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin: 0 0 12px; }
+.post-scorers ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.post-scorers ul.right { text-align: right; }
+/* destaque: faixa fina de uma linha */
+.motm-strip { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 8px 12px; margin: 0 0 12px; background: var(--ink); color: var(--paper); }
+.motm-strip .kicker { margin: 0; color: var(--mustard); }
+.motm-strip .hint { color: var(--paper-2); }
+.motm-strip .rating { margin-left: auto; background: var(--good); color: #fff; font-weight: 800; padding: 2px 8px; }
+/* estatísticas de TV: barras espelhadas a partir do centro */
+.post-stats { margin: 0 0 4px; }
+.post-stats h4 { margin: 0 0 6px; }
+.tv-stats { display: flex; flex-direction: column; gap: 6px; }
+.tv-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 104px minmax(0, 1fr) 44px; align-items: center; gap: 8px; font-size: 14px; }
+.tv-row b { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
+.tv-row b.lead { font-weight: 900; color: var(--text); }
+.tv-row b:last-child { text-align: right; }
+.tv-label { text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.tv-bar { display: flex; height: 8px; background: var(--paper-2); box-shadow: 0 0 0 1px var(--ink); }
+.tv-bar.l { justify-content: flex-end; }
+.tv-bar.l i { background: var(--l); }
+.tv-bar.r i { background: var(--r); }
+.tv-bar i { display: block; height: 100%; }
+.match.post .fold-board { margin-top: 12px; }
+@media (max-width: 560px) {
+  .tv-row { grid-template-columns: 36px minmax(0, 1fr) 84px minmax(0, 1fr) 36px; gap: 6px; font-size: 13px; }
+  .tv-label { font-size: 11px; }
+}
+/* bloco recolhível aberto: o resumo do cabeçalho some (o conteúdo já mostra tudo) */
+.fold[open] > summary .hint { display: none; }
+@media (max-width: 560px) {
+  /* destaque no celular: nome e posição empilhados, nota fixa à direita */
+  .motm-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 0; align-items: center; }
+  .motm-strip .kicker, .motm-strip b, .motm-strip .hint { grid-column: 1; }
+  .motm-strip .rating { grid-column: 2; grid-row: 1 / span 3; margin: 0; }
+}
+
 /* ---------- cena do lance (partida assistida) ---------- */
 .match-scene { position: relative; margin-bottom: 8px; box-shadow: 0 0 0 var(--px) var(--ink); background: #0e1126; overflow: hidden; }
 .match-scene canvas { display: block; width: 100%; height: auto; aspect-ratio: 240 / 100; image-rendering: pixelated; image-rendering: crisp-edges; }
