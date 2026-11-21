@@ -30,6 +30,8 @@ export interface MarketCtx {
   me: string;
   /** Clubes de técnicos humanos (multijogador): a IA não compra deles nem eles entram como comprador. */
   humans?: string[];
+  /** Data em que o técnico assumiu o clube (carência para propostas e pedidos). */
+  since?: IsoDate;
   decisions: Decision[];
   push: (kind: 'good' | 'bad' | 'money' | 'info', text: string) => void;
   addSale: (fee: number) => void;
@@ -53,6 +55,13 @@ const round1000 = (v: number) => Math.round(v / 1000) * 1000;
 const fmt = (v: number) => `$ ${v.toLocaleString('pt-BR')}`;
 const MAX_PENDING = 3;
 const RAISE_COOLDOWN_DAYS = 120;
+/**
+ * Carência ao assumir um clube: ninguém faz proposta nos primeiros 60 dias nem pede
+ * aumento nos primeiros 45. Quem está começando conhece o elenco antes das decisões.
+ */
+export const BID_GRACE_DAYS = 60;
+export const RAISE_GRACE_DAYS = 45;
+const inGrace = (ctx: MarketCtx, days: number) => !!ctx.since && daysBetween(ctx.since, ctx.date) < days;
 
 function daysBetween(a: IsoDate, b: IsoDate) {
   return (Date.parse(b) - Date.parse(a)) / 86400000;
@@ -88,6 +97,7 @@ export function marketDay(ctx: MarketCtx, rng: Rng) {
 /** Proposta de outro clube por um atleta: ~1 a cada 2 meses, mais se houver alguém insatisfeito. */
 function maybeBid(ctx: MarketCtx, club: Club, rng: Rng) {
   if (ctx.decisions.some((d) => d.kind === 'bid')) return;
+  if (inGrace(ctx, BID_GRACE_DAYS)) return;
   // atleta sem valor de mercado não recebe proposta (evitava oferta de $0 e "NaN% do valor" na tela)
   const pool = club.players.filter((p) => canLose(club, p) && !p.leaving && !p.clubLocked && playerValue(p) > 0);
   if (!pool.length) return;
@@ -109,6 +119,7 @@ const goodSeason = (p: Player) => p.stats.apps >= 5 && p.stats.ratingSum / p.sta
 /** Pedido de aumento: atleta mal pago, insatisfeito ou em boa fase; no máximo um por quinzena. */
 function maybeRaise(ctx: MarketCtx, club: Club, rng: Rng) {
   if (ctx.decisions.some((d) => d.kind === 'raise')) return;
+  if (inGrace(ctx, RAISE_GRACE_DAYS)) return;
   const median = [...club.players].map(overall).sort((a, b) => a - b)[Math.floor(club.players.length / 2)] ?? 0;
   const eligible = club.players.filter((p) =>
     !p.leaving

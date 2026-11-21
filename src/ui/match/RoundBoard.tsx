@@ -3,7 +3,7 @@ import type { Career, PreparedRound } from '../../game/career';
 import type { MatchEvent } from '../../sports/football/types';
 import { Flag } from '../flag';
 
-type Scope = 'div' | 'all';
+export type Scope = 'div' | 'all';
 /** Escolha lembrada enquanto o jogo está aberto: a próxima rodada abre do mesmo jeito. */
 let lastScope: Scope = 'div';
 
@@ -37,9 +37,14 @@ function scoreAt(events: MatchEvent[], minute: number, final: boolean) {
  * Placar dos jogos da rodada. Durante a partida os outros jogos andam junto com o
  * relógio (os resultados já estão sorteados; só revelamos os gols minuto a minuto).
  */
-export function RoundBoard({ career, prep, minute, final, myPens }: { career: Career; prep: PreparedRound; minute: number; final: boolean; myPens?: [number, number] }) {
+export function RoundBoard({ career, prep, minute, final, myPens, scope: fixed }: {
+  career: Career; prep: PreparedRound; minute: number; final: boolean; myPens?: [number, number];
+  /** Escopo escolhido fora (abas do jogo ao vivo): esconde os botões próprios. */
+  scope?: Scope;
+}) {
   const cup = prep.cup !== undefined;
-  const [scope, setScope] = useState<Scope>(lastScope);
+  const [own, setScope] = useState<Scope>(lastScope);
+  const scope = fixed ?? own;
   const choose = (s: Scope) => { lastScope = s; setScope(s); };
   const m = prep.match;
 
@@ -62,7 +67,7 @@ export function RoundBoard({ career, prep, minute, final, myPens }: { career: Ca
     <section className="round-board" aria-label="Jogos da rodada">
       <div className="rb-head">
         <h4>{cup ? prep.cupLabel : `Rodada ${prep.round + 1}`}{final ? ' · resultados' : ' · ao vivo'}</h4>
-        {!cup && <div className="chips" role="group" aria-label="Quais jogos mostrar">
+        {!cup && !fixed && <div className="chips" role="group" aria-label="Quais jogos mostrar">
           <button className={`chip ${scope === 'div' ? 'on' : ''}`} aria-pressed={scope === 'div'} onClick={() => choose('div')}>Minha divisão</button>
           <button className={`chip ${scope === 'all' ? 'on' : ''}`} aria-pressed={scope === 'all'} onClick={() => choose('all')}>Todas as divisões</button>
         </div>}
