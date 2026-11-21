@@ -70,6 +70,19 @@ export function ClubName({ club }: { club: Club }) {
   return <span className="clubname"><Badge club={club} size="sm" />{club.name}</span>;
 }
 
+/**
+ * Bloco recolhível (padrão do jogo: o que alonga a tela vem fechado).
+ * `summary` é o resumo que aparece no cabeçalho, para não precisar abrir só para conferir.
+ */
+export function Fold({ title, summary, children, open, className = '' }: { title: ReactNode; summary?: ReactNode; children: ReactNode; open?: boolean; className?: string }) {
+  return (
+    <details className={`fold ${className}`} open={open}>
+      <summary>{title}{summary !== undefined && <span className="hint">{summary}</span>}</summary>
+      {children}
+    </details>
+  );
+}
+
 export function Bar({ value, max = 100, tone }: { value: number; max?: number; tone?: 'good' | 'warn' | 'bad' | 'accent' }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   const t = tone ?? (pct >= 70 ? 'good' : pct >= 45 ? 'warn' : 'bad');

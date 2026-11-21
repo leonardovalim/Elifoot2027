@@ -40,7 +40,7 @@ import { CupPanel } from './CupPanel';
 import { ForeignFlag } from '../flag';
 import { COUNTRY_NAME, nationalityOf } from '../../sports/football/nations';
 import { CONTINENTAL_NAME, CUP_NAME } from '../../game/cup';
-import { Bar, ClubName, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
+import { Bar, ClubName, Fold, POS_LABEL, STYLE_LABEL, Stars, money, moneyShort } from '../util';
 
 export type Act = (fn: (c: Career) => string | null | void) => void;
 
@@ -822,15 +822,23 @@ export function CareerPanel({ career, onReset }: { career: Career; onReset: () =
         <button className="btn danger ghost" onClick={onReset}>Apagar save e recomeçar</button>
       </section>
       <section>
-        <h4>Trajetória</h4>
-        {e.history.length === 0 ? <p className="hint">Nenhuma temporada concluída.</p> : (
-          <ul className="list">
-            {e.history.map((h, i) => (
-              <li key={i}>{h.year} · {h.orgName} · {h.position}º na Div {h.division} · <span className={h.achieved ? 'ok' : 'neg'}>{h.achieved ? 'objetivo cumprido' : 'objetivo não cumprido'}</span></li>
-            ))}
-          </ul>
+        {/* cresce uma linha por temporada: vem recolhida, com o resumo no cabeçalho */}
+        {e.history.length === 0
+          ? <><h4>Trajetória</h4><p className="hint">Nenhuma temporada concluída.</p></>
+          : (
+            <Fold title="Trajetória" summary={`${e.history.length} ${e.history.length === 1 ? 'temporada' : 'temporadas'} · ${e.history.filter((h) => h.achieved).length} objetivo(s) cumprido(s)`}>
+              <ul className="list">
+                {e.history.map((h, i) => (
+                  <li key={i}>{h.year} · {h.orgName} · {h.position}º na Div {h.division} · <span className={h.achieved ? 'ok' : 'neg'}>{h.achieved ? 'objetivo cumprido' : 'objetivo não cumprido'}</span></li>
+                ))}
+              </ul>
+            </Fold>
+          )}
+        {club && club.titles.length > 0 && (
+          <Fold title="Títulos do clube" summary={`🏆 ${club.titles.length}`}>
+            <ul className="list">{club.titles.map((t, i) => <li key={i}>🏆 {t.competition} {t.year}</li>)}</ul>
+          </Fold>
         )}
-        {club && club.titles.length > 0 && (<><h4>Títulos do clube</h4><ul className="list">{club.titles.map((t, i) => <li key={i}>🏆 {t.competition} {t.year}</li>)}</ul></>)}
       </section>
       <AchievementsSection />
     </div>

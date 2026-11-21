@@ -11,7 +11,7 @@ import { cheer, play, setCrowd, SoundToggle, startCrowd, stopCrowd, useSoundOn }
 import { crowdLevels, crowdReaction, CUE_PRIORITY, type CrowdCue } from '../crowd';
 import { RoundBoard, type Scope } from './RoundBoard';
 import { Flag } from '../flag';
-import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
+import { Badge, Bar, Fold, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
 
 interface Props {
   career: Career;
@@ -171,7 +171,9 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
               ))}
               {o.homeScore + o.awayScore === 0 && <li className="hint">Sem gols.</li>}
             </ul>
-            <StatsBars style={barColors} a={o.stats[L]} b={o.stats[R]} possession={L === 'home' ? o.possession : 1 - o.possession} />
+            <Fold title="Estatísticas" summary={statsLine(o.stats[L], o.stats[R], L === 'home' ? o.possession : 1 - o.possession)}>
+              <StatsBars style={barColors} a={o.stats[L]} b={o.stats[R]} possession={L === 'home' ? o.possession : 1 - o.possession} />
+            </Fold>
           </section>
           <section>
             {motm && (
@@ -182,7 +184,9 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
                 <span className="rating">{o.motm.rating.toFixed(1)}</span>
               </div>
             )}
-            <RoundBoard career={career} prep={p} minute={m.minute} final myPens={sh ? [sh.home, sh.away] : undefined} />
+            <Fold title="Outros jogos da rodada" className="fold-board">
+              <RoundBoard career={career} prep={p} minute={m.minute} final myPens={sh ? [sh.home, sh.away] : undefined} />
+            </Fold>
           </section>
         </div>
         <div className="row center">
@@ -283,13 +287,16 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             </div>
             </div>
           </details>
-          <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
-          <h4>Condição física · {m[side].short}</h4>
-          <div className="cond-list">
-            {onPitch.map((x) => (
-              <div key={x.id} className="attr"><span className={`pos ${x.position}`}>{POS_LABEL[x.position]}</span><span className="nm">{x.name}</span><Bar value={mine.condition[x.id]!} /></div>
-            ))}
-          </div>
+          <Fold title="Estatísticas" summary={statsLine(m[L].stats, m[R].stats, possessionOf(m[L].stats, m[R].stats))}>
+            <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
+          </Fold>
+          <Fold title={`Condição física · ${m[side].short}`} summary={tiredLine(onPitch.map((x) => ({ name: x.name, cond: mine.condition[x.id]! })))}>
+            <div className="cond-list">
+              {onPitch.map((x) => (
+                <div key={x.id} className="attr"><span className={`pos ${x.position}`}>{POS_LABEL[x.position]}</span><span className="nm">{x.name}</span><Bar value={mine.condition[x.id]!} /></div>
+              ))}
+            </div>
+          </Fold>
         </section>
       </div>
     </div>
@@ -331,6 +338,18 @@ function Compare({ label, a, b }: { label: string; a: number; b: number }) {
       <span className="label">{label}</span>
     </div>
   );
+}
+
+/** Resumo das estatísticas no cabeçalho recolhido: posse e finalizações (seu time primeiro). */
+function statsLine(a: TeamStats, b: TeamStats, possession: number) {
+  const pa = Math.round(possession * 100);
+  return `posse ${pa}% · chutes ${a.shots}×${b.shots}`;
+}
+
+/** Quem está mais cansado, para decidir a troca sem abrir a lista. */
+function tiredLine(list: { name: string; cond: number }[]) {
+  const t = [...list].sort((x, y) => x.cond - y.cond)[0];
+  return t ? `mais cansado: ${t.name.split(' ')[0]} ${Math.round(t.cond)}%` : '';
 }
 
 function StatsBars({ a, b, possession, style }: { a: TeamStats; b: TeamStats; possession: number; style?: CSSProperties }) {
