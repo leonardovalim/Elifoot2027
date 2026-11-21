@@ -7,10 +7,11 @@ import { CUE_PRIORITY, type CrowdCue, type CrowdLevels } from './crowd';
  * são sintetizados na hora com Web Audio (chiptune, sem arquivos).
  * Liga/desliga fica salvo no navegador; o padrão é ligado.
  */
-export type SoundKind = 'goalFor' | 'goalAgainst' | 'whistle' | 'halfTime' | 'fullTime' | 'alert' | 'card' | 'injury' | 'click';
+export type SoundKind = 'goalFor' | 'goalAgainst' | 'whistle' | 'halfTime' | 'fullTime' | 'alert' | 'card' | 'injury' | 'click'
+  | 'post' | 'signing' | 'money' | 'achievement';
 
 /** Arquivos em public/audio. */
-export const SAMPLES = ['intro', 'goal', 'whistle', 'click'] as const;
+export const SAMPLES = ['intro', 'goal', 'whistle', 'click', 'goal-against', 'card', 'injury', 'post', 'alert', 'signing', 'money', 'achievement'] as const;
 export type SampleId = (typeof SAMPLES)[number];
 
 /** Um toque de amostra: começa em `t` (s) e dura `d` (s; sem `d`, até o fim). */
@@ -23,6 +24,14 @@ export const SAMPLED: Partial<Record<SoundKind, Hit[]>> = {
   halfTime: [{ s: 'whistle', t: 0, d: 0.22 }, { s: 'whistle', t: 0.32, d: 0.45 }],
   fullTime: [{ s: 'whistle', t: 0, d: 0.22 }, { s: 'whistle', t: 0.3, d: 0.22 }, { s: 'whistle', t: 0.6, d: 0.75 }],
   click: [{ s: 'click', t: 0, vol: 0.6 }],
+  goalAgainst: [{ s: 'goal-against', t: 0 }],
+  card: [{ s: 'card', t: 0 }],
+  injury: [{ s: 'injury', t: 0 }],
+  alert: [{ s: 'alert', t: 0, vol: 0.8 }],
+  post: [{ s: 'post', t: 0, vol: 0.8 }],
+  signing: [{ s: 'signing', t: 0 }],
+  money: [{ s: 'money', t: 0 }],
+  achievement: [{ s: 'achievement', t: 0, vol: 0.9 }],
 };
 
 const KEY = 'mde.sound';
@@ -469,6 +478,14 @@ export const SOUNDS: Record<SoundKind, Note[]> = {
   injury: [{ f: 880, t: 0, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 660, t: 0.15, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 880, t: 0.3, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 660, t: 0.45, d: 0.2, type: 'triangle', vol: 0.8 }],
   // blip de cursor
   click: [{ f: 1568, t: 0, d: 0.04, vol: 0.35 }],
+  // "plim" metálico: bola na trave
+  post: [{ f: 2093, t: 0, d: 0.18, type: 'triangle', vol: 0.7 }, { f: 1568, t: 0.06, d: 0.2, type: 'triangle', vol: 0.4 }],
+  // arpejo curto subindo: contrato assinado
+  signing: [523, 659, 784, 1047].map((f, i) => ({ f, t: i * 0.07, d: i === 3 ? 0.25 : 0.07, vol: 0.6 })),
+  // duas moedas: dinheiro entrando
+  money: [{ f: 1976, t: 0, d: 0.08, vol: 0.6 }, { f: 2637, t: 0.09, d: 0.22, vol: 0.6 }],
+  // fanfarrinha: conquista
+  achievement: [784, 988, 1175, 1568].map((f, i) => ({ f, t: i * 0.08, d: i === 3 ? 0.35 : 0.08, vol: 0.6 })),
 };
 
 export function play(kind: SoundKind) {

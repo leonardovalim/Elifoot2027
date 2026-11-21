@@ -68,6 +68,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         else if (e.type === 'injury' && e.side === side) play('injury');
         else if (e.type === 'half' || e.type === 'extra') play('halfTime');
         else if (e.type === 'penalty') play('whistle');
+        else if (e.type === 'post' || e.type === 'bar') play('post');
       }
       if (m.finished) play('fullTime');
       // torcida da casa: a reação mais forte do minuto e o volume das camadas

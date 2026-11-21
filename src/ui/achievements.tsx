@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_ID, TIER_LABEL, emptyAch, normalizeAch, type AchState } from '../game/achievements';
 import { track } from './analytics';
+import { play } from './sound';
 import { drawLegacyThumb } from './scene/legacyThumb';
 
 /**
@@ -85,6 +86,8 @@ export function AchievementToastHost() {
   }, []);
 
   const current = queue[0];
+  // cada banner novo entra com a fanfarrinha da conquista
+  useEffect(() => { if (current) play('achievement'); }, [current]);
   // o cronômetro depende só do banner atual: conquistas novas entrando na fila não podem
   // estender a vida dele (a animação de saída já rodou e ele ficaria invisível travando a fila)
   useEffect(() => {
