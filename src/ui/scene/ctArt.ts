@@ -129,7 +129,7 @@ export const PLACES: Place[] = [
     id: 'primeira-vitoria', layer: 'front', s: 'faixa', tint: true, k: 0.75, x: 220, y: 213,
     extra: (c, _fr, k, x, y) => drawText(c, 'VAMOS!', x + Math.round((43 - textWidth('VAMOS!')) / 2), y + 7, '#ffffff', k[0]),
   },
-  { id: 'de-virada', layer: 'front', s: 'torcedor-bumbo', tint: true, x: 268, y: 213, move: (fr) => ({ dx: 0, dy: fr % 60 < 30 ? 0 : -1 }) },
+  { id: 'de-virada', layer: 'front', s: 'torcedor-bumbo', tint: true, x: 268, y: 213 },
   { id: 'laranja-da-baixada', layer: 'front', s: 'laranjas', k: 0.6, x: 292, y: 232 },
   // ---------------- pátio: portão, monumentos, fonte e estacionamento
   { id: 'casamento', layer: 'front', s: 'placa-homenagem', k: 0.6, x: 128, y: 210 },

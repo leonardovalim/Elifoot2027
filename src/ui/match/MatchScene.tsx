@@ -86,9 +86,10 @@ export function drawMatchScene(
   c.drawImage(art.stadium, 0, OFF);
   if (celebrating) { // torcida pulando
     const h = STANDS.bottom - STANDS.top;
-    for (let x = 0; x < W; x += 3) {
-      const off = Math.round(Math.abs(Math.sin(time * 12 + x * 0.9)) * 2);
-      if (off) c.drawImage(art.stadium, x, STANDS.top - OFF, 3, h, x, STANDS.top - off, 3, h);
+    for (let x = 0; x < W; x += 12) {
+      // ola: blocos de 12 px sobem e descem devagar, em onda (sem cintilar)
+      const off = Math.round(Math.max(0, Math.sin(time * 5 - x * 0.05)) * 2);
+      if (off) c.drawImage(art.stadium, x, STANDS.top - OFF, 12, h, x, STANDS.top - off, 12, h);
     }
   }
   // rede (balança no gol)
@@ -96,7 +97,7 @@ export function drawMatchScene(
   c.fillStyle = 'rgba(236,240,236,0.22)';
   for (let i = 0; i <= 9; i++) {
     const x = GOAL.left + 1 + ((GOAL.right - GOAL.left - 2) * i) / 9;
-    for (let y = GOAL.top + 1; y <= GOAL.bottom; y++) c.fillRect(Math.round(x + Math.sin(time * 28 + y * 0.5) * ripple * 1.6), y, 1, 1);
+    for (let y = GOAL.top + 1; y <= GOAL.bottom; y++) c.fillRect(Math.round(x + Math.sin(time * 9 + y * 0.35) * ripple * 1.2), y, 1, 1);
   }
   for (let j = 0; j <= 7; j++) c.fillRect(GOAL.left + 1, Math.round(GOAL.top + 1 + ((GOAL.bottom - GOAL.top - 1) * j) / 7), GOAL.right - GOAL.left - 2, 1);
 
