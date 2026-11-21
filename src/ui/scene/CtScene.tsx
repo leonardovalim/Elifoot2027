@@ -4,7 +4,7 @@ import { sceneDetails } from './sceneDetails';
 import { drawCoach, drawPlayer, drawText, lookFor, textWidth, SPRITE_H, SPRITE_W, type Look } from './sprites';
 import { drawLegacy, drawPlaza } from './legacy';
 import { tintedSheet } from './tint';
-import { ART_H, ART_W, COACH_SPOT, WALK, drawCones, drawCtSign, drawLegacyArt, insideWalk, type Atlas } from './ctArt';
+import { ART_H, ART_W, COACH_SPOT, WALK, drawCones, drawCtSign, drawLegacyArt, insideWalk, standingLegacy, type Atlas } from './ctArt';
 import athleteUrl from '../../assets/ct/atleta.png';
 import coachUrl from '../../assets/ct/tecnico.png';
 import stageUrl from '../../assets/ct/cenario.png';
@@ -221,6 +221,7 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
           drawFrame(c, tintedSheet(athlete, colors, a.look.skin), ATHLETE.size, f, a.x, a.y, ATHLETE.feet, ATHLETE.cx, a.flip);
         } })),
         { y: COACH_SPOT.feet, draw: () => drawFrame(c, coach, COACH.size, coachFrame, COACH_SPOT.x, COACH_SPOT.feet, COACH.feet, COACH.cx, false) },
+        ...standingLegacy(c, fr, colors, has, atlas, tinted, rects),
       ].sort((a, b) => a.y - b.y);
       for (const p of people) p.draw();
 

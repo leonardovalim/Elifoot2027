@@ -44,6 +44,8 @@ interface Place {
   k?: number;
   /** Usa a cópia do atlas nas cores do clube (verde-limão → cor 1, azul → cor 2). */
   tint?: boolean;
+  /** Objeto em pé no gramado: desenhado na ordem de profundidade junto com os atletas. */
+  stand?: boolean;
   /** Deslocamento animado (ou null para esconder neste quadro). */
   move?: (fr: number) => { dx: number; dy: number } | null;
   /** Desenho antigo (legacy.ts) reaproveitado: escala e posição do canto do objeto antigo. */
@@ -57,8 +59,8 @@ const bob = (speed: number, amp: number, phase = 0) => (fr: number) => ({ dx: 0,
 const r = (c: CanvasRenderingContext2D, color: string, x: number, y: number, w: number, h: number) => { c.fillStyle = color; c.fillRect(x, y, w, h); };
 
 export const PLACES: Place[] = [
-  // ---------------- céu e telhado
-  { id: 'subiu', layer: 'back', s: 'baloes', tint: true, x: 286, y: 4, move: bob(30, 2) },
+  // ---------------- céu (só o que atravessa devagar ou flutua; nada pisca)
+  { id: 'subiu', layer: 'back', s: 'baloes', tint: true, x: 286, y: 4, move: bob(45, 1.5) },
   { id: 'elite', layer: 'back', s: 'dirigivel', tint: true, x: 0, y: 4, move: (fr) => ({ dx: Math.round(((fr * 0.12) % 470) - 60), dy: 0 }) },
   {
     id: 'invencivel-na-elite', layer: 'back', s: 'aviao', x: 0, y: 26,
@@ -78,68 +80,70 @@ export const PLACES: Place[] = [
     },
   },
   { id: 'centenario', layer: 'back', x: 0, y: 4, code: { k: 2, from: [0, 0] } },
-  { id: 'narrador-de-plantao', layer: 'back', s: 'antena', x: 40, y: 2, extra: (c, fr, _k, x, y) => { if (fr % 60 < 30) r(c, '#ff4d4d', x + 2, y, 2, 2); } },
-  { id: 'negocio-fechado', layer: 'back', s: 'neon', x: 158, y: 4, extra: (c, fr, _k, x, y) => { if (fr % 97 >= 90) { c.fillStyle = 'rgba(20,24,40,0.55)'; c.fillRect(x, y, 12, 20); } } },
-  { id: 'magnata', layer: 'back', s: 'helicoptero', x: 62, y: 9, extra: (c, fr, _k, x, y) => { if (fr % 6 < 3) r(c, '#2a2a33', x + 4, y + 1, 30, 1); } },
-  { id: 'temporada-sem-vermelho', layer: 'back', x: 116, y: 22, code: { k: 2, from: [34, 12] } },
-  // ---------------- fachada e anexo (sala de troféus)
-  { id: 'relogio-suico', layer: 'back', x: 178, y: 38, code: { k: 2, from: [14, 25] } },
+  // ---------------- telhado do prédio
+  { id: 'narrador-de-plantao', layer: 'back', s: 'antena', x: 40, y: 2, extra: (c, fr, _k, x, y) => { if (fr % 120 < 60) r(c, '#ff4d4d', x + 2, y, 2, 2); } },
+  { id: 'magnata', layer: 'back', s: 'helicoptero', x: 62, y: 9 },
+  { id: 'temporada-sem-vermelho', layer: 'back', x: 130, y: 24, code: { k: 2, from: [34, 12] } },
+  { id: 'negocio-fechado', layer: 'back', s: 'neon', x: 174, y: 4 },
+  // ---------------- fachada
   { id: 'nome-limpo', layer: 'back', x: 26, y: 61, code: { k: 2, from: [21, 30] } },
+  { id: 'relogio-suico', layer: 'back', x: 178, y: 38, code: { k: 2, from: [14, 25] } },
   { id: 'licao-de-casa', layer: 'back', s: 'quadro-negro', x: 168, y: 88 },
-  { id: 'volta-por-cima', layer: 'back', s: 'fenix', k: 0.75, x: 330, y: 52, extra: (c, fr, _k, x, y) => { if (fr % 120 < 60) { c.fillStyle = 'rgba(255,200,80,0.18)'; c.fillRect(x, y, 23, 21); } } },
-  { id: 'campeao', layer: 'back', s: 'taca', k: 0.6, x: 212, y: 70 },
-  { id: 'bicampeao', layer: 'back', s: 'taca', k: 0.6, x: 230, y: 70 },
-  { id: 'bicampeao', layer: 'back', x: 240, y: 38, code: { k: 2, from: [131, 16] } },
-  { id: 'chuteira-de-ouro', layer: 'back', s: 'chuteira', k: 0.5, x: 249, y: 74 },
-  { id: 'lenda-viva', layer: 'back', s: 'retrato', k: 0.6, x: 263, y: 62, extra: (c, _fr, _k, x, y) => { c.strokeStyle = '#f2b632'; c.lineWidth = 1; c.strokeRect(x - 0.5, y - 0.5, 17, 24); } },
-  {
-    id: 'atropelo', layer: 'back', s: 'placar', x: 222, y: 20,
-    extra: (c, fr, _k, x, y) => drawText(c, '5X0', x + Math.round((42 - textWidth('5X0')) / 2), y + 7, fr % 140 < 120 ? '#ffd23f' : '#b38f1e', '#1a1420'),
-  },
-  // ---------------- gramado (sob os atletas)
-  { id: 'invicto', layer: 'ground', x: 238, y: 140, code: { k: 2, from: [115, 78] } },
-  { id: 'primeiro-apito', layer: 'ground', s: 'bandeirinha', k: 0.75, x: 40, y: 129, move: bob(10, 0.6) },
-  { id: 'primeiro-apito', layer: 'ground', s: 'bandeirinha', k: 0.75, x: 210, y: 79, move: bob(10, 0.6, 1) },
-  { id: 'primeiro-apito', layer: 'ground', s: 'bandeirinha', k: 0.75, x: 312, y: 224, move: bob(10, 0.6, 2) },
-  { id: 'muralha', layer: 'ground', s: 'bonecos', k: 0.75, x: 122, y: 152 },
-  { id: 'na-raca', layer: 'ground', s: 'pneus', k: 0.75, x: 290, y: 168 },
-  { id: 'joia-lapidada', layer: 'ground', s: 'golzinho', k: 0.75, x: 340, y: 196 },
-  { id: 'prata-da-casa', layer: 'ground', x: 348, y: 204, code: { k: 1, from: [198, 105] } },
-  { id: 'folego', layer: 'ground', s: 'escada', k: 0.75, x: 180, y: 168 },
+  // ---------------- anexo de vidro = sala de troféus (prateleira) e placar no telhado
+  { id: 'atropelo', layer: 'back', s: 'placar', x: 222, y: 18, extra: (c, _fr, _k, x, y) => drawText(c, '5X0', x + Math.round((42 - textWidth('5X0')) / 2), y + 7, '#ffd23f', '#1a1420') },
+  { id: 'lenda-viva', layer: 'back', s: 'retrato', k: 0.6, x: 211, y: 59, extra: (c, _fr, _k, x, y) => { c.strokeStyle = '#f2b632'; c.lineWidth = 1; c.strokeRect(x - 0.5, y - 0.5, 17, 24); } },
+  { id: 'campeao', layer: 'back', s: 'taca', k: 0.75, x: 231, y: 64 },
+  { id: 'bicampeao', layer: 'back', s: 'taca', k: 0.75, x: 251, y: 64 },
+  { id: 'bicampeao', layer: 'back', x: 273, y: 40, code: { k: 2, from: [131, 16] } },
+  { id: 'chuteira-de-ouro', layer: 'back', s: 'chuteira', k: 0.55, x: 266, y: 70 },
+  // ---------------- fundo do campo, junto ao muro
+  { id: 'volta-por-cima', layer: 'back', s: 'fenix', k: 0.75, x: 318, y: 54 },
+  { id: 'jogo-limpo', layer: 'back', s: 'bandeira-fairplay', k: 0.75, x: 292, y: 64 },
+  { id: 'missao-cumprida', layer: 'back', s: 'mastro', tint: true, x: 368, y: 38 },
   { id: 'escalada', layer: 'ground', s: 'podio', x: 336, y: 92 },
+  // ---------------- gramado (o que é chato fica sob os atletas)
+  { id: 'invicto', layer: 'ground', x: 238, y: 140, code: { k: 2, from: [115, 78] } },
+  { id: 'folego', layer: 'ground', s: 'escada', k: 0.75, x: 178, y: 170 },
+  { id: 'na-raca', layer: 'ground', s: 'pneus', k: 0.75, x: 290, y: 168 },
+  { id: 'prata-da-casa', layer: 'ground', x: 348, y: 204, code: { k: 1, from: [198, 105] } },
   {
     id: 'mestre-das-trocas', layer: 'ground', x: 66, y: 162,
     extra: (c, _fr, k, x, y) => { for (let i = 0; i < 52; i++) { r(c, k[0], x + i, y + Math.round(i * 0.2), 1, 2); if (i % 6 < 3) r(c, k[1], x + i, y + 2 + Math.round(i * 0.2), 1, 1); } },
   },
   { id: 'ouvido-colado', layer: 'ground', s: 'radio', k: 0.5, x: 100, y: 180 },
   { id: 'prancheta', layer: 'ground', x: 78, y: 182, code: { k: 2, from: [17, 104] } },
-  { id: 'mao-na-massa', layer: 'ground', s: 'placa-sub', k: 0.75, x: 124, y: 172 },
-  { id: 'caneta-na-mao', layer: 'ground', s: 'bebedouro', k: 0.75, x: 46, y: 172 },
+  // ---------------- em pé no gramado: entram na ordem de profundidade com os atletas
+  { id: 'primeiro-apito', layer: 'ground', stand: true, s: 'bandeirinha', k: 0.75, x: 40, y: 129 },
+  { id: 'primeiro-apito', layer: 'ground', stand: true, s: 'bandeirinha', k: 0.75, x: 210, y: 79 },
+  { id: 'primeiro-apito', layer: 'ground', stand: true, s: 'bandeirinha', k: 0.75, x: 312, y: 224 },
+  { id: 'muralha', layer: 'ground', stand: true, s: 'bonecos', k: 0.75, x: 122, y: 150 },
+  { id: 'joia-lapidada', layer: 'ground', stand: true, s: 'golzinho', k: 0.75, x: 340, y: 196 },
+  { id: 'mao-na-massa', layer: 'ground', stand: true, s: 'placa-sub', k: 0.75, x: 124, y: 172 },
+  { id: 'caneta-na-mao', layer: 'ground', stand: true, s: 'bebedouro', k: 0.75, x: 52, y: 178 },
+  // ---------------- gramado à esquerda
+  { id: 'uma-decada', layer: 'front', s: 'arvore', x: 2, y: 144 },
+  { id: 'do-po-ao-topo', layer: 'front', s: 'obelisco', x: 32, y: 150 },
   // ---------------- beira do campo, embaixo
-  { id: 'classico-do-sofa', layer: 'front', s: 'sofa', k: 0.75, x: 178, y: 216 },
+  { id: 'classico-do-sofa', layer: 'front', s: 'sofa', k: 0.75, x: 176, y: 216 },
   {
-    id: 'primeira-vitoria', layer: 'front', s: 'faixa', tint: true, k: 0.75, x: 222, y: 214,
+    id: 'primeira-vitoria', layer: 'front', s: 'faixa', tint: true, k: 0.75, x: 220, y: 213,
     extra: (c, _fr, k, x, y) => drawText(c, 'VAMOS!', x + Math.round((43 - textWidth('VAMOS!')) / 2), y + 7, '#ffffff', k[0]),
   },
-  { id: 'de-virada', layer: 'front', s: 'torcedor-bumbo', tint: true, x: 268, y: 214, move: (fr) => ({ dx: 0, dy: fr % 24 < 12 ? 0 : -1 }) },
-  { id: 'jogo-limpo', layer: 'front', s: 'bandeira-fairplay', k: 0.75, x: 292, y: 206, move: bob(12, 0.6) },
-  { id: 'laranja-da-baixada', layer: 'front', s: 'laranjas', k: 0.6, x: 312, y: 238 },
-  // ---------------- pátio de entrada e portão
-  { id: 'missao-cumprida', layer: 'front', s: 'mastro', tint: true, x: 160, y: 214 },
+  { id: 'de-virada', layer: 'front', s: 'torcedor-bumbo', tint: true, x: 268, y: 213, move: (fr) => ({ dx: 0, dy: fr % 60 < 30 ? 0 : -1 }) },
+  { id: 'laranja-da-baixada', layer: 'front', s: 'laranjas', k: 0.6, x: 292, y: 232 },
+  // ---------------- pátio: portão, monumentos, fonte e estacionamento
   { id: 'casamento', layer: 'front', s: 'placa-homenagem', k: 0.6, x: 128, y: 210 },
   { id: 'no-azul', layer: 'front', s: 'cofre', k: 0.5, x: 144, y: 214 },
   { id: 'daqui-ninguem-sai', layer: 'front', x: 96, y: 264, code: { k: 2, from: [78, 145] } },
   { id: 'salvador', layer: 'front', x: 96, y: 250, code: { k: 2, from: [78, 141] } },
-  { id: 'tetra', layer: 'front', s: 'calcada-fama', k: 0.75, x: 188, y: 242 },
-  { id: 'casa-cheia', layer: 'front', s: 'torcida-fila', tint: true, k: 0.75, x: 240, y: 246, move: (fr) => ({ dx: 0, dy: Math.floor(fr / 30) % 2 }) },
-  { id: 'cofre-cheio', layer: 'front', s: 'fonte', k: 0.75, x: 186, y: 258 },
-  { id: 'temporada-perfeita', layer: 'front', s: 'estatua', x: 300, y: 250 },
-  { id: 'do-po-ao-topo', layer: 'front', s: 'obelisco', x: 320, y: 240 },
-  { id: 'uma-decada', layer: 'front', s: 'arvore', x: 4, y: 146, move: (fr) => ({ dx: fr % 120 < 60 ? 0 : 1, dy: 0 }) },
-  { id: 'ct-de-primeiro-mundo', layer: 'front', s: 'piscina', k: 0.75, x: 236, y: 278 },
-  { id: 'reforco', layer: 'front', s: 'van', tint: true, k: 0.75, x: 162, y: 286 },
-  { id: 'venda-milionaria', layer: 'front', s: 'carro', k: 0.75, x: 286, y: 290 },
-  { id: 'sangue-novo', layer: 'front', s: 'bicicletas', k: 0.5, x: 340, y: 286 },
+  { id: 'tetra', layer: 'front', s: 'calcada-fama', k: 0.75, x: 170, y: 244 },
+  { id: 'casa-cheia', layer: 'front', s: 'torcida-fila', tint: true, k: 0.75, x: 232, y: 244 },
+  { id: 'temporada-perfeita', layer: 'front', s: 'estatua', x: 304, y: 246 },
+  { id: 'cofre-cheio', layer: 'front', s: 'fonte', k: 0.75, x: 196, y: 260 },
+  { id: 'ct-de-primeiro-mundo', layer: 'front', s: 'piscina', k: 0.75, x: 248, y: 276 },
+  { id: 'reforco', layer: 'front', s: 'van', tint: true, k: 0.75, x: 158, y: 286 },
+  { id: 'venda-milionaria', layer: 'front', s: 'carro', k: 0.75, x: 296, y: 290 },
+  { id: 'sangue-novo', layer: 'front', s: 'bicicletas', k: 0.5, x: 342, y: 286 },
 ];
 
 /** Ids com lugar no cenário novo (o teste garante as 50 conquistas). */
@@ -150,37 +154,50 @@ function legacyDraw(id: string) {
   return null;
 }
 
-/** Desenha os objetos de conquista de uma camada no cenário novo. */
+function drawPlace(c: CanvasRenderingContext2D, p: Place, fr: number, k: Colors, atlas: CanvasImageSource, tinted: CanvasImageSource, rects: Atlas) {
+  const m = p.move ? p.move(fr) : { dx: 0, dy: 0 };
+  if (!m) return;
+  const x = p.x + m.dx, y = p.y + m.dy;
+  if (p.code) {
+    const draw = legacyDraw(p.id);
+    if (draw) {
+      c.save();
+      c.translate(x - p.code.from[0] * p.code.k, y - p.code.from[1] * p.code.k);
+      c.scale(p.code.k, p.code.k);
+      draw(c, fr, k);
+      c.restore();
+    } else if (p.id === 'bicampeao') { // estrela dourada sobre o anexo
+      r(c, '#f2b632', x + 2, y, 2, 6); r(c, '#f2b632', x, y + 2, 6, 2);
+    }
+  }
+  if (p.s) {
+    const rect = rects[p.s];
+    if (rect) {
+      const s = p.k ?? 1;
+      c.drawImage(p.tint ? tinted : atlas, rect[0], rect[1], rect[2], rect[3], Math.round(x), Math.round(y), Math.round(rect[2] * s), Math.round(rect[3] * s));
+    }
+  }
+  p.extra?.(c, fr, k, Math.round(x), Math.round(y));
+}
+
+/** Desenha os objetos de conquista de uma camada no cenário novo (menos os que ficam em pé). */
 export function drawLegacyArt(
   c: CanvasRenderingContext2D, layer: Layer, fr: number, k: Colors, has: (id: string) => boolean,
   atlas: CanvasImageSource, tinted: CanvasImageSource, rects: Atlas,
 ) {
-  for (const p of PLACES) {
-    if (p.layer !== layer || !has(p.id)) continue;
-    const m = p.move ? p.move(fr) : { dx: 0, dy: 0 };
-    if (!m) continue;
-    const x = p.x + m.dx, y = p.y + m.dy;
-    if (p.code) {
-      const draw = legacyDraw(p.id);
-      if (draw) {
-        c.save();
-        c.translate(x - p.code.from[0] * p.code.k, y - p.code.from[1] * p.code.k);
-        c.scale(p.code.k, p.code.k);
-        draw(c, fr, k);
-        c.restore();
-      } else if (p.id === 'bicampeao') { // estrela dourada sobre o anexo
-        r(c, '#f2b632', x + 2, y, 2, 6); r(c, '#f2b632', x, y + 2, 6, 2);
-      }
-    }
-    if (p.s) {
-      const rect = rects[p.s];
-      if (rect) {
-        const s = p.k ?? 1;
-        c.drawImage(p.tint ? tinted : atlas, rect[0], rect[1], rect[2], rect[3], Math.round(x), Math.round(y), Math.round(rect[2] * s), Math.round(rect[3] * s));
-      }
-    }
-    p.extra?.(c, fr, k, Math.round(x), Math.round(y));
-  }
+  for (const p of PLACES) if (p.layer === layer && !p.stand && has(p.id)) drawPlace(c, p, fr, k, atlas, tinted, rects);
+}
+
+/** Objetos em pé no gramado, com a linha da base, para ordenar junto com os atletas. */
+export function standingLegacy(
+  c: CanvasRenderingContext2D, fr: number, k: Colors, has: (id: string) => boolean,
+  atlas: CanvasImageSource, tinted: CanvasImageSource, rects: Atlas,
+): { y: number; draw: () => void }[] {
+  return PLACES.filter((p) => p.stand && has(p.id)).map((p) => {
+    const rect = p.s ? rects[p.s] : undefined;
+    const base = p.y + (rect ? Math.round(rect[3] * (p.k ?? 1)) : 0);
+    return { y: base, draw: () => drawPlace(c, p, fr, k, atlas, tinted, rects) };
+  });
 }
 
 /** Placa do CT nas cores do clube + estrelas do nível da estrutura (sobre o telhado). */
