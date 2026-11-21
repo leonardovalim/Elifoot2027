@@ -5,6 +5,7 @@ import {
   type Bond,
   type Entrepreneur,
   type SeasonObjective,
+  type SideGoal,
 } from '../core/entrepreneur';
 import type { Result } from '../core/league';
 import { Rng } from '../core/rng';
@@ -243,8 +244,13 @@ export function clubStrength(club: Club): number {
   return xi.reduce((a, p) => a + overall(p), 0) / xi.length;
 }
 
-/** Objetivo definido pela diretoria a partir da força relativa do elenco. */
-export function boardObjective(c: Career, clubId: string): SeasonObjective {
+const LADDER: SeasonObjective[] = ['permanencia', 'meio', 'acesso', 'titulo'];
+
+/**
+ * Objetivo definido pela diretoria a partir da força relativa do elenco, deslocado pela
+ * cobrança acumulada (`pressure`): quem vem de sucesso começa a temporada devendo mais.
+ */
+export function boardObjective(c: Career, clubId: string, pressure = 0): SeasonObjective {
   const d = divisionOf(c, clubId);
   const ranked = c.season.divisions[d]!.teamIds
     .map((id) => ({ id, s: clubStrength(c.clubs[id]!) }))
@@ -252,11 +258,79 @@ export function boardObjective(c: Career, clubId: string): SeasonObjective {
   const rank = ranked.findIndex((r) => r.id === clubId) + 1;
   const top = d === 0;
   const bottom = d === DIVISIONS - 1;
-  if (rank === 1) return top ? 'titulo' : 'acesso';
-  if (rank <= 3 && !top) return 'acesso';
-  if (rank <= 6 || bottom) return 'meio';
-  return 'permanencia';
+  let base: SeasonObjective;
+  if (rank === 1) base = top ? 'titulo' : 'acesso';
+  else if (rank <= 3 && !top) base = 'acesso';
+  else if (rank <= 6 || bottom) base = 'meio';
+  else base = 'permanencia';
+  const floor = bottom ? 1 : 0; // na última divisão não existe "evitar o rebaixamento"
+  const i = Math.max(floor, Math.min(LADDER.length - 1, LADDER.indexOf(base) + pressure));
+  return LADDER[i]!;
 }
+
+/** Próxima cobrança depois de uma temporada avaliada no mesmo clube. */
+export function nextPressure(prev: number, s: SeasonSummary): number {
+  if (s.promoted || s.relegated) return 0; // divisão nova, régua nova
+  if (s.position === 1) return 2; // campeão: a torcida quer outro
+  return s.achieved ? Math.min(2, prev + 1) : Math.max(-1, prev - 1);
+}
+
+// ---------------------------------------------------------------- metas secundárias
+
+function hashStr(str: string) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+const round10k = (v: number) => Math.round(v / 10000) * 10000;
+
+/** Sorteia as metas secundárias da temporada (determinístico por clube e ano). */
+export function sideGoals(c: Career, clubId: string, count: number): SideGoal[] {
+  if (count <= 0) return [];
+  const club = c.clubs[clubId]!;
+  const rng = new Rng(hashStr(`${clubId}:${c.season.year}`));
+  const rounds = c.roundDates.length;
+  const objective = boardObjective(c, clubId);
+  const pool: SideGoal[] = [
+    club.budget < 0
+      ? { kind: 'caixa', label: 'Fechar a temporada sem dívida', target: 0, dir: 'max' }
+      : { kind: 'caixa', label: `Fechar a temporada com ${fmtMoney(round10k(club.budget * 1.15 + 50000))} em caixa`, target: round10k(club.budget * 1.15 + 50000), dir: 'max' },
+    { kind: 'torcida', label: `Chegar a ${Math.round(club.fans * 1.08).toLocaleString('pt-BR')} torcedores`, target: Math.round(club.fans * 1.08), dir: 'max' },
+    { kind: 'base', label: 'Dar 25 jogos a atletas de até 21 anos', target: 25, dir: 'max' },
+    { kind: 'defesa', label: `Sofrer no máximo ${Math.round(rounds * { titulo: 0.85, acesso: 1, meio: 1.25, permanencia: 1.5 }[objective])} gols no campeonato`, target: Math.round(rounds * { titulo: 0.85, acesso: 1, meio: 1.25, permanencia: 1.5 }[objective]), dir: 'min' },
+    { kind: 'venda', label: `Arrecadar ${fmtMoney(Math.max(200000, round10k(c.clubs[clubId]!.players.reduce((a, p) => a + p.wage, 0) * 4)))} com vendas`, target: Math.max(200000, round10k(club.players.reduce((a, p) => a + p.wage, 0) * 4)), dir: 'max' },
+    { kind: 'artilheiro', label: 'Ter o artilheiro da divisão', target: 1, dir: 'max' },
+  ];
+  return rng.shuffle(pool).slice(0, count);
+}
+
+/** Valor atual de uma meta secundária (para a barra de progresso e para a avaliação). */
+export function goalValue(c: Career, g: SideGoal): number {
+  const me = myClubId(c);
+  const club = c.clubs[me]!;
+  switch (g.kind) {
+    case 'caixa': return club.budget;
+    case 'torcida': return club.fans;
+    case 'base': return club.players.filter((p) => p.age <= 21).reduce((a, p) => a + p.stats.apps, 0);
+    case 'venda': return c.ledger.sales;
+    case 'defesa': {
+      const d = divisionOf(c, me);
+      const row = divisionStandings(c.season.divisions[d]!, football.points).find((r) => r.teamId === me);
+      return row?.scoreAgainst ?? 0;
+    }
+    case 'artilheiro': {
+      const d = divisionOf(c, me);
+      const best = c.season.divisions[d]!.teamIds
+        .flatMap((id) => c.clubs[id]!.players.map((p) => ({ id, goals: p.stats.goals })))
+        .sort((a, b) => b.goals - a.goals)[0];
+      return best && best.goals > 0 && best.id === me ? 1 : 0;
+    }
+    default: return 0;
+  }
+}
+
+export const goalDone = (c: Career, g: SideGoal) => (g.dir === 'max' ? goalValue(c, g) >= g.target : goalValue(c, g) <= g.target);
 
 const salaryFor = (club: Club) => Math.round((3000 + club.reputation ** 1.6 * 25) / 500) * 500;
 
@@ -286,6 +360,8 @@ export function acceptOffer(c: Career, offer: Offer): string | null {
     monthlySalary: offer.monthlySalary,
     since: c.date,
     objective: offer.objective,
+    pressure: 0,
+    goals: sideGoals(c, club.id, 1),
   };
   c.entrepreneur.bonds = [bond];
   c.unemployed = false;
@@ -1149,6 +1225,10 @@ export interface SeasonSummary {
   reputationDelta: number;
   /** Terminou a temporada com o caixa negativo (mesmo somando a premiação): demissão. */
   broke: boolean;
+  /** Cobrança da diretoria nesta temporada (−1 a +2). */
+  pressure: number;
+  /** Metas secundárias e se foram cumpridas. */
+  goals: { label: string; done: boolean }[];
 }
 
 const PRIZE = [[2500000, 1200000, 700000], [900000, 450000, 250000], [400000, 200000, 100000], [180000, 90000, 50000]];
@@ -1165,10 +1245,13 @@ export function seasonSummary(c: Career): SeasonSummary {
   const expected = { titulo: 1, acesso: 2, meio: 6, permanencia: 10 }[bond.objective];
   const prize = PRIZE[d]?.[pos - 1] ?? 0;
   const broke = c.clubs[me]!.budget + prize < 0;
-  const fired = broke || (!achieved && (relegated || pos - expected >= 4));
+  const pressure = bond.pressure ?? 0;
+  // sob cobrança alta a meta é mais ousada: a diretoria tolera errar um pouco mais por ela
+  const fired = broke || (!achieved && (relegated || pos - expected >= 4 + Math.max(0, pressure)));
+  const goals = (bond.goals ?? []).map((g) => ({ label: g.label, done: goalDone(c, g) }));
   // quebrar o clube pesa mais que o resultado em campo: demitido por caixa negativo leva a penalidade de demissão
   const reputationDelta = (broke ? -10 : achieved ? 8 : fired ? -10 : -4) + (promoted ? 4 : 0) + (pos === 1 ? 5 : 0);
-  return { position: pos, division: d, objective: bond.objective, achieved, fired, promoted, relegated, prize, reputationDelta, broke };
+  return { position: pos, division: d, objective: bond.objective, achieved, fired, promoted, relegated, prize, reputationDelta, broke, pressure, goals };
 }
 
 /** Fecha a temporada: premiação, avaliação, acesso/queda, envelhecimento, nova tabela e ofertas. */
@@ -1226,7 +1309,14 @@ export function closeSeasonAll(c: Career): SeasonSummary[] {
         e.cash += bonus;
         push(c, 'good', `Objetivo cumprido! Bônus de ${fmtMoney(bonus)} no seu patrimônio.`);
       } else if (!sum.fired) {
-        push(c, 'bad', 'Objetivo não cumprido. A diretoria mantém você, mas a pressão aumenta.');
+        push(c, 'bad', 'Objetivo não cumprido. A diretoria mantém você, mas a paciência diminui.');
+      }
+      const extras = sum.goals.filter((g) => g.done).length;
+      if (extras) {
+        const bonus = activeBond(c)!.monthlySalary * extras;
+        e.cash += bonus;
+        e.reputation = Math.min(100, e.reputation + 2 * extras);
+        push(c, 'good', `${extras} meta${extras > 1 ? 's' : ''} extra${extras > 1 ? 's' : ''} cumprida${extras > 1 ? 's' : ''}: ${fmtMoney(bonus)} de bônus e +${2 * extras} de reputação.`);
       }
     });
 
@@ -1289,7 +1379,12 @@ export function closeSeasonAll(c: Career): SeasonSummary[] {
     });
     forEachManager(c, (i) => {
       const sum = sums[i];
-      if (sum && !sum.fired) activeBond(c)!.objective = boardObjective(c, myClubId(c));
+      if (sum && !sum.fired) {
+        const bond = activeBond(c)!;
+        bond.pressure = nextPressure(bond.pressure ?? 0, sum);
+        bond.objective = boardObjective(c, myClubId(c), bond.pressure);
+        bond.goals = sideGoals(c, myClubId(c), 2);
+      }
       // sem clube desde antes (demitido e ainda escolhendo) também recebe propostas novas;
       // no máximo duas, para a escolha caber na tela sem virar uma lista longa
       c.offers = generateOffers(c, !sum || sum.fired || sum.achieved ? MAX_OFFERS : 0);

@@ -15,7 +15,24 @@ export interface Bond {
   monthlySalary: number;
   since: string;
   objective: SeasonObjective;
+  /**
+   * Cobrança da diretoria: −1 (tolerante) a +2 (máxima). Sobe quando você cumpre a meta
+   * (depois de um título vai ao máximo) e desce quando falha. Sobe a meta da temporada seguinte.
+   */
+  pressure?: number;
+  /** Metas secundárias da temporada: dão bônus, nunca demitem. */
+  goals?: SideGoal[];
 }
+
+export interface SideGoal {
+  kind: string;
+  label: string;
+  /** Alvo numérico; `dir` diz se é para chegar a ele ('max') ou não passar dele ('min'). */
+  target: number;
+  dir: 'max' | 'min';
+}
+
+export const PRESSURE_LABEL: Record<number, string> = { [-1]: 'Tolerante', 0: 'Normal', 1: 'Alta', 2: 'Máxima' };
 
 export type SeasonObjective = 'titulo' | 'acesso' | 'meio' | 'permanencia';
 

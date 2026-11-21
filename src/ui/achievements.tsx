@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ACHIEVEMENTS, ACHIEVEMENT_BY_ID, TIER_LABEL, emptyAch, normalizeAch, type AchState } from '../game/achievements';
+import { ACHIEVEMENTS, ACHIEVEMENT_BY_ID, TIER_LABEL, emptyAch, normalizeAch, progressOf, type AchState } from '../game/achievements';
 import { track } from './analytics';
 import { drawLegacyThumb } from './scene/legacyThumb';
 
@@ -34,8 +34,21 @@ export function achieve(rule: (s: AchState) => string[]) {
   if (!ids.length) return;
   version++;
   listeners.forEach((l) => l());
-  for (const id of ids) track('achievement_unlocked', { id, tier: ACHIEVEMENT_BY_ID[id]?.tier ?? '', total: Object.keys(state.unlocked).length });
+  for (const id of ids) track('achievement_unlocked', { id, tier: ACHIEVEMENT_BY_ID[id]?.tier ?? '', total: Object.keys(state.unlocked).length, play_minutes: state.playMinutes });
   if (enqueue) enqueue(ids); else pending.push(...ids);
+}
+
+/** Minutos de jogo ativo (aba visível com o jogo aberto). Vai junto dos eventos para calibrar o ritmo. */
+export const playMinutes = () => state.playMinutes;
+
+/** Conta um minuto a cada 60 s com a aba visível. Devolve a função de parar. */
+export function startPlayClock(): () => void {
+  const t = setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+    state.playMinutes++;
+    persist();
+  }, 60_000);
+  return () => clearInterval(t);
 }
 
 function subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; }
@@ -144,7 +157,31 @@ export function AchievementsSection() {
             ))}
           </ul>
         )}
+      <NextUp unlocked={unlocked} />
       {left > 0 && got.length > 0 && <p className="hint">{left} conquista{left > 1 ? 's' : ''} secreta{left > 1 ? 's' : ''} por descobrir.</p>}
     </details>
+  );
+}
+
+/** As 3 conquistas numéricas mais perto de sair: revela a meta e mostra o progresso. */
+function NextUp({ unlocked }: { unlocked: Record<string, string> }) {
+  const near = ACHIEVEMENTS
+    .filter((a) => !unlocked[a.id])
+    .map((a) => ({ a, p: progressOf(state, a.id) }))
+    .filter((x): x is { a: typeof x.a; p: { cur: number; goal: number } } => !!x.p && x.p.cur > 0)
+    .sort((x, y) => y.p.cur / y.p.goal - x.p.cur / x.p.goal)
+    .slice(0, 3);
+  if (!near.length) return null;
+  return (
+    <div className="ach-next">
+      <span className="attr-title">Perto de sair</span>
+      {near.map(({ a, p }) => (
+        <div key={a.id} className="ach-next-row">
+          <span>{a.how}</span>
+          <span className="bar ach-bar" aria-hidden><i style={{ width: `${(p.cur / p.goal) * 100}%` }} /></span>
+          <b>{p.cur.toLocaleString('pt-BR')}/{p.goal.toLocaleString('pt-BR')}</b>
+        </div>
+      ))}
+    </div>
   );
 }

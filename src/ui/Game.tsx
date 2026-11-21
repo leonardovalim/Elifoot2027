@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { PHASE_LABEL, formatDate } from '../core/calendar';
-import { OBJECTIVE_LABEL } from '../core/entrepreneur';
+import { OBJECTIVE_LABEL, PRESSURE_LABEL } from '../core/entrepreneur';
 import { divisionStandings } from '../core/season';
 import {
   acceptOffer,
   activeBond,
+  goalDone,
   activeIndex,
   advanceDay,
   closeSeasonAll,
@@ -43,7 +44,7 @@ import { track } from './analytics';
 import { play, SoundToggle } from './sound';
 import { saveCareer } from './storage';
 import { openHelp } from './help';
-import { achieve, setAchievementColors, useUnlocked } from './achievements';
+import { achieve, playMinutes, setAchievementColors, startPlayClock, useUnlocked } from './achievements';
 import { checkState, onAction, onMatch, onMonth, onSeasonEnd, seasonFacts, snapshotForActions } from '../game/achievements';
 import type { RoundRecord } from '../game/career';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
@@ -192,6 +193,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const club = me ? c.clubs[me] : undefined;
   const bond = activeBond(c);
   // a miniatura da conquista sai nas cores do clube, como o objeto aparece no CT
+  useEffect(() => startPlayClock(), []);
   useEffect(() => { if (club) setAchievementColors(club.colors); }, [club?.colors[0], club?.colors[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Fecha o balanço da vez; se faltar o de outro técnico, a vez passa para ele. */
@@ -241,7 +243,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
     achieve((st) => onSeasonEnd(st, facts, ref.current));
     // os outros técnicos veem o balanço deles em seguida
     setSummaryQueue(all.map((x, i) => ({ manager: i, s: x })).filter((x) => x.s && x.manager !== me));
-    track('season_completed', { seasons_played: ref.current.entrepreneur.history.length, position: s.position, division: s.division + 1, objective: s.objective, achieved: s.achieved, fired: s.fired, promoted: s.promoted, relegated: s.relegated });
+    track('season_completed', { seasons_played: ref.current.entrepreneur.history.length, position: s.position, division: s.division + 1, objective: s.objective, achieved: s.achieved, fired: s.fired, promoted: s.promoted, relegated: s.relegated, pressure: s.pressure, side_goals: s.goals.length, side_goals_done: s.goals.filter((g) => g.done).length, play_minutes: playMinutes() });
     setSummary(s);
     save();
     force();
@@ -388,6 +390,15 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
                 <b>{table[pos - 1]?.points ?? 0} pts</b>
               </div>
               <Bar value={c.season.round} max={c.roundDates.length} tone="accent" />
+              <p className={`pressure p${bond.pressure ?? 0}`}>Cobrança da diretoria: <b>{PRESSURE_LABEL[bond.pressure ?? 0]}</b></p>
+              {(bond.goals ?? []).length > 0 && (
+                <ul className="side-goals">
+                  {bond.goals!.map((g) => {
+                    const done = goalDone(c, g);
+                    return <li key={g.kind} className={done ? 'done' : ''}><span>{done ? '✓' : '○'}</span>{g.label}</li>;
+                  })}
+                </ul>
+              )}
             </div>
           </section>
           <section className="window news">
@@ -445,6 +456,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             </>
           )}
           <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>
+          <p className={`pressure p${activeBond(c)!.pressure ?? 0}`}>Cobrança da diretoria: <b>{PRESSURE_LABEL[activeBond(c)!.pressure ?? 0]}</b>{(activeBond(c)!.pressure ?? 0) > 0 ? ' · depois do que você entregou, a meta subiu' : ''}</p>
           <div className="modal-cta">
             <button className="btn primary" onClick={() => { ref.current.offers = []; nextSummary(); }}>
               {c.offers.length ? 'Ficar no clube' : 'Seguir para a nova temporada'} ›
@@ -490,6 +502,11 @@ function SummaryView({ s }: { s: SeasonSummary }) {
       <div className="big-pos">{s.position}º</div>
       <p>na Divisão {s.division + 1}{s.promoted ? ' · 🎉 ACESSO!' : ''}{s.relegated ? ' · rebaixado' : ''}</p>
       <p className={s.achieved ? 'ok' : 'neg'}>🎯 {OBJECTIVE_LABEL[s.objective]}: {s.achieved ? 'cumprido!' : 'não cumprido'}</p>
+      {s.goals.length > 0 && (
+        <ul className="side-goals">
+          {s.goals.map((g) => <li key={g.label} className={g.done ? 'done' : ''}><span>{g.done ? '✓' : '✗'}</span>{g.label}</li>)}
+        </ul>
+      )}
       <dl className="kv">
         <dt>Premiação</dt><dd>{money(s.prize)}</dd>
         <dt>Reputação</dt><dd>{s.reputationDelta >= 0 ? '+' : ''}{s.reputationDelta}</dd>

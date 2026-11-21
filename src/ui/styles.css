@@ -921,3 +921,20 @@ html, body { overflow-x: hidden; }
 .fold-board .round-board { margin-top: 0; padding-top: 0; border-top: 0; }
 .fold-board .rb-head h4 { display: none; }
 .side-panel .fold, .two-col .fold { margin-top: 10px; }
+
+/* ---------- cobrança da diretoria e metas extras ---------- */
+.pressure { font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+.pressure b { color: var(--ink); }
+.pressure.p1 b { color: var(--tomato-dk); }
+.pressure.p2 b { color: var(--bad); }
+.pressure.p-1 b { color: var(--good); }
+.side-goals { list-style: none; padding: 0; margin: 4px 0 0; font-size: 13px; display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.side-goals li { display: flex; gap: 6px; color: var(--muted); }
+.side-goals li span { width: 14px; flex: none; font-weight: 800; }
+.side-goals li.done { color: var(--good); font-weight: 600; }
+.summary .side-goals { max-width: 320px; margin: 6px auto; }
+.ach-next { margin: 10px 0 6px; padding-top: 8px; border-top: 2px dotted var(--paper-2); }
+.ach-next-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; align-items: center; font-size: 13px; margin: 4px 0; }
+.ach-next-row .ach-bar { margin: 0; height: 6px; }
+.ach-next-row b { font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .ach-next-row { grid-template-columns: minmax(0, 1fr) 60px auto; } }
