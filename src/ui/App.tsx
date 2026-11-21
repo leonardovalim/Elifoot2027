@@ -302,7 +302,7 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
                     <dt>Estrutura</dt><dd><Stars n={club.trainingCenter} /></dd>
                     <dt>Seu salário</dt><dd>{money(o.monthlySalary)}/mês</dd>
                   </dl>
-                  <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
+                  <div className="objective"><span className="obj-icon" aria-hidden="true">🎯</span><span className="obj-text">{OBJECTIVE_LABEL[o.objective]}</span></div>
                   <button className="btn primary" disabled={!!taken} onClick={() => {
                     if (!name.trim()) { setNameError(true); setStep(1); nameRef.current?.focus(); return; }
                     if (multi) {
