@@ -7,7 +7,7 @@ import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
 import { track } from '../analytics';
-import { cheer, play, setCrowd, SoundToggle, startCrowd, stopCrowd, useSoundOn } from '../sound';
+import { cheer, play, playJingle, setCrowd, SoundToggle, startCrowd, stopCrowd, useMusic, useSoundOn } from '../sound';
 import { crowdLevels, crowdReaction, CUE_PRIORITY, type CrowdCue } from '../crowd';
 import { RoundBoard, type Scope } from './RoundBoard';
 import { Flag } from '../flag';
@@ -91,6 +91,17 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
     startCrowd(crowdLevels(m, attendance));
     return () => stopCrowd();
   }, [stage, soundOn, m, attendance]);
+
+  // trilha: tensão no pré-jogo; na partida, só a torcida; no apito final, a vinheta do resultado
+  useMusic(stage === 'pre' ? 'prematch' : null);
+  useEffect(() => {
+    if (stage !== 'post' || !outcome.current) return;
+    const o = outcome.current;
+    const sh = myShootout(p, o);
+    const mineG = side === 'home' ? o.homeScore : o.awayScore, theirG = side === 'home' ? o.awayScore : o.homeScore;
+    const res = sh ? ((side === 'home' ? sh.home > sh.away : sh.away > sh.home) ? 'win' : 'loss') : mineG > theirG ? 'win' : mineG < theirG ? 'loss' : 'draw';
+    playJingle(res, 1.1); // depois do apito final
+  }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const home = career.clubs[m.home.clubId]!;
   const away = career.clubs[m.away.clubId]!;

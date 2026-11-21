@@ -66,8 +66,10 @@ export function App() {
     setStarted(true);
     if (ready) playIntro();
   };
-  useEffect(() => installClickSound(), []);
-  useMusic(screen !== 'game' && started && revealed ? 'menu' : null);
+  // blip de clique só dentro do jogo: no onboarding (início, nome, desafio, oportunidade) fica mudo
+  useEffect(() => (screen === 'game' ? installClickSound() : undefined), [screen]);
+  // no jogo quem decide a trilha é o Game (CT, partida); aqui só o menu
+  useMusic(screen === 'game' ? undefined : started && revealed ? 'menu' : null);
   useEffect(() => { track('$pageview', { screen }); }, [screen]);
   useEffect(() => { track('app_opened', { has_save: !!career }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
