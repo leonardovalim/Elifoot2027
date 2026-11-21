@@ -7,10 +7,11 @@ import { CUE_PRIORITY, type CrowdCue, type CrowdLevels } from './crowd';
  * são sintetizados na hora com Web Audio (chiptune, sem arquivos).
  * Liga/desliga fica salvo no navegador; o padrão é ligado.
  */
-export type SoundKind = 'goalFor' | 'goalAgainst' | 'whistle' | 'halfTime' | 'fullTime' | 'alert' | 'card' | 'injury' | 'click';
+export type SoundKind = 'goalFor' | 'goalAgainst' | 'whistle' | 'halfTime' | 'fullTime' | 'alert' | 'card' | 'injury' | 'click'
+  | 'post' | 'signing' | 'money' | 'achievement';
 
 /** Arquivos em public/audio. */
-export const SAMPLES = ['intro', 'goal', 'whistle', 'click'] as const;
+export const SAMPLES = ['intro', 'goal', 'whistle', 'click', 'goal-against', 'card', 'injury', 'post', 'alert', 'signing', 'money', 'achievement'] as const;
 export type SampleId = (typeof SAMPLES)[number];
 
 /** Um toque de amostra: começa em `t` (s) e dura `d` (s; sem `d`, até o fim). */
@@ -23,6 +24,14 @@ export const SAMPLED: Partial<Record<SoundKind, Hit[]>> = {
   halfTime: [{ s: 'whistle', t: 0, d: 0.22 }, { s: 'whistle', t: 0.32, d: 0.45 }],
   fullTime: [{ s: 'whistle', t: 0, d: 0.22 }, { s: 'whistle', t: 0.3, d: 0.22 }, { s: 'whistle', t: 0.6, d: 0.75 }],
   click: [{ s: 'click', t: 0, vol: 0.6 }],
+  goalAgainst: [{ s: 'goal-against', t: 0 }],
+  card: [{ s: 'card', t: 0 }],
+  injury: [{ s: 'injury', t: 0 }],
+  alert: [{ s: 'alert', t: 0, vol: 0.8 }],
+  post: [{ s: 'post', t: 0, vol: 0.8 }],
+  signing: [{ s: 'signing', t: 0 }],
+  money: [{ s: 'money', t: 0 }],
+  achievement: [{ s: 'achievement', t: 0, vol: 0.9 }],
 };
 
 const KEY = 'mde.sound';
@@ -211,17 +220,18 @@ function fadeVoice(a: AudioContext, v: Voice, fade: number) {
 // ---------- música ----------
 
 /** Trilhas em loop (public/audio), carregadas só quando a tela pede. */
-export const MUSIC = ['menu'] as const;
+export const MUSIC = ['menu', 'hub', 'prematch'] as const;
 export type MusicId = (typeof MUSIC)[number];
 
-const MUSIC_GAIN = 0.3;
-const musicBuffers = new Map<MusicId, AudioBuffer>();
-const musicLoading = new Map<MusicId, Promise<AudioBuffer | null>>();
+/** Volume de cada trilha: a do CT fica de fundo, mais baixa que a do menu. */
+const MUSIC_GAIN: Record<MusicId, number> = { menu: 0.3, hub: 0.2, prematch: 0.26 };
+const musicBuffers = new Map<string, AudioBuffer>();
+const musicLoading = new Map<string, Promise<AudioBuffer | null>>();
 /** A trilha que a tela atual quer (volta a tocar se o som for religado). */
 let wanted: MusicId | null = null;
 let music: { id: MusicId; voice: Voice; at: number } | null = null;
 
-function loadMusic(a: AudioContext, id: MusicId): Promise<AudioBuffer | null> {
+function loadMusic(a: AudioContext, id: string): Promise<AudioBuffer | null> {
   let p = musicLoading.get(id);
   if (!p) {
     p = fetch(sampleUrl(id))
@@ -242,7 +252,7 @@ function startMusic(a: AudioContext, id: MusicId, buf: AudioBuffer) {
   src.loop = true;
   const g = a.createGain();
   g.gain.setValueAtTime(0.0001, at);
-  g.gain.linearRampToValueAtTime(MUSIC_GAIN, at + 1.2);
+  g.gain.linearRampToValueAtTime(MUSIC_GAIN[id], at + 1.2);
   src.connect(g).connect(out(a));
   src.start(at);
   music = { id, voice: { src, gain: g }, at };
@@ -273,9 +283,35 @@ function fadeOutMusic(fade: number) {
   if (a && cur) fadeVoice(a, cur.voice, fade);
 }
 
-/** A tela declara a trilha que quer (null = silêncio). */
-export function useMusic(id: MusicId | null) {
-  useEffect(() => { if (id) playMusic(id); else stopMusic(); }, [id]);
+/**
+ * A tela declara a trilha que quer: null = silêncio; undefined = "não é comigo"
+ * (outra tela por cima decide, ex.: o Dia de jogo aberto sobre o CT).
+ */
+export function useMusic(id: MusicId | null | undefined) {
+  useEffect(() => { if (id === undefined) return; if (id) playMusic(id); else stopMusic(); }, [id]);
+}
+
+// ---------- vinhetas ----------
+
+/** Vinhetas curtas (public/audio/jingle-*.mp3): tocam uma vez por cima de tudo. */
+export const JINGLES = ['win', 'draw', 'loss', 'title', 'promotion', 'relegation'] as const;
+export type JingleId = (typeof JINGLES)[number];
+const JINGLE_GAIN = 0.4;
+
+/**
+ * Toca a vinheta (depois de `delay` s). A trilha em loop abaixa enquanto ela toca
+ * e volta sozinha no fim, se a tela ainda quiser música.
+ */
+export function playJingle(id: JingleId, delay = 0) {
+  if (!enabled) return;
+  const a = audio();
+  if (!a) return;
+  void loadMusic(a, `jingle-${id}`).then((buf) => {
+    if (!buf || !enabled) return;
+    fadeOutMusic(0.4);
+    const v = playBuffer(a, buf, a.currentTime + delay, undefined, JINGLE_GAIN / SAMPLE_GAIN, 0.03);
+    v.src.onended = () => { if (wanted && !music && enabled) playMusic(wanted); };
+  });
 }
 
 // ---------- torcida ----------
@@ -442,6 +478,14 @@ export const SOUNDS: Record<SoundKind, Note[]> = {
   injury: [{ f: 880, t: 0, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 660, t: 0.15, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 880, t: 0.3, d: 0.14, type: 'triangle', vol: 0.8 }, { f: 660, t: 0.45, d: 0.2, type: 'triangle', vol: 0.8 }],
   // blip de cursor
   click: [{ f: 1568, t: 0, d: 0.04, vol: 0.35 }],
+  // "plim" metálico: bola na trave
+  post: [{ f: 2093, t: 0, d: 0.18, type: 'triangle', vol: 0.7 }, { f: 1568, t: 0.06, d: 0.2, type: 'triangle', vol: 0.4 }],
+  // arpejo curto subindo: contrato assinado
+  signing: [523, 659, 784, 1047].map((f, i) => ({ f, t: i * 0.07, d: i === 3 ? 0.25 : 0.07, vol: 0.6 })),
+  // duas moedas: dinheiro entrando
+  money: [{ f: 1976, t: 0, d: 0.08, vol: 0.6 }, { f: 2637, t: 0.09, d: 0.22, vol: 0.6 }],
+  // fanfarrinha: conquista
+  achievement: [784, 988, 1175, 1568].map((f, i) => ({ f, t: i * 0.08, d: i === 3 ? 0.35 : 0.08, vol: 0.6 })),
 };
 
 export function play(kind: SoundKind) {
