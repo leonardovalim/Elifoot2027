@@ -111,14 +111,16 @@ export interface Work {
 export type Side = 'home' | 'away';
 
 export type MatchEvent =
-  | { minute: number; type: 'goal'; side: Side; playerId: string; playerName: string; assistName?: string }
-  | { minute: number; type: 'save'; side: Side; playerId: string; playerName: string; keeperName: string }
-  | { minute: number; type: 'post' | 'bar' | 'miss'; side: Side; playerId: string; playerName: string }
+  | { minute: number; type: 'goal'; side: Side; playerId: string; playerName: string; assistName?: string; penalty?: boolean }
+  | { minute: number; type: 'save'; side: Side; playerId: string; playerName: string; keeperName: string; penalty?: boolean }
+  | { minute: number; type: 'post' | 'bar' | 'miss'; side: Side; playerId: string; playerName: string; penalty?: boolean }
+  /** Pênalti marcado a favor de `side`; quem bate é `playerName`, quem cometeu é `foulerName`. */
+  | { minute: number; type: 'penalty'; side: Side; playerId: string; playerName: string; foulerName: string; reason: 'falta' | 'expulsão' }
   | { minute: number; type: 'yellow' | 'red'; side: Side; playerId: string; playerName: string }
   | { minute: number; type: 'injury'; side: Side; playerId: string; playerName: string; rounds: number }
   | { minute: number; type: 'sub'; side: Side; playerId: string; playerName: string; inName: string; inId: string; reason: 'cansaço' | 'tática' | 'lesão' }
   | { minute: number; type: 'tactic'; side: Side; text: string }
-  | { minute: number; type: 'half' | 'end' };
+  | { minute: number; type: 'half' | 'end' | 'extra' };
 
 export interface TeamStats {
   shots: number;

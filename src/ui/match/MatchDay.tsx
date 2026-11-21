@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'rea
 import { formatDate } from '../../core/calendar';
 import type { Rng } from '../../core/rng';
 import { clubStrength, lastAttendance, liveRng, myClubId, myShootout, type Career, type PreparedRound } from '../../game/career';
-import { changeFormation, changeStyle, stepMinute, substitute, toOutcome, type FootballOutcome, type SideState } from '../../sports/football/engine';
+import { changeFormation, changeStyle, minuteLabel, stepMinute, substitute, toOutcome, type FootballOutcome, type SideState } from '../../sports/football/engine';
 import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
@@ -59,11 +59,13 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         if (e.type === 'goal') play(e.side === side ? 'goalFor' : 'goalAgainst');
         else if (e.type === 'red') play('card');
         else if (e.type === 'injury' && e.side === side) play('injury');
-        else if (e.type === 'half') play('halfTime');
+        else if (e.type === 'half' || e.type === 'extra') play('halfTime');
+        else if (e.type === 'penalty') play('whistle');
       }
       if (m.finished) play('fullTime');
       // pausa em gol do adversário, expulsão ou lesão nossa: momento de decidir
-      if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || ((e.type === 'red' || e.type === 'injury') && e.side === side))) setRunning(false);
+      // pausa também em pênalti (a favor ou contra) e no começo da prorrogação
+      if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || ((e.type === 'red' || e.type === 'injury') && e.side === side) || e.type === 'penalty' || e.type === 'extra')) setRunning(false);
       if (m.minute === m.firstHalfEnd) setRunning(false);
       if (m.finished) { outcome.current = toOutcome(m); playInfo.current.watched = true; setRunning(false); setStage('post'); }
       tick();
@@ -146,7 +148,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             <h4>Gols</h4>
             <ul className="list">
               {o.events.filter((e) => e.type === 'goal').map((e, i) => (
-                <li key={i}>⚽ {e.minute}' {e.type === 'goal' && <SideTag color={colors[e.side]} label={m[e.side].short} />} <b>{'playerName' in e ? e.playerName : ''}</b></li>
+                <li key={i}>⚽ {e.minute}' {e.type === 'goal' && <SideTag color={colors[e.side]} label={m[e.side].short} />} <b>{'playerName' in e ? e.playerName : ''}</b>{e.type === 'goal' && e.penalty && <span className="hint"> (pênalti)</span>}</li>
               ))}
               {o.homeScore + o.awayScore === 0 && <li className="hint">Sem gols.</li>}
             </ul>
@@ -175,12 +177,12 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const mine = m[side];
   const onPitch = [mine.GK, ...mine.DF, ...mine.MF, ...mine.FW];
   const feed = m.events.filter(isNarrated).slice().reverse();
-  const minuteLabel = m.minute > 90 ? `90+${m.minute - 90}` : m.minute > 45 && m.minute <= m.firstHalfEnd ? `45+${m.minute - 45}` : `${m.minute}`;
+  const clock = minuteLabel(m);
   return (
     <div className="match live">
       <div className="scoreboard">
         <TeamHead club={clubOf[L]} color={colors[L]} mine />
-        <div className="score">{m[L].goals} × {m[R].goals}<span className="clock">{minuteLabel}'</span></div>
+        <div className="score">{m[L].goals} × {m[R].goals}<span className="clock">{clock}'{m.extraStart !== undefined && m.minute > m.extraStart ? ' · prorrogação' : ''}</span></div>
         <TeamHead club={clubOf[R]} color={colors[R]} mine={false} right />
       </div>
       <div className="controls">
