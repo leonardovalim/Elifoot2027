@@ -241,8 +241,13 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         )}
         </div>
         <section className="side-panel">
-          <div className="iv card" aria-label="Intervenções">
-            <h4>Intervenções</h4>
+          {/* recolhido por padrão: o resumo mostra a situação atual sem ocupar a tela */}
+          <details className="iv card">
+            <summary>
+              <h4>Intervenções</h4>
+              <span className="iv-now">{STYLE_LABEL[mine.style]} · {mine.formation} · {mine.subsLeft} {mine.subsLeft === 1 ? 'troca' : 'trocas'}</span>
+            </summary>
+            <div className="iv-body">
             <div className="iv-block">
               <span className="iv-label">Postura</span>
               <div className="seg" role="group" aria-label="Postura do time">
@@ -276,7 +281,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
               }}>⇄ Trocar</button>
               {subErr && <p className="sub-error" role="alert">{subErr}</p>}
             </div>
-          </div>
+            </div>
+          </details>
           <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
           <h4>Condição física · {m[side].short}</h4>
           <div className="cond-list">
