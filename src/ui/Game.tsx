@@ -406,7 +406,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           <section className="window news">
             <header className="window-title"><span>Notícias</span></header>
             <ul className="window-body feed">
-              {visibleNews(c).slice(0, 14).map((n, i) => (
+              {visibleNews(c).slice(0, 30).map((n, i) => (
                 <li key={i} className={n.kind}><span className="ico">{NEWS_ICON[n.kind]}</span><span>{n.text}<em>{n.date.slice(8, 10)}/{n.date.slice(5, 7)}</em></span></li>
               ))}
             </ul>

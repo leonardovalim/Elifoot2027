@@ -394,6 +394,16 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 
 .toast { position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%); z-index: 40; background: var(--tomato); color: var(--paper-3); padding: 10px 16px; max-width: calc(100% - 32px); }
 
+/* duas colunas: a lateral termina junto com a base da cena do CT; as notícias
+   ocupam todo o espaço que sobra (contain: size: a lista não estica a linha,
+   só preenche o que sobra e rola por dentro) */
+@media (min-width: 901px) {
+  .stage { align-items: stretch; }
+  .side { min-height: 0; }
+  .news { flex: 1 1 auto; min-height: 180px; contain: size; display: flex; flex-direction: column; }
+  .news .feed { flex: 1 1 auto; min-height: 0; max-height: none; }
+}
+
 /* ---------- responsivo ---------- */
 @media (max-width: 900px) {
   .stage { grid-template-columns: minmax(0, 1fr); }
