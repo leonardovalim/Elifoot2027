@@ -1290,8 +1290,9 @@ export function closeSeasonAll(c: Career): SeasonSummary[] {
     forEachManager(c, (i) => {
       const sum = sums[i];
       if (sum && !sum.fired) activeBond(c)!.objective = boardObjective(c, myClubId(c));
-      // sem clube desde antes (demitido e ainda escolhendo) também recebe propostas novas
-      c.offers = generateOffers(c, !sum || sum.fired ? 3 : sum.achieved ? 2 : 0);
+      // sem clube desde antes (demitido e ainda escolhendo) também recebe propostas novas;
+      // no máximo duas, para a escolha caber na tela sem virar uma lista longa
+      c.offers = generateOffers(c, !sum || sum.fired || sum.achieved ? MAX_OFFERS : 0);
       if (c.offers.length && sum && !sum.fired) push(c, 'good', `Você recebeu ${c.offers.length} proposta(s) de outros clubes.`);
     });
     return sums;
@@ -1376,6 +1377,9 @@ export function resolveMidSeason(c: Career, acceptClubId: string | null): string
 }
 
 /** Propostas de trabalho conforme a reputação do empreendedor (GDD 2.11). */
+/** Propostas de clubes no fim da temporada (demitido, sem clube ou objetivo cumprido). */
+export const MAX_OFFERS = 2;
+
 export function generateOffers(c: Career, count: number): Offer[] {
   if (count <= 0) return [];
   const me = myClubId(c);

@@ -1,6 +1,7 @@
 import {
   acceptOffer, advanceDay, buyPlayer, challengeOptions, closeSeason, completeRound, isMatchDay, liveRng,
   marketListings, myClubId, newWorld, prepareRound, seasonSummary, simulateRound, startCareer, type Career,
+  MAX_OFFERS,
 } from '../src/game/career';
 import { changeStyle, runToEnd, substitute, toOutcome } from '../src/sports/football/engine';
 
@@ -82,6 +83,8 @@ describe('carreira com calendário', () => {
         expect(c.offers.length).toBeGreaterThan(0);
       }
       if (c.phase === 'encerramento') closeSeason(c);
+      // propostas no fim da temporada: no máximo duas opções
+      expect(c.offers.length).toBeLessThanOrEqual(MAX_OFFERS);
       if (c.unemployed) {
         // aceita a primeira proposta e segue
         const o = c.offers[0]!;
