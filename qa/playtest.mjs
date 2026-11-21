@@ -481,6 +481,7 @@ async function runViewport(browser, vpName, report) {
       const dlg = page.getByRole('dialog', { name: 'Carreira' });
       await dlg.waitFor({ timeout: 3000 });
       await dlg.locator('.ach-section').scrollIntoViewIfNeeded();
+      await click(dlg.locator('.ach-section > summary')); // a seção vem recolhida
       await check('carreira-conquistas');
       await click(dlg.getByRole('button', { name: 'Fechar' }));
       // devolve a coleção verdadeira: temporadas e exploração seguem com o progresso real

@@ -118,26 +118,33 @@ export function AchievementsSection() {
   const unlocked = useUnlocked();
   const got = ACHIEVEMENTS.filter((a) => unlocked[a.id]).sort((x, y) => (unlocked[y.id] ?? '').localeCompare(unlocked[x.id] ?? ''));
   const left = ACHIEVEMENTS.length - got.length;
+  // recolhida por padrão: com dezenas de conquistas a lista alongava demais a tela
   return (
-    <section className="ach-section">
-      <h4>Conquistas · {got.length}/{ACHIEVEMENTS.length}</h4>
-      <div className="bar ach-bar"><i style={{ width: `${(got.length / ACHIEVEMENTS.length) * 100}%` }} /></div>
+    <details className="fold ach-section">
+      <summary>
+        Conquistas
+        <span className="hint">{got.length}/{ACHIEVEMENTS.length}</span>
+        <span className="bar ach-bar ach-bar-mini" aria-hidden><i style={{ width: `${(got.length / ACHIEVEMENTS.length) * 100}%` }} /></span>
+      </summary>
       {got.length === 0
-        ? <p className="hint">Todas as conquistas são secretas. Jogue para descobrir: cada uma coloca um objeto novo no seu CT.</p>
+        ? <p className="hint">Todas as conquistas são secretas. Cada uma coloca um objeto novo no seu CT.</p>
         : (
           <ul className="ach-list">
             {got.map((a) => (
               <li key={a.id} className={`tier-${a.tier}`}>
-                <LegacyThumb id={a.id} size={40} />
-                <span className="ach-li-text">
-                  <b>{a.name}</b> <span className="ach-tier">{TIER_LABEL[a.tier]}</span>
-                  <span className="hint">{a.how} · no CT: {a.element.toLowerCase()}</span>
-                </span>
+                {/* cartão compacto: miniatura e nome; toque para ver como ganhou e o que entrou no CT */}
+                <details className="ach-card">
+                  <summary>
+                    <LegacyThumb id={a.id} size={40} />
+                    <span className="ach-li-text"><b>{a.name}</b><span className="ach-tier">{TIER_LABEL[a.tier]}</span></span>
+                  </summary>
+                  <p className="hint">{a.how} · no CT: {a.element.toLowerCase()}</p>
+                </details>
               </li>
             ))}
           </ul>
         )}
       {left > 0 && got.length > 0 && <p className="hint">{left} conquista{left > 1 ? 's' : ''} secreta{left > 1 ? 's' : ''} por descobrir.</p>}
-    </section>
+    </details>
   );
 }
