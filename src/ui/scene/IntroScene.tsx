@@ -280,16 +280,17 @@ export function drawIntroArt(c: CanvasRenderingContext2D, bg: CanvasImageSource,
   // torcida pulando: faixas verticais da arquibancada sobem e descem
   if (cheering) {
     const h = ART_STANDS.bottom - ART_STANDS.top;
-    for (let x = 0; x < W; x += 3) {
-      const off = Math.round(Math.abs(Math.sin(time * 12 + x * 0.9)) * 2);
-      if (off) c.drawImage(bg, x, ART_STANDS.top, 3, h, x, ART_STANDS.top - off, 3, h);
+    for (let x = 0; x < W; x += 12) {
+      // ola: blocos de 12 px sobem e descem devagar, em onda (sem cintilar)
+      const off = Math.round(Math.max(0, Math.sin(time * 5 - x * 0.05)) * 2);
+      if (off) c.drawImage(bg, x, ART_STANDS.top, 12, h, x, ART_STANDS.top - off, 12, h);
     }
   }
 
   // rede na boca do gol (balança depois do gol)
   const g = ART_GOAL;
   const ripple = s.sinceGoal >= 0 ? Math.max(0, 1 - s.sinceGoal / 1.6) : 0;
-  const sway = (p: Pt): Pt => (ripple ? { x: p.x + Math.sin(time * 28 + p.y * 0.5) * ripple * 1.6, y: p.y } : p);
+  const sway = (p: Pt): Pt => (ripple ? { x: p.x + Math.sin(time * 9 + p.y * 0.35) * ripple * 1.2, y: p.y } : p);
   c.fillStyle = 'rgba(236,240,236,0.22)';
   mesh(c, { x: g.left + 1, y: g.top + 1 }, { x: g.right - 1, y: g.top + 1 }, { x: g.right - 1, y: g.bottom }, { x: g.left + 1, y: g.bottom }, 9, 7, sway);
 
@@ -388,7 +389,7 @@ export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: numb
   // gol: fundo da rede, lateral distante e teto (atrás de tudo)
   const ripple = s.sinceGoal >= 0 ? Math.max(0, 1 - s.sinceGoal / 1.6) : 0;
   const sway = (p: Pt): Pt => (ripple && p.x > POST_FAR.base.x + 2
-    ? { x: p.x + Math.sin(time * 28 + p.y * 0.5) * ripple * 1.6, y: p.y }
+    ? { x: p.x + Math.sin(time * 9 + p.y * 0.35) * ripple * 1.2, y: p.y }
     : p);
   c.fillStyle = 'rgba(20,40,20,0.18)';
   c.beginPath();
