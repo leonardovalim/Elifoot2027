@@ -1,10 +1,16 @@
 import { useEffect, useRef } from 'react';
 import { INTRO_END, introState, type IntroState } from './introTimeline';
 import { drawPlayer, lookFor, SPRITE_H } from './sprites';
+import stadiumUrl from '../../assets/intro/estadio.png';
+import kickerUrl from '../../assets/intro/cobrador.png';
+import keeperUrl from '../../assets/intro/goleiro.png';
+import wallUrl from '../../assets/intro/barreira.png';
 
 /**
  * Abertura em pixel art: estádio à noite, refletores acendendo, cobrança de
- * falta no ângulo e a torcida explodindo. Tudo desenhado em código (sem assets).
+ * falta no ângulo e a torcida explodindo. O cenário é arte gerada no PixelLab
+ * (src/assets/intro); enquanto ela não carrega, ou se falhar, a cena usa o
+ * cenário desenhado em código.
  */
 const W = 240;
 const H = 135;
@@ -89,9 +95,228 @@ function mesh(c: CanvasRenderingContext2D, a: Pt, b: Pt, cc: Pt, d: Pt, nu: numb
   for (let j = 0; j <= nv; j++) line(c, sway(lerp(a, d, j / nv)), sway(lerp(b, cc, j / nv)));
 }
 
-function bezier(t: number) {
+/** Onde a jogada acontece: muda conforme o cenário (desenhado em código ou arte gerada). */
+interface PlayLayout {
+  ballEnd: Pt;
+  ballRest: Pt;
+  groundEnd: number;
+  ctrl: Pt;
+  keeperX: number;
+  keeperBase: number;
+  /** Para que lado o goleiro salta (px no fim do salto). */
+  keeperDive: number;
+}
+
+const CLASSIC_PLAY: PlayLayout = {
+  ballEnd: BALL_END, ballRest: BALL_REST, groundEnd: GROUND_END, ctrl: BALL_CTRL, keeperX: 184, keeperBase: 97, keeperDive: -2,
+};
+
+function bezier(t: number, L: PlayLayout) {
   const a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
-  return { x: a * BALL_START.x + b * BALL_CTRL.x + c * BALL_END.x, y: a * BALL_START.y + b * BALL_CTRL.y + c * BALL_END.y };
+  return { x: a * BALL_START.x + b * L.ctrl.x + c * L.ballEnd.x, y: a * BALL_START.y + b * L.ctrl.y + c * L.ballEnd.y };
+}
+
+function drawPlay(c: CanvasRenderingContext2D, s: IntroState, time: number, L: PlayLayout) {
+  // barreira
+  const wallJump = s.flight > 0 && s.flight < 0.6 ? -Math.round(Math.sin(s.flight / 0.6 * Math.PI) * 5) : 0;
+  // do mais distante para o mais próximo, para quem está na frente cobrir quem está atrás
+  WALL_SPOTS.forEach((spot, i) => drawPlayer(c, WALL[i]!, spot.x - 4, spot.ground - SPRITE_H + 1 + wallJump, 0, true));
+
+  // goleiro: na linha, salta para o ângulo do fundo e não alcança
+  const dive = s.flight > 0.45 ? Math.min(1, (s.flight - 0.45) / 0.4) : 0;
+  const keeperBase = L.keeperBase;
+  const keeperY = keeperBase - Math.round(dive * 10) + (s.sinceGoal > 0.3 ? Math.min(10, Math.round((s.sinceGoal - 0.3) * 20)) : 0);
+  drawPlayer(c, KEEPER, L.keeperX + Math.round(dive * L.keeperDive), Math.min(keeperBase, keeperY), 0, true);
+
+  // cobrador
+  const kx = Math.round(58 + s.run * 28);
+  const celebrating = s.sinceGoal >= 0;
+  drawPlayer(c, HOME, celebrating ? kx + Math.round(Math.min(1, s.sinceGoal) * 10) : kx, 107 - (celebrating && Math.sin(time * 10) > 0 ? 3 : 0), s.run > 0 && s.run < 1 ? Math.floor(time * 10) : 0, false);
+
+  // bola: curva até o ângulo, estufa a rede e cai dentro do gol
+  let bx = BALL_START.x, by = BALL_START.y, ground = BALL_START.y + 2;
+  if (s.sinceGoal >= 0) {
+    const k = Math.min(1, s.sinceGoal / 0.25);
+    bx = L.ballEnd.x + (L.ballRest.x - L.ballEnd.x) * k;
+    by = Math.min(L.ballRest.y, L.ballEnd.y + 3 * k + Math.max(0, s.sinceGoal - 0.2) ** 2 * 120);
+    ground = L.ballRest.y + 2;
+  } else if (s.flight > 0) {
+    ({ x: bx, y: by } = bezier(s.flight, L));
+    ground = BALL_START.y + 2 + (L.groundEnd - BALL_START.y - 2) * s.flight;
+  }
+  if (s.flight > 0 && s.sinceGoal < 0) {
+    // rastro
+    for (let k = 1; k <= 3; k++) {
+      const p = bezier(Math.max(0, s.flight - k * 0.04), L);
+      c.fillStyle = `rgba(255,255,255,${0.35 - k * 0.1})`; c.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
+    }
+  }
+  c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(Math.round(bx), Math.round(ground), 3, 1);
+  c.fillStyle = '#ffffff'; c.fillRect(Math.round(bx), Math.round(by), 3, 3);
+  c.fillStyle = '#1a1420'; c.fillRect(Math.round(bx) + 1, Math.round(by) + 1, 1, 1);
+}
+
+function drawEffects(c: CanvasRenderingContext2D, s: IntroState) {
+  if (s.sinceGoal >= 0 && s.sinceGoal < 0.35) { c.fillStyle = `rgba(255,255,255,${0.55 * (1 - s.sinceGoal / 0.35)})`; c.fillRect(0, 0, W, H); }
+  if (s.sinceGoal >= 0 && s.sinceGoal < 3) {
+    const t = s.sinceGoal;
+    for (const p of CONFETTI) {
+      const y = 40 + p.vy * t + 30 * t * t;
+      if (y > H) continue;
+      c.fillStyle = p.color; c.fillRect(Math.round(p.x + p.vx * t), Math.round(y), 1, 2);
+    }
+  }
+}
+
+/*
+ * Cenário com arte gerada (PixelLab): estádio já iluminado. A cena escurece
+ * tudo e apaga cada refletor até a vez dele, faz a torcida pular no gol e põe
+ * a rede (que balança) na boca do gol desenhado na arte.
+ */
+const ART_GOAL = { left: 194, right: 222, top: 85, bottom: 108 };
+/** Refletores da arte, da esquerda para a direita (centro da lâmpada). */
+const ART_LAMPS = [{ x: 6, y: 12 }, { x: 78, y: 19 }, { x: 152, y: 12 }, { x: 230, y: 2 }];
+const ART_STANDS = { top: 56, bottom: 95 };
+const ART_PLAY: PlayLayout = {
+  ballEnd: { x: 198, y: 88 }, ballRest: { x: 215, y: 99 }, groundEnd: 100, ctrl: { x: 152, y: 58 },
+  keeperX: 203, keeperBase: 96, keeperDive: -5,
+};
+
+/*
+ * Jogadores gerados no PixelLab (src/assets/intro/*.png): folhas horizontais de
+ * quadros quadrados. `feet` é a linha dos pés dentro do quadro e `cx` o centro
+ * do corpo parado, para alinhar o sprite a um ponto do gramado.
+ */
+export interface Sheet { img: CanvasImageSource; size: number; feet: number; cx: number; anims: Record<string, [number, number]> }
+export interface IntroSprites { kicker: Sheet; keeper: Sheet; wall: Sheet }
+
+export const SHEETS = {
+  kicker: { size: 36, feet: 29, cx: 18, anims: { parado: [0, 1], corrida: [1, 8], chute: [9, 5], comemora: [14, 9] } },
+  keeper: { size: 40, feet: 32, cx: 20, anims: { parado: [0, 1], salto: [1, 5], chao: [6, 3] } },
+  wall: { size: 40, feet: 32, cx: 20, anims: { parado: [0, 1], pulo: [1, 8] } },
+} satisfies Record<keyof IntroSprites, Omit<Sheet, 'img'>>;
+
+function sprite(c: CanvasRenderingContext2D, sh: Sheet, anim: string, i: number, x: number, ground: number) {
+  const [start, n] = sh.anims[anim] ?? [0, 1];
+  const f = start + Math.max(0, Math.min(n - 1, Math.floor(i)));
+  c.drawImage(sh.img, f * sh.size, 0, sh.size, sh.size, Math.round(x - sh.cx), Math.round(ground - sh.feet), sh.size, sh.size);
+}
+
+/** Pedaço de [a, b] já percorrido por v (0–1). */
+const seg = (v: number, a: number, b: number) => Math.max(0, Math.min(1, (v - a) / (b - a)));
+
+const ART_KICK = { from: 60, to: 87, ground: 121 };
+/** Barreira: fila na diagonal do gramado, do mais distante ao mais próximo. */
+const ART_WALL = [{ x: 155, g: 107 }, { x: 147, g: 112 }, { x: 139, g: 117 }];
+const ART_KEEPER = { x: 210, ground: 109, dive: -12 };
+
+function drawBall(c: CanvasRenderingContext2D, s: IntroState, L: PlayLayout) {
+  let bx = BALL_START.x, by = BALL_START.y, ground = BALL_START.y + 3;
+  if (s.sinceGoal >= 0) {
+    const k = Math.min(1, s.sinceGoal / 0.25);
+    bx = L.ballEnd.x + (L.ballRest.x - L.ballEnd.x) * k;
+    by = Math.min(L.ballRest.y, L.ballEnd.y + 3 * k + Math.max(0, s.sinceGoal - 0.2) ** 2 * 120);
+    ground = L.ballRest.y + 3;
+  } else if (s.flight > 0) {
+    ({ x: bx, y: by } = bezier(s.flight, L));
+    ground = BALL_START.y + 3 + (L.groundEnd - BALL_START.y - 3) * s.flight;
+    for (let k = 1; k <= 4; k++) {
+      const p = bezier(Math.max(0, s.flight - k * 0.035), L);
+      c.fillStyle = `rgba(255,255,255,${0.42 - k * 0.09})`; c.fillRect(Math.round(p.x), Math.round(p.y), 3, 3);
+    }
+  }
+  const x = Math.round(bx), y = Math.round(by);
+  // sombra fica menor quanto mais alta a bola
+  const air = Math.max(0, ground - by - 3);
+  const sw = air > 14 ? 2 : 4;
+  c.fillStyle = `rgba(0,0,0,${air > 14 ? 0.18 : 0.32})`; c.fillRect(x + (4 - sw) / 2, Math.round(ground), sw, 1);
+  // bola 4x4 com gomos girando
+  c.fillStyle = '#1a1420'; c.fillRect(x, y + 1, 4, 2); c.fillRect(x + 1, y, 2, 4);
+  c.fillStyle = '#ffffff'; c.fillRect(x + 1, y + 1, 2, 2); c.fillRect(x, y + 1, 1, 1); c.fillRect(x + 3, y + 2, 1, 1); c.fillRect(x + 1, y, 1, 1); c.fillRect(x + 2, y + 3, 1, 1);
+  const spin = s.flight > 0 && s.sinceGoal < 0.6 ? Math.floor(s.flight * 18 + Math.max(0, s.sinceGoal) * 20) % 4 : 0;
+  const dots = [[1, 1], [2, 1], [2, 2], [1, 2]] as const;
+  c.fillStyle = '#1a1420'; c.fillRect(x + dots[spin]![0], y + dots[spin]![1], 1, 1);
+}
+
+function drawPlayArt(c: CanvasRenderingContext2D, s: IntroState, time: number, L: PlayLayout, sp: IntroSprites) {
+  // goleiro: parado, salta para o ângulo (não alcança) e cai no gramado
+  const dive = seg(s.flight, 0.45, 1);
+  const kx = ART_KEEPER.x + ART_KEEPER.dive * dive;
+  if (s.sinceGoal >= 0) sprite(c, sp.keeper, 'chao', s.sinceGoal / 0.18, kx - 9, ART_KEEPER.ground);
+  else if (dive > 0) sprite(c, sp.keeper, 'salto', dive * 5, kx, ART_KEEPER.ground - Math.round(Math.sin(dive * Math.PI) * 3));
+  else sprite(c, sp.keeper, 'parado', 0, kx, ART_KEEPER.ground);
+
+  // barreira: pula quando a bola sai
+  const jump = seg(s.flight, 0, 0.6);
+  ART_WALL.forEach((w, i) => {
+    const j = Math.max(0, Math.min(1, jump - i * 0.04));
+    if (j > 0 && j < 1) sprite(c, sp.wall, 'pulo', j * 8, w.x, w.g);
+    else sprite(c, sp.wall, 'parado', 0, w.x, w.g);
+  });
+
+  // cobrador: espera, corre, chuta e comemora
+  const K = ART_KICK;
+  if (s.sinceGoal >= 0) {
+    const run = Math.min(1, s.sinceGoal / 1.2);
+    sprite(c, sp.kicker, 'comemora', (s.sinceGoal * 12) % 9, K.to + run * 18, K.ground);
+  } else if (s.flight > 0) {
+    const f = s.flight < 0.12 ? 2 : s.flight < 0.3 ? 3 : s.flight < 0.5 ? 4 : -1;
+    if (f >= 0) sprite(c, sp.kicker, 'chute', f, K.to, K.ground);
+    else sprite(c, sp.kicker, 'parado', 0, K.to, K.ground);
+  } else if (s.run > 0) {
+    const x = K.from + (K.to - K.from) * s.run;
+    if (s.run < 0.8) sprite(c, sp.kicker, 'corrida', (time * 14) % 8, x, K.ground);
+    else sprite(c, sp.kicker, 'chute', s.run < 0.9 ? 0 : 1, x, K.ground);
+  } else sprite(c, sp.kicker, 'parado', 0, K.from, K.ground);
+
+  drawBall(c, s, L);
+}
+
+export function drawIntroArt(c: CanvasRenderingContext2D, bg: CanvasImageSource, s: IntroState, time: number, sp?: IntroSprites | null) {
+  const lit = s.lightsOn / 4;
+  const cheering = s.sinceGoal >= 0 && s.sinceGoal < 2.4;
+  c.drawImage(bg, 0, 0);
+
+  // torcida pulando: faixas verticais da arquibancada sobem e descem
+  if (cheering) {
+    const h = ART_STANDS.bottom - ART_STANDS.top;
+    for (let x = 0; x < W; x += 3) {
+      const off = Math.round(Math.abs(Math.sin(time * 12 + x * 0.9)) * 2);
+      if (off) c.drawImage(bg, x, ART_STANDS.top, 3, h, x, ART_STANDS.top - off, 3, h);
+    }
+  }
+
+  // rede na boca do gol (balança depois do gol)
+  const g = ART_GOAL;
+  const ripple = s.sinceGoal >= 0 ? Math.max(0, 1 - s.sinceGoal / 1.6) : 0;
+  const sway = (p: Pt): Pt => (ripple ? { x: p.x + Math.sin(time * 28 + p.y * 0.5) * ripple * 1.6, y: p.y } : p);
+  c.fillStyle = 'rgba(236,240,236,0.22)';
+  mesh(c, { x: g.left + 1, y: g.top + 1 }, { x: g.right - 1, y: g.top + 1 }, { x: g.right - 1, y: g.bottom }, { x: g.left + 1, y: g.bottom }, 9, 7, sway);
+
+  if (sp) drawPlayArt(c, s, time, ART_PLAY, sp);
+  else drawPlay(c, s, time, ART_PLAY);
+
+  // escuridão antes dos refletores; cada refletor apagado ganha uma sombra sobre lâmpada e facho
+  if (lit < 1) {
+    c.fillStyle = `rgba(8,10,24,${0.55 * (1 - lit)})`; c.fillRect(0, 0, W, H);
+    ART_LAMPS.forEach((l, i) => {
+      if (i < s.lightsOn) return;
+      c.fillStyle = 'rgba(8,10,24,0.55)';
+      c.beginPath(); c.moveTo(l.x - 12, 0); c.lineTo(l.x + 12, 0); c.lineTo(l.x + 40, ART_STANDS.top); c.lineTo(l.x - 40, ART_STANDS.top); c.closePath(); c.fill();
+      const glow = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, 16);
+      glow.addColorStop(0, 'rgba(8,10,24,0.8)'); glow.addColorStop(1, 'rgba(8,10,24,0)');
+      c.fillStyle = glow; c.fillRect(l.x - 16, l.y - 16, 32, 32);
+    });
+  }
+  // brilho rápido quando o refletor acende
+  ART_LAMPS.forEach((l, i) => {
+    if (i >= s.lightsOn) return;
+    const glow = c.createRadialGradient(l.x, l.y, 0, l.x, l.y, 14);
+    glow.addColorStop(0, 'rgba(255,246,200,0.28)'); glow.addColorStop(1, 'rgba(255,246,200,0)');
+    c.fillStyle = glow; c.fillRect(l.x - 14, l.y - 14, 28, 28);
+  });
+
+  drawEffects(c, s);
 }
 
 export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: number) {
@@ -177,43 +402,7 @@ export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: numb
   // poste do fundo (mais fino e sombreado)
   c.fillStyle = '#d8dce4'; line(c, POST_FAR.base, POST_FAR.top);
 
-  // barreira
-  const wallJump = s.flight > 0 && s.flight < 0.6 ? -Math.round(Math.sin(s.flight / 0.6 * Math.PI) * 5) : 0;
-  // do mais distante para o mais próximo, para quem está na frente cobrir quem está atrás
-  WALL_SPOTS.forEach((spot, i) => drawPlayer(c, WALL[i]!, spot.x - 4, spot.ground - SPRITE_H + 1 + wallJump, 0, true));
-
-  // goleiro: na linha, salta para o ângulo do fundo e não alcança
-  const dive = s.flight > 0.45 ? Math.min(1, (s.flight - 0.45) / 0.4) : 0;
-  const keeperBase = 97;
-  const keeperY = keeperBase - Math.round(dive * 10) + (s.sinceGoal > 0.3 ? Math.min(10, Math.round((s.sinceGoal - 0.3) * 20)) : 0);
-  drawPlayer(c, KEEPER, 184 - Math.round(dive * 2), Math.min(keeperBase, keeperY), 0, true);
-
-  // cobrador
-  const kx = Math.round(58 + s.run * 28);
-  const celebrating = s.sinceGoal >= 0;
-  drawPlayer(c, HOME, celebrating ? kx + Math.round(Math.min(1, s.sinceGoal) * 10) : kx, 107 - (celebrating && Math.sin(time * 10) > 0 ? 3 : 0), s.run > 0 && s.run < 1 ? Math.floor(time * 10) : 0, false);
-
-  // bola: curva até o ângulo, estufa a rede e cai dentro do gol
-  let bx = BALL_START.x, by = BALL_START.y, ground = BALL_START.y + 2;
-  if (s.sinceGoal >= 0) {
-    const k = Math.min(1, s.sinceGoal / 0.25);
-    bx = BALL_END.x + (BALL_REST.x - BALL_END.x) * k;
-    by = Math.min(BALL_REST.y, BALL_END.y + 3 * k + Math.max(0, s.sinceGoal - 0.2) ** 2 * 120);
-    ground = BALL_REST.y + 2;
-  } else if (s.flight > 0) {
-    ({ x: bx, y: by } = bezier(s.flight));
-    ground = BALL_START.y + 2 + (GROUND_END - BALL_START.y - 2) * s.flight;
-  }
-  if (s.flight > 0 && s.sinceGoal < 0) {
-    // rastro
-    for (let k = 1; k <= 3; k++) {
-      const p = bezier(Math.max(0, s.flight - k * 0.04));
-      c.fillStyle = `rgba(255,255,255,${0.35 - k * 0.1})`; c.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
-    }
-  }
-  c.fillStyle = 'rgba(0,0,0,0.3)'; c.fillRect(Math.round(bx), Math.round(ground), 3, 1);
-  c.fillStyle = '#ffffff'; c.fillRect(Math.round(bx), Math.round(by), 3, 3);
-  c.fillStyle = '#1a1420'; c.fillRect(Math.round(bx) + 1, Math.round(by) + 1, 1, 1);
+  drawPlay(c, s, time, CLASSIC_PLAY);
 
   // gol: lateral próxima da rede, poste da frente e travessão (na frente da bola)
   c.fillStyle = 'rgba(236,240,236,0.45)';
@@ -234,16 +423,7 @@ export function drawIntro(c: CanvasRenderingContext2D, s: IntroState, time: numb
     c.beginPath(); c.moveTo(x - 4, 8); c.lineTo(x + 6, 8); c.lineTo(x + 40, H); c.lineTo(x - 38, H); c.closePath(); c.fill();
   });
 
-  // flash e confete do gol
-  if (s.sinceGoal >= 0 && s.sinceGoal < 0.35) { c.fillStyle = `rgba(255,255,255,${0.55 * (1 - s.sinceGoal / 0.35)})`; c.fillRect(0, 0, W, H); }
-  if (s.sinceGoal >= 0 && s.sinceGoal < 3) {
-    const t = s.sinceGoal;
-    for (const p of CONFETTI) {
-      const y = 40 + p.vy * t + 30 * t * t;
-      if (y > H) continue;
-      c.fillStyle = p.color; c.fillRect(Math.round(p.x + p.vx * t), Math.round(y), 1, 2);
-    }
-  }
+  drawEffects(c, s);
 }
 
 interface Props {
@@ -263,12 +443,26 @@ export function IntroScene({ skip, onReveal }: Props) {
     const ctx = canvas.current?.getContext('2d');
     if (!ctx) return;
     const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    let bg: HTMLImageElement | null = null;
+    let sp: IntroSprites | null = null;
+    let alive = true;
+    const load = (src: string) => new Promise<HTMLImageElement>((ok, fail) => {
+      const im = new Image(); im.onload = () => ok(im); im.onerror = fail; im.src = src;
+    });
+    // com movimento reduzido só um quadro é desenhado: redesenha quando a arte chegar
+    load(stadiumUrl).then((im) => { if (!alive) return; bg = im; if (reduced) raf = requestAnimationFrame(tick); }).catch(() => {});
+    Promise.all([load(kickerUrl), load(keeperUrl), load(wallUrl)]).then(([k, g, w]) => {
+      if (!alive) return;
+      sp = { kicker: { img: k, ...SHEETS.kicker }, keeper: { img: g, ...SHEETS.keeper }, wall: { img: w, ...SHEETS.wall } };
+      if (reduced) raf = requestAnimationFrame(tick);
+    }).catch(() => {});
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
       const t = (now - start) / 1000 + offset.current;
       const st = introState(t);
-      drawIntro(ctx, st, reduced ? 0 : t);
+      if (bg) drawIntroArt(ctx, bg, st, reduced ? 0 : t, sp);
+      else drawIntro(ctx, st, reduced ? 0 : t);
       if (st.revealed && !revealed.current) { revealed.current = true; reveal.current(); }
       if (!reduced) raf = requestAnimationFrame(tick);
     };
@@ -278,6 +472,7 @@ export function IntroScene({ skip, onReveal }: Props) {
     window.addEventListener('pointerdown', skipNow);
     window.addEventListener('keydown', skipNow);
     return () => {
+      alive = false;
       cancelAnimationFrame(raf);
       window.removeEventListener('pointerdown', skipNow);
       window.removeEventListener('keydown', skipNow);

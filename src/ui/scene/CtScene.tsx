@@ -1,8 +1,33 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { scenePresentation } from './scenePresentation';
 import { sceneDetails } from './sceneDetails';
 import { drawCoach, drawPlayer, drawText, lookFor, textWidth, SPRITE_H, SPRITE_W, type Look } from './sprites';
 import { drawLegacy, drawPlaza } from './legacy';
+import { tintedSheet } from './tint';
+import { ART_H, ART_W, COACH_SPOT, WALK, drawCones, drawCtSign, drawLegacyArt, insideWalk, type Atlas } from './ctArt';
+import athleteUrl from '../../assets/ct/atleta.png';
+import coachUrl from '../../assets/ct/tecnico.png';
+import stageUrl from '../../assets/ct/cenario.png';
+import atlasUrl from '../../assets/ct/objetos.png';
+import atlasRects from '../../assets/ct/objetos.json';
+
+/*
+ * Atleta e técnico gerados no PixelLab (src/assets/ct). O atleta é recolorido
+ * para as cores do clube e o tom de pele de cada jogador (ver tint.ts).
+ * Folhas de quadros quadrados; `feet`/`cx` alinham o sprite pelos pés.
+ */
+const ATHLETE = { size: 40, feet: 37, cx: 20, idle: 0, walk: [1, 8] as const };
+const COACH = { size: 36, feet: 33, cx: 18, frames: 9 };
+
+function drawFrame(c: CanvasRenderingContext2D, img: CanvasImageSource, size: number, f: number, x: number, feetY: number, feet: number, cx: number, flip: boolean) {
+  const dy = Math.round(feetY - feet);
+  if (!flip) { c.drawImage(img, f * size, 0, size, size, Math.round(x - cx), dy, size, size); return; }
+  c.save();
+  c.translate(Math.round(x), 0);
+  c.scale(-1, 1);
+  c.drawImage(img, f * size, 0, size, size, -cx, dy, size, size);
+  c.restore();
+}
 
 export interface ScenePlayer {
   id: string;
@@ -39,6 +64,8 @@ interface Actor {
   ty: number;
   wait: number;
   flip: boolean;
+  /** Em que cenário a posição vale: 'art' = pés no cenário novo; 'code' = canto do boneco antigo. */
+  mode: 'art' | 'code';
 }
 
 interface Float { x: number; y: number; text: string; life: number }
@@ -46,6 +73,18 @@ interface Float { x: number; y: number; text: string; life: number }
 function rand(seed: { v: number }) {
   seed.v = (seed.v * 1664525 + 1013904223) >>> 0;
   return seed.v / 4294967296;
+}
+
+const WALK_BOX = WALK.reduce((b, [x, y]) => ({ x0: Math.min(b.x0, x), x1: Math.max(b.x1, x), y0: Math.min(b.y0, y), y1: Math.max(b.y1, y) }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+
+/** Ponto aleatório no campo do cenário novo (perto de `near`, se der). */
+function pickWalk(seed: { v: number }, near?: { x: number; y: number }): { x: number; y: number } {
+  for (let i = 0; i < 12; i++) {
+    const x = near ? near.x + (rand(seed) - 0.5) * 90 : WALK_BOX.x0 + rand(seed) * (WALK_BOX.x1 - WALK_BOX.x0);
+    const y = near ? near.y + (rand(seed) - 0.5) * 44 : WALK_BOX.y0 + rand(seed) * (WALK_BOX.y1 - WALK_BOX.y0);
+    if (insideWalk(x, y)) return { x, y };
+  }
+  return near ?? { x: 240, y: 170 };
 }
 
 /** Centro de treinamento em pixel art: atletas treinando, bola rodando e "+1" flutuando. */
@@ -60,26 +99,44 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
   legacyRef.current = legacy ?? {};
   // conquista nova com o jogo pausado: redesenha a cena para o objeto aparecer na hora
   const legacyCount = Object.keys(legacy ?? {}).length;
+  const art = useRef<{ athlete?: HTMLImageElement; coach?: HTMLImageElement; stage?: HTMLImageElement; atlas?: HTMLImageElement }>({});
+  const [artReady, setArtReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const load = (src: string) => new Promise<HTMLImageElement>((ok, fail) => {
+      const im = new Image(); im.onload = () => ok(im); im.onerror = fail; im.src = src;
+    });
+    Promise.all([load(athleteUrl), load(coachUrl), load(stageUrl), load(atlasUrl)]).then(([athlete, coach, stage, atlas]) => {
+      if (!alive) return;
+      art.current = { athlete, coach, stage, atlas };
+      setArtReady(true);
+    }).catch(() => { /* sem a arte: bonecos desenhados em código */ });
+    return () => { alive = false; };
+  }, []);
 
   // sincroniza atores com o elenco
   useEffect(() => {
     const seed = { v: 7 };
     const existing = new Map(actors.current.map((a) => [a.id, a]));
+    const mode = artReady ? 'art' : 'code';
     actors.current = players.slice(0, 16).map((p) => {
       const old = existing.get(p.id);
-      if (old) return old;
-      const x = FIELD.x + 10 + rand(seed) * (FIELD.w - 30);
-      const y = FIELD.y + 4 + rand(seed) * (FIELD.h - 20);
-      return { id: p.id, look: lookFor(p.id, colors[0], colors[1]), x, y, tx: x, ty: y, wait: Math.floor(rand(seed) * 120), flip: false };
+      if (old && old.mode === mode) return old;
+      const pos = mode === 'art'
+        ? pickWalk(seed)
+        : { x: FIELD.x + 10 + rand(seed) * (FIELD.w - 30), y: FIELD.y + 8 + rand(seed) * (FIELD.h - 24) };
+      return { id: p.id, look: lookFor(p.id, colors[0], colors[1]), x: pos.x, y: pos.y, tx: pos.x, ty: pos.y, wait: old?.wait ?? Math.floor(rand(seed) * 120), flip: false, mode };
     });
-  }, [players, colors]);
+  }, [players, colors, artReady]);
 
   // novos ganhos de treino viram "+1 ATR" flutuando sobre o atleta
   useEffect(() => {
     for (const g of gains) {
       const a = actors.current.find((x) => x.id === g.playerId);
-      const x = a ? a.x + SPRITE_W / 2 : FIELD.x + FIELD.w / 2;
-      const y = a ? a.y - 3 : FIELD.y;
+      const artMode = a?.mode === 'art';
+      const x = a ? (artMode ? a.x : a.x + SPRITE_W / 2) : FIELD.x + FIELD.w / 2;
+      const y = a ? (artMode ? a.y - 27 : a.y - 3) : FIELD.y;
       floats.current.push({ x: x - textWidth(g.text) / 2, y, text: g.text, life: 70 });
     }
   }, [gainsKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -104,8 +161,13 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
           const dist = Math.hypot(dx, dy);
           if (dist < 1) {
             a.wait = 30 + Math.floor(rand(seed) * 150);
-            a.tx = Math.max(FIELD.x + 4, Math.min(FIELD.x + FIELD.w - 14, a.x + (rand(seed) - 0.5) * 80));
-            a.ty = Math.max(FIELD.y + 2, Math.min(FIELD.y + FIELD.h - 16, a.y + (rand(seed) - 0.5) * 40));
+            if (a.mode === 'art') {
+              const t = pickWalk(seed, a);
+              a.tx = t.x; a.ty = t.y;
+            } else {
+              a.tx = Math.max(FIELD.x + 4, Math.min(FIELD.x + FIELD.w - 14, a.x + (rand(seed) - 0.5) * 80));
+              a.ty = Math.max(FIELD.y + 8, Math.min(FIELD.y + FIELD.h - 16, a.y + (rand(seed) - 0.5) * 40));
+            }
           } else {
             const sp = 0.35;
             a.x += (dx / dist) * sp;
@@ -121,8 +183,9 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
           if (b.t >= 1) { b.from = b.to; b.to = Math.floor(rand(seed) * list.length); b.t = 0; }
           const f = list[b.from % list.length]!, t = list[b.to % list.length]!;
           const ease = Math.min(1, b.t);
-          b.x = f.x + 4 + (t.x - f.x) * ease;
-          b.y = f.y + 11 + (t.y - f.y) * ease - Math.sin(ease * Math.PI) * 6;
+          const [ox, oy] = f.mode === 'art' ? [3, -2] : [4, 11];
+          b.x = f.x + ox + (t.x - f.x) * ease;
+          b.y = f.y + oy + (t.y - f.y) * ease - Math.sin(ease * Math.PI) * (f.mode === 'art' ? 10 : 6);
         }
 
         draw(ctx, frame);
@@ -135,7 +198,50 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
       raf = requestAnimationFrame(tick);
     };
 
+    const drawArt = (c: CanvasRenderingContext2D, fr: number) => {
+      const { stage, atlas, athlete, coach } = art.current;
+      if (!stage || !atlas || !athlete || !coach) return;
+      const has = (id: string) => !!legacyRef.current[id];
+      const tinted = tintedSheet(atlas, colors, '#e0a878');
+      const rects = atlasRects as unknown as Atlas;
+      c.imageSmoothingEnabled = false;
+      c.drawImage(stage, 0, 0);
+      drawCtSign(c, colors, details.level);
+      drawLegacyArt(c, 'back', fr, colors, has, atlas, tinted, rects);
+      drawLegacyArt(c, 'ground', fr, colors, has, atlas, tinted, rects);
+      drawCones(c, details.coneCount);
+
+      // técnico e atletas por profundidade (pés mais acima = mais longe)
+      const k = fr % 300;
+      const coachFrame = !pausedRef.current && k < COACH.frames * 8 ? Math.floor(k / 8) : 0;
+      const people = [
+        ...actors.current.map((a) => ({ y: a.y, draw: () => {
+          const walking = a.wait === 0 && !pausedRef.current;
+          const f = walking ? ATHLETE.walk[0] + (Math.floor(fr / 6) % ATHLETE.walk[1]) : ATHLETE.idle;
+          drawFrame(c, tintedSheet(athlete, colors, a.look.skin), ATHLETE.size, f, a.x, a.y, ATHLETE.feet, ATHLETE.cx, a.flip);
+        } })),
+        { y: COACH_SPOT.feet, draw: () => drawFrame(c, coach, COACH.size, coachFrame, COACH_SPOT.x, COACH_SPOT.feet, COACH.feet, COACH.cx, false) },
+      ].sort((a, b) => a.y - b.y);
+      for (const p of people) p.draw();
+
+      // bola
+      const b = ball.current;
+      c.fillStyle = 'rgba(0,0,0,0.28)'; c.fillRect(Math.round(b.x) - 1, Math.round(b.y) + 3, 4, 1);
+      c.fillStyle = '#1a1420'; c.fillRect(Math.round(b.x), Math.round(b.y), 3, 3);
+      c.fillStyle = '#ffffff'; c.fillRect(Math.round(b.x), Math.round(b.y), 2, 2);
+
+      drawLegacyArt(c, 'front', fr, colors, has, atlas, tinted, rects);
+
+      floats.current = floats.current.filter((f) => f.life > 0);
+      for (const f of floats.current) {
+        f.life--;
+        f.y -= 0.15;
+        drawText(c, f.text, Math.round(f.x), Math.round(f.y), '#ffe14d');
+      }
+    };
+
     const draw = (c: CanvasRenderingContext2D, fr: number) => {
+      if (art.current.stage && actors.current.every((a) => a.mode === 'art')) { drawArt(c, fr); return; }
       // céu e prédio do CT
       c.fillStyle = '#9fd3e8'; c.fillRect(0, 0, W, 40);
       c.fillStyle = '#c3e4f0'; c.fillRect(0, 0, W, 12);
@@ -205,11 +311,26 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
 
       // atores ordenados por profundidade
       const sorted = [...actors.current].sort((a, b) => a.y - b.y);
+      const { athlete, coach } = art.current;
       for (const a of sorted) {
         const walking = a.wait === 0 && !pausedRef.current;
-        drawPlayer(c, a.look, Math.round(a.x), Math.round(a.y), walking ? Math.floor(fr / 8) : 0, a.flip);
+        if (athlete) {
+          const sheet = tintedSheet(athlete, colors, a.look.skin);
+          const f = walking ? ATHLETE.walk[0] + (Math.floor(fr / 6) % ATHLETE.walk[1]) : ATHLETE.idle;
+          // pés onde ficavam os pés do boneco antigo (9x13): x + 4, y + 13
+          drawFrame(c, sheet, ATHLETE.size, f, a.x + 4, a.y + SPRITE_H, ATHLETE.feet, ATHLETE.cx, a.flip);
+        } else {
+          drawPlayer(c, a.look, Math.round(a.x), Math.round(a.y), walking ? Math.floor(fr / 8) : 0, a.flip);
+        }
       }
-      drawCoach(c, 20, FIELD.y + FIELD.h - SPRITE_H - 2, Math.floor(fr / 40));
+      if (coach) {
+        // a cada ~5 s o técnico bate palmas e aponta; no resto do tempo fica parado
+        const k = fr % 300;
+        const f = k < COACH.frames * 8 ? Math.floor(k / 8) : 0;
+        drawFrame(c, coach, COACH.size, f, 24, FIELD.y + FIELD.h - 2, COACH.feet, COACH.cx, false);
+      } else {
+        drawCoach(c, 20, FIELD.y + FIELD.h - SPRITE_H - 2, Math.floor(fr / 40));
+      }
 
       // pátio de entrada e objetos de conquista na frente
       drawPlaza(c, colors);
@@ -231,13 +352,13 @@ export function CtScene({ players, colors, trainingCenter, gains, gainsKey, paus
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [colors, trainingCenter, legacyCount]);
+  }, [colors, trainingCenter, legacyCount, artReady]);
 
   const presentation = scenePresentation(trainingCenter, paused, players.length);
 
   return (
     <div className="scene-shell">
-      <canvas ref={canvas} width={W} height={H} className="scene" role="img" aria-label={presentation.label} />
+      <canvas ref={canvas} width={artReady ? ART_W : W} height={artReady ? ART_H : H} className={`scene ${artReady ? 'art' : ''}`} role="img" aria-label={presentation.label} />
       <div className="scene-status" aria-live="polite">
         {/* pausado: o selo "Pausado · continuar" sobre a cena já avisa; aqui não repete */}
         {!paused && <b>● Treino ativo</b>}

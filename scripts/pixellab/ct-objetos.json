@@ -1,0 +1,272 @@
+[
+ {
+  "n": "helicoptero",
+  "w": 48,
+  "h": 32,
+  "d": "small red helicopter parked, side view",
+  "view": "side"
+ },
+ {
+  "n": "dirigivel",
+  "w": 64,
+  "h": 32,
+  "d": "white blimp airship with a wide lime green band and royal blue tail fins, side view",
+  "view": "side"
+ },
+ {
+  "n": "aviao",
+  "w": 32,
+  "h": 32,
+  "d": "small white propeller airplane flying to the left, side view",
+  "view": "side"
+ },
+ {
+  "n": "disco",
+  "w": 32,
+  "h": 32,
+  "d": "silver flying saucer UFO with a cyan glass dome and small yellow lights",
+  "view": "side"
+ },
+ {
+  "n": "baloes",
+  "w": 32,
+  "h": 48,
+  "d": "bunch of three party balloons on strings, one lime green, one royal blue, one gold",
+  "view": "side"
+ },
+ {
+  "n": "neon",
+  "w": 32,
+  "h": 32,
+  "d": "rooftop neon sign shaped like a bright green dollar symbol on a dark metal frame",
+  "view": "side"
+ },
+ {
+  "n": "placar",
+  "w": 48,
+  "h": 32,
+  "d": "blank dark electronic scoreboard on two metal legs, empty black screen",
+  "view": "side"
+ },
+ {
+  "n": "carro",
+  "w": 48,
+  "h": 32,
+  "d": "red sports car parked"
+ },
+ {
+  "n": "van",
+  "w": 48,
+  "h": 32,
+  "d": "white minibus van with a lime green stripe along the side, parked"
+ },
+ {
+  "n": "estatua",
+  "w": 32,
+  "h": 48,
+  "d": "golden statue of a football coach pointing forward on a grey stone pedestal",
+  "view": "side"
+ },
+ {
+  "n": "arvore",
+  "w": 32,
+  "h": 48,
+  "d": "big leafy green tree",
+  "view": "side"
+ },
+ {
+  "n": "fonte",
+  "w": 48,
+  "h": 48,
+  "d": "round stone water fountain with blue water and a few gold coins at the bottom"
+ },
+ {
+  "n": "piscina",
+  "w": 64,
+  "h": 32,
+  "d": "small rectangular recovery pool with white tiled border and bright blue water"
+ },
+ {
+  "n": "podio",
+  "w": 48,
+  "h": 32,
+  "d": "three-step winners podium, gold center step, silver left, bronze right",
+  "view": "side"
+ },
+ {
+  "n": "obelisco",
+  "w": 32,
+  "h": 64,
+  "d": "tall white stone obelisk monument with a gold tip on a stone base",
+  "view": "side"
+ },
+ {
+  "n": "sofa",
+  "w": 48,
+  "h": 32,
+  "d": "red fabric sofa"
+ },
+ {
+  "n": "bicicletas",
+  "w": 48,
+  "h": 32,
+  "d": "bike rack with two blue bicycles parked"
+ },
+ {
+  "n": "torcida-fila",
+  "w": 64,
+  "h": 32,
+  "d": "queue of five football fans wearing lime green and royal blue shirts, standing in line",
+  "view": "side"
+ },
+ {
+  "n": "mastro",
+  "w": 32,
+  "h": 64,
+  "d": "tall white flagpole with a waving flag, upper half lime green and lower half royal blue",
+  "view": "side"
+ },
+ {
+  "n": "placa-homenagem",
+  "w": 32,
+  "h": 32,
+  "d": "golden commemorative plaque on a short wooden post",
+  "view": "side"
+ },
+ {
+  "n": "cofre",
+  "w": 32,
+  "h": 32,
+  "d": "grey steel safe with a round dial and a small gold handle"
+ },
+ {
+  "n": "calcada-fama",
+  "w": 64,
+  "h": 32,
+  "d": "walk of fame: row of four pink square tiles each with a gold star",
+  "view": "high top-down"
+ },
+ {
+  "n": "taca",
+  "w": 32,
+  "h": 32,
+  "d": "shiny golden football trophy cup with two handles",
+  "view": "side"
+ },
+ {
+  "n": "chuteira",
+  "w": 32,
+  "h": 32,
+  "d": "golden football boot on a small display stand",
+  "view": "side"
+ },
+ {
+  "n": "retrato",
+  "w": 32,
+  "h": 48,
+  "d": "framed portrait painting of a smiling football coach in a navy suit, golden frame",
+  "view": "side"
+ },
+ {
+  "n": "quadro-negro",
+  "w": 32,
+  "h": 32,
+  "d": "green chalkboard on an easel with white tactical football drawings",
+  "view": "side"
+ },
+ {
+  "n": "fenix",
+  "w": 32,
+  "h": 32,
+  "d": "fiery orange phoenix bird mural with spread wings",
+  "view": "side"
+ },
+ {
+  "n": "bonecos",
+  "w": 48,
+  "h": 32,
+  "d": "row of four yellow football training wall dummies"
+ },
+ {
+  "n": "pneus",
+  "w": 48,
+  "h": 32,
+  "d": "four black tires laid in a zigzag on the grass for agility training",
+  "view": "high top-down"
+ },
+ {
+  "n": "escada",
+  "w": 48,
+  "h": 32,
+  "d": "yellow agility ladder lying flat on the grass",
+  "view": "high top-down"
+ },
+ {
+  "n": "golzinho",
+  "w": 32,
+  "h": 32,
+  "d": "small white youth football goal with net"
+ },
+ {
+  "n": "bandeirinha",
+  "w": 32,
+  "h": 32,
+  "d": "football corner flag: thin white pole with a small red and yellow flag",
+  "view": "side"
+ },
+ {
+  "n": "placa-sub",
+  "w": 32,
+  "h": 32,
+  "d": "football substitution board held up on a pole, black panel with a red arrow and a green arrow",
+  "view": "side"
+ },
+ {
+  "n": "bebedouro",
+  "w": 32,
+  "h": 32,
+  "d": "blue water cooler dispenser on a small stand",
+  "view": "side"
+ },
+ {
+  "n": "radio",
+  "w": 32,
+  "h": 32,
+  "d": "old wooden vintage radio with a short antenna",
+  "view": "side"
+ },
+ {
+  "n": "torcedor-bumbo",
+  "w": 32,
+  "h": 32,
+  "d": "football fan in a lime green shirt standing behind a large round bass drum, hitting it with a mallet, marching drum on a strap",
+  "view": "side"
+ },
+ {
+  "n": "bandeira-fairplay",
+  "w": 32,
+  "h": 48,
+  "d": "yellow flag with a green horizontal stripe on a white pole",
+  "view": "side"
+ },
+ {
+  "n": "laranjas",
+  "w": 32,
+  "h": 32,
+  "d": "wooden crate full of oranges"
+ },
+ {
+  "n": "faixa",
+  "w": 64,
+  "h": 32,
+  "d": "blank lime green banner with a royal blue top border stretched between two poles, empty with no writing",
+  "view": "side"
+ },
+ {
+  "n": "antena",
+  "w": 32,
+  "h": 32,
+  "d": "single rooftop television aerial antenna on a thin metal mast, horizontal rods, tiny red light at the top, no building",
+  "view": "side"
+ }
+]

@@ -17,6 +17,7 @@ import {
 import { Game } from './Game';
 import { clearCareer, loadCareer, saveCareer } from './storage';
 import { track } from './analytics';
+import emblemUrl from '../assets/intro/emblema.png';
 import { IntroScene } from './scene/IntroScene';
 import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
@@ -88,6 +89,7 @@ export function App() {
       <IntroScene skip={introSeen} onReveal={() => { setRevealed(true); markIntroSeen(); }} />
       {!revealed && <p className="skip-hint">toque para pular</p>}
       <div className="logo">
+        <img className="emblem" src={emblemUrl} alt="" width={96} height={96} />
         <h1>MESTRES<br />DO ESPORTE</h1>
         <p>Construa seu legado.</p>
       </div>

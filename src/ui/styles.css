@@ -132,7 +132,11 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .skip-hint { position: absolute; bottom: 16px; z-index: 2; margin: 0; font-size: 13px; color: rgba(246,236,214,0.6); letter-spacing: 1px; text-transform: uppercase; animation: blink 1.4s steps(2, start) infinite; }
 @media (orientation: portrait) {
   .title-screen { background: linear-gradient(#070816, #0e1126 42%); justify-content: flex-start; padding-top: 10vh; }
-  .intro-canvas { top: auto; height: 58%; object-position: 86% 100%; }
+  /* altura proporcional à largura: mostra do cobrador ao gol (≈150 de 240 px da cena) em qualquer celular */
+  .intro-canvas {
+    top: auto; height: min(58%, 90vw); object-position: 94% 100%;
+    -webkit-mask-image: linear-gradient(transparent, #000 22%); mask-image: linear-gradient(transparent, #000 22%);
+  }
 }
 @keyframes logo-drop { 0% { opacity: 0; transform: translateY(-60px) scale(1.15); } 70% { opacity: 1; transform: translateY(6px) scale(0.98); } 100% { opacity: 1; transform: none; } }
 @keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
@@ -142,8 +146,19 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 }
 .logo h1 { font-size: clamp(38px, 8.5vw, 72px); line-height: 0.95; letter-spacing: 4px; color: var(--mustard); text-shadow: 4px 4px 0 var(--tomato-dk), 8px 8px 0 var(--ink); }
 .logo p { margin-top: 18px; color: var(--paper-3); font-size: 19px; font-weight: 700; text-shadow: 2px 2px 0 var(--ink); }
+.emblem { display: block; width: clamp(88px, 14vw, 132px); height: auto; margin: 0 auto 10px; image-rendering: pixelated; filter: drop-shadow(4px 4px 0 rgba(14,17,38,0.75)); }
 .trophy { font-size: 48px; display: block; margin-bottom: 8px; filter: drop-shadow(3px 3px 0 var(--ink)); }
 .title-screen .menu { display: flex; flex-direction: column; gap: 10px; }
+/* celular deitado: pouca altura, logo menor e menu em linha para caber sem rolar */
+@media (orientation: landscape) and (max-height: 520px) {
+  .title-screen { gap: 14px; padding: 10px 16px 28px; }
+  .logo h1 { font-size: clamp(28px, 10vh, 46px); letter-spacing: 3px; text-shadow: 3px 3px 0 var(--tomato-dk), 5px 5px 0 var(--ink); }
+  .logo p { margin-top: 8px; font-size: 15px; }
+  .emblem { width: clamp(52px, 17vh, 72px); margin-bottom: 4px; }
+  .title-screen .menu { flex-direction: row; flex-wrap: wrap; justify-content: center; max-width: 640px; }
+  .title-screen .menu .btn.big { font-size: 15px; padding: 10px 16px; }
+  .title-screen .foot, .skip-hint { bottom: 6px; }
+}
 .foot { position: absolute; bottom: 12px; color: var(--paper-2); }
 
 /* ---------- criação ---------- */
@@ -221,6 +236,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .scene-wrap { position: relative; margin: var(--px); box-shadow: 0 0 0 var(--px) var(--ink); background: var(--grass); overflow: hidden; }
 .scene-shell { position: relative; }
 .scene { display: block; width: 100%; height: auto; aspect-ratio: 240 / 153; image-rendering: pixelated; image-rendering: crisp-edges; }
+.scene.art { aspect-ratio: 400 / 304; }
 /* fica embaixo da cena (não por cima): o pátio de entrada, com os objetos de conquista, ocupa a base do canvas */
 .scene-status { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; background: rgba(29, 35, 64, 0.96); color: var(--paper); font-size: 12px; line-height: 1.2; }
 .scene-status b { color: var(--mustard); white-space: nowrap; }
