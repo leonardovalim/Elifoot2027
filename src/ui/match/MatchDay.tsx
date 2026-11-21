@@ -142,17 +142,36 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
     const motmSide = m[o.motm.side];
     const motm = [motmSide.GK, ...motmSide.DF, ...motmSide.MF, ...motmSide.FW, ...Object.values(career.clubs[motmSide.clubId]!.players)]
       .find((x) => x.id === o.motm.playerId);
+    const myGoals = goalsOf(o, L), theirGoals = goalsOf(o, R);
+    // pênaltis decidem o mata-mata; senão vale o placar
+    const result: 'win' | 'draw' | 'loss' = sh ? (won ? 'win' : 'loss') : myGoals > theirGoals ? 'win' : myGoals < theirGoals ? 'loss' : 'draw';
+    const RESULT_LABEL = sh
+      ? { win: 'Classificado nos pênaltis', loss: 'Eliminado nos pênaltis', draw: '' }
+      : { win: 'Vitória', draw: 'Empate', loss: 'Derrota' };
+    const goals = o.events.filter((e): e is Extract<typeof e, { type: 'goal' }> => e.type === 'goal');
+    const scorers = (s: Side) => goals.filter((e) => e.side === s);
+    const possession = L === 'home' ? o.possession : 1 - o.possession;
     return (
-      <div className="match">
+      <div className="match post">
         <p className="kicker">Fim de jogo · {competition}</p>
+        <p className={`result-chip ${result}`}>{RESULT_LABEL[result]}</p>
         <div className="scoreboard">
           <TeamHead club={clubOf[L]} color={colors[L]} mine />
-          <div className="score">{goalsOf(o, L)} × {goalsOf(o, R)}{sh && <span className="clock">pên. {L === 'home' ? sh.home : sh.away} × {L === 'home' ? sh.away : sh.home}</span>}</div>
+          <div className="score">{myGoals} × {theirGoals}{sh && <span className="clock">pên. {L === 'home' ? sh.home : sh.away} × {L === 'home' ? sh.away : sh.home}</span>}</div>
           <TeamHead club={clubOf[R]} color={colors[R]} mine={false} right />
         </div>
+        {/* gols embaixo de cada time, como no placar da TV */}
+        {goals.length > 0 && (
+          <div className="post-scorers">
+            {[L, R].map((s) => (
+              <ul key={s} className={s === R ? 'right' : ''} aria-label={`Gols do ${m[s].short}`}>
+                {scorers(s).map((e, i) => <li key={i}>⚽ <b>{e.playerName}</b> {e.minute}'{e.penalty && <span className="hint"> (pên.)</span>}</li>)}
+              </ul>
+            ))}
+          </div>
+        )}
         {sh && (
           <section className={`shootout ${won ? 'won' : 'lost'}`} aria-label="Disputa de pênaltis">
-            <h4>{won ? 'Classificado nos pênaltis!' : 'Eliminado nos pênaltis'}</h4>
             <ol className="kicks">
               {sh.kicks.map((k, i) => (
                 <li key={i} className={`${k.side === side ? 'mine' : ''} ${k.scored ? 'in' : 'out'}`}>
@@ -162,34 +181,22 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             </ol>
           </section>
         )}
-        <div className="two-col">
-          <section>
-            <h4>Gols</h4>
-            <ul className="list">
-              {o.events.filter((e) => e.type === 'goal').map((e, i) => (
-                <li key={i}>⚽ {e.minute}' {e.type === 'goal' && <SideTag color={colors[e.side]} label={m[e.side].short} />} <b>{'playerName' in e ? e.playerName : ''}</b>{e.type === 'goal' && e.penalty && <span className="hint"> (pênalti)</span>}</li>
-              ))}
-              {o.homeScore + o.awayScore === 0 && <li className="hint">Sem gols.</li>}
-            </ul>
-            <Fold title="Estatísticas" summary={statsLine(o.stats[L], o.stats[R], L === 'home' ? o.possession : 1 - o.possession)}>
-              <StatsBars style={barColors} a={o.stats[L]} b={o.stats[R]} possession={L === 'home' ? o.possession : 1 - o.possession} />
-            </Fold>
-          </section>
-          <section>
-            {motm && (
-              <div className="motm">
-                <span className="kicker">Destaque da partida</span>
-                <b>{motm.name}</b>
-                <span className="hint">{POS_LABEL[motm.position]} · {m[o.motm.side].short}</span>
-                <span className="rating">{o.motm.rating.toFixed(1)}</span>
-              </div>
-            )}
-            <Fold title="Outros jogos da rodada" className="fold-board">
-              <RoundBoard career={career} prep={p} minute={m.minute} final myPens={sh ? [sh.home, sh.away] : undefined} />
-            </Fold>
-          </section>
-        </div>
-        <div className="row center">
+        {motm && (
+          <div className="motm-strip">
+            <span className="kicker">⭐ Destaque</span>
+            <b>{motm.name}</b>
+            <span className="hint">{POS_LABEL[motm.position]} · {m[o.motm.side].short}</span>
+            <span className="rating">{o.motm.rating.toFixed(1)}</span>
+          </div>
+        )}
+        <section className="post-stats" aria-label="Estatísticas">
+          <h4>Estatísticas</h4>
+          <TvStats style={barColors} a={o.stats[L]} b={o.stats[R]} possession={possession} />
+        </section>
+        <Fold title="Outros jogos da rodada" className="fold-board">
+          <RoundBoard career={career} prep={p} minute={m.minute} final myPens={sh ? [sh.home, sh.away] : undefined} />
+        </Fold>
+        <div className="modal-cta">
           <button className="btn primary" onClick={() => onDone(p, o, playInfo.current)}>Continuar ›</button>
         </div>
       </div>
@@ -287,8 +294,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             </div>
             </div>
           </details>
-          <Fold title="Estatísticas" summary={statsLine(m[L].stats, m[R].stats, possessionOf(m[L].stats, m[R].stats))}>
-            <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
+          <Fold title="Estatísticas" open summary={statsLine(m[L].stats, m[R].stats, possessionOf(m[L].stats, m[R].stats))}>
+            <TvStats style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
           </Fold>
           <Fold title={`Condição física · ${m[side].short}`} summary={tiredLine(onPitch.map((x) => ({ name: x.name, cond: mine.condition[x.id]! })))}>
             <div className="cond-list">
@@ -352,24 +359,34 @@ function tiredLine(list: { name: string; cond: number }[]) {
   return t ? `mais cansado: ${t.name.split(' ')[0]} ${Math.round(t.cond)}%` : '';
 }
 
-function StatsBars({ a, b, possession, style }: { a: TeamStats; b: TeamStats; possession: number; style?: CSSProperties }) {
-  const rows: [string, number, number][] = [
-    ['Posse', Math.round(possession * 100), 100 - Math.round(possession * 100)],
-    ['Finalizações', a.shots, b.shots],
-    ['No alvo', a.onTarget, b.onTarget],
-    ['Escanteios', a.corners, b.corners],
-    ['Faltas', a.fouls, b.fouls],
+/**
+ * Estatísticas no formato de TV: uma linha por número, barras espelhadas
+ * saindo do centro (seu time à esquerda), o rótulo no meio.
+ */
+function TvStats({ a, b, possession, style }: { a: TeamStats; b: TeamStats; possession: number; style?: CSSProperties }) {
+  const rows: [string, number, number, string][] = [
+    ['Posse', Math.round(possession * 100), 100 - Math.round(possession * 100), '%'],
+    ['Finalizações', a.shots, b.shots, ''],
+    ['No alvo', a.onTarget, b.onTarget, ''],
+    ['Escanteios', a.corners, b.corners, ''],
+    ['Faltas', a.fouls, b.fouls, ''],
   ];
   return (
-    <div className="stats" style={style}>
-      {rows.map(([label, x, y]) => (
-        <div key={label} className="compare-row">
-          <b>{x}{label === 'Posse' ? '%' : ''}</b>
-          <div className="dual"><span className="l" style={{ width: `${x + y ? (x / (x + y)) * 100 : 50}%` }} /><span className="r" style={{ width: `${x + y ? (y / (x + y)) * 100 : 50}%` }} /></div>
-          <b>{y}{label === 'Posse' ? '%' : ''}</b>
-          <span className="label">{label}</span>
-        </div>
-      ))}
+    <div className="tv-stats" style={style}>
+      {rows.map(([label, x, y, unit]) => {
+        const total = x + y;
+        const px = total ? (x / total) * 100 : 50, py = total ? (y / total) * 100 : 50;
+        return (
+          <div key={label} className="tv-row">
+            <b className={x > y ? 'lead' : ''}>{x}{unit}</b>
+            <span className="tv-bar l"><i style={{ width: `${px}%` }} /></span>
+            <span className="tv-label">{label}</span>
+            <span className="tv-bar r"><i style={{ width: `${py}%` }} /></span>
+            <b className={y > x ? 'lead' : ''}>{y}{unit}</b>
+          </div>
+        );
+      })}
     </div>
   );
 }
+
