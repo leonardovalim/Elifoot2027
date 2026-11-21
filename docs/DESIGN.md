@@ -141,6 +141,8 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - [x] IA adversária contratando de outros clubes da IA pela posição mais carente, respeitando o próprio caixa (~20 negociações por temporada, listadas no Mercado)
 - [ ] IA demitindo técnico
 - [x] Copa Mestres: mata-mata em jogo único com os 48 clubes (6 fases nas quartas-feiras entre rodadas), mando do clube de divisão mais baixa, pênaltis no empate, prêmio por fase ($30k → $1,2M); não conta na artilharia
+- [x] Pênaltis na partida: por falta de zagueiro na área ou depois de zagueiro expulso (1 em 3, regra do Elifoot 98, conforme a engenharia reversa do rustfoot98); ~1 a cada 3,7 jogos, cobrado no minuto seguinte pelo melhor finalizador contra o goleiro (~76% de conversão), com pausa na partida do jogador. Conversão dos lances normais caiu de 0,205 para 0,192 para a média de gols seguir realista
+- [x] Prorrogação de 30 minutos no mata-mata empatado (como no Elifoot 98), antes dos pênaltis
 - [x] Taça Continental: os 4 primeiros da Divisão 1 contra 12 clubes estrangeiros fictícios (oitavas à final), prêmios de $150k a $2,5M
 - [x] Nacionalidades: ~8% de estrangeiros na liga (nome do país e bandeirinha), clubes estrangeiros com elenco do próprio país
 - [x] Lesões: ~1,3 por time por temporada (mais chance com cansaço), fora de 1 a 6 rodadas (média 2,7); substituição forçada automática, pausa e som na partida do jogador; as férias curam

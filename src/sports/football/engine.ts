@@ -17,7 +17,7 @@ import type { Club, Formation, MatchEvent, Player, Position, Side, Style, TeamSt
 export const TUNING = {
   attackPerMinute: 0.5,
   shotFactor: 0.62,
-  conversion: 0.205,
+  conversion: 0.192,
   /** Mando de campo na criação de chances: 7000/6000, como no Elifoot 98. */
   homeChanceBoost: 7000 / 6000,
   /** Mando de campo na posse (leve). */
@@ -42,6 +42,16 @@ export const TUNING = {
   autoSubCondition: 70,
   /** Chance de lesão por atleta em campo por minuto, antes do peso do cansaço (~1,5 por time por temporada). */
   injuryPerMinute: 0.000055,
+  /**
+   * Pênalti por falta na área: parte das faltas de zagueiro com o adversário atacando
+   * (o Elifoot 98 não tinha falta; aqui elas existem e ajudam a chegar a ~1 pênalti a cada 3 ou 4 jogos).
+   */
+  penaltyFromFoul: 0.075,
+  penaltyFromCard: 0.1,
+  /** Elifoot 98: zagueiro expulso dá pênalti no minuto seguinte em 1 de cada 3 vezes (goleiro, sempre). */
+  penaltyAfterDefenderRed: 1 / 3,
+  /** Duração da prorrogação no mata-mata. */
+  extraTimeMinutes: 30,
 };
 
 /** Rodadas fora por lesão: a maioria é curta, algumas tiram o atleta por mais de um mês. */
@@ -82,6 +92,12 @@ export interface MatchState {
   minute: number;
   firstHalfEnd: number;
   total: number;
+  /** Mata-mata: empate no tempo normal vai para a prorrogação. */
+  knockout?: boolean;
+  /** Minuto em que começou a prorrogação (ausente = não houve). */
+  extraStart?: number;
+  /** Pênalti marcado, cobrado no minuto seguinte (dá tempo de o técnico ver a marcação). */
+  pendingPenalty?: { side: Side; takerId: string };
   home: SideState;
   away: SideState;
   events: MatchEvent[];
@@ -298,39 +314,65 @@ export function stepMinute(m: MatchState, rng: Rng) {
     if (field.length > 7 && rng.chance(TUNING.injuryPerMinute * total)) injure(m, side, rng.weighted(field, weight), minute, rng);
   }
 
+  // pênalti marcado no minuto anterior (expulsão de zagueiro)
+  if (m.pendingPenalty) {
+    const pp = m.pendingPenalty;
+    m.pendingPenalty = undefined;
+    kickPenalty(m, pp.side, pp.takerId, minute, rng);
+  }
+
   // disciplina
   for (const side of ['home', 'away'] as const) {
     const s = m[side];
     const field = outfield(s);
     if (field.length === 0) continue;
+    const opp = other(side);
+    // falta de zagueiro com o adversário atacando pode ser dentro da área
+    const inBox = (p: Player, chance: number) => attacking === opp && s.DF.includes(p) && rng.chance(chance) && !m.pendingPenalty;
+    const sentOffDefender = (p: Player, wasDefender: boolean, gavePenalty: boolean) => {
+      if (!gavePenalty && wasDefender && rng.chance(TUNING.penaltyAfterDefenderRed)) awardPenalty(m, opp, minute, 'expulsão', p.name);
+    };
     // time mais agressivo comete mais faltas e leva mais cartões (mesmo número de sorteios: o placar segue determinístico)
     const rate = foulRate(field);
     if (rng.chance(TUNING.yellowPerMinute * field.length * 0.5 * rate)) {
       const p = rng.weighted(field, (x) => (x.aggression + 60) * (s.yellows.includes(x.id) ? 0.3 : 1));
       s.stats.fouls++;
+      const wasDefender = s.DF.includes(p);
+      const penalty = inBox(p, TUNING.penaltyFromCard);
       if (s.yellows.includes(p.id)) {
         m.events.push({ minute, type: 'red', side, playerId: p.id, playerName: p.name });
         s.sentOff.push(p.id);
         bump(s, p.id, -1.5);
         removeFromPitch(s, p.id);
+        sentOffDefender(p, wasDefender, penalty);
       } else {
         s.yellows.push(p.id);
         bump(s, p.id, -0.3);
         m.events.push({ minute, type: 'yellow', side, playerId: p.id, playerName: p.name });
       }
+      if (penalty) awardPenalty(m, opp, minute, 'falta', p.name);
     } else if (rng.chance(TUNING.directRedPerMinute * field.length * rate)) {
       const p = rng.weighted(field, (x) => x.aggression ** 2);
       s.stats.fouls++;
+      const wasDefender = s.DF.includes(p);
+      const penalty = inBox(p, TUNING.penaltyFromCard);
       m.events.push({ minute, type: 'red', side, playerId: p.id, playerName: p.name });
       s.sentOff.push(p.id);
       bump(s, p.id, -1.5);
       removeFromPitch(s, p.id);
+      sentOffDefender(p, wasDefender, penalty);
+      if (penalty) awardPenalty(m, opp, minute, 'falta', p.name);
     } else if (rng.chance(0.06 * rate)) {
       s.stats.fouls++;
+      // falta sem cartão: o raçudo é quem mais derruba dentro da área
+      if (attacking === opp && s.DF.length && rng.chance(0.4)) {
+        const p = rng.weighted(s.DF, (x) => x.aggression + 20);
+        if (rng.chance(TUNING.penaltyFromFoul)) awardPenalty(m, opp, minute, 'falta', p.name);
+      }
     }
   }
 
-  if (rng.chance(TUNING.attackPerMinute)) {
+  if (!m.pendingPenalty && rng.chance(TUNING.attackPerMinute)) {
     const defSide = other(attacking);
     const attackPower = power[attacking].attack;
     const ratio = attackPower / (attackPower + power[defSide].defense);
@@ -342,12 +384,76 @@ export function stepMinute(m: MatchState, rng: Rng) {
 
   // "lance de sorte" (Elifoot 98: Random(180) em casa, Random(270) fora):
   // uma finalização que independe da força dos times — fonte das zebras.
-  if (rng.chance(TUNING.luckyHome)) shoot(m, 'home', power.away.keeper, minute, rng);
-  if (rng.chance(TUNING.luckyAway)) shoot(m, 'away', power.home.keeper, minute, rng);
+  if (!m.pendingPenalty && rng.chance(TUNING.luckyHome)) shoot(m, 'home', power.away.keeper, minute, rng);
+  if (!m.pendingPenalty && rng.chance(TUNING.luckyAway)) shoot(m, 'away', power.home.keeper, minute, rng);
 
   if (minute === m.firstHalfEnd) m.events.push({ minute, type: 'half' });
-  if (minute >= m.total) finish(m);
+  if (minute >= m.total) {
+    if (m.knockout && m.extraStart === undefined && m.home.goals === m.away.goals) {
+      // mata-mata empatado: prorrogação, como no Elifoot 98 (depois, se seguir empatado, pênaltis)
+      m.extraStart = minute;
+      m.total = minute + TUNING.extraTimeMinutes;
+      m.events.push({ minute, type: 'extra' });
+    } else if (!m.pendingPenalty) finish(m);
+  }
 }
+
+/** Minuto como aparece no placar: 45+2, 90+3 e, na prorrogação, 91 a 120. */
+export function minuteLabel(m: MatchState): string {
+  if (m.extraStart !== undefined && m.minute > m.extraStart) return `${90 + m.minute - m.extraStart}`;
+  if (m.minute > 90) return `90+${m.minute - 90}`;
+  if (m.minute > 45 && m.minute <= m.firstHalfEnd) return `45+${m.minute - 45}`;
+  return `${m.minute}`;
+}
+
+/** Marca o pênalti: anuncia quem bate (o melhor finalizador em campo) e deixa a cobrança para o minuto seguinte. */
+function awardPenalty(m: MatchState, side: Side, minute: number, reason: 'falta' | 'expulsão', foulerName: string) {
+  if (m.pendingPenalty) return;
+  const att = m[side];
+  const takers = outfield(att);
+  if (takers.length === 0) return;
+  const taker = takers.reduce((best, p) => (penaltyPower(att, p) > penaltyPower(att, best) ? p : best));
+  m.events.push({ minute, type: 'penalty', side, playerId: taker.id, playerName: taker.name, foulerName, reason });
+  m.pendingPenalty = { side, takerId: taker.id };
+}
+
+/**
+ * Cobrança: o batedor contra o goleiro (o Elifoot 98 usava o atacante mais forte
+ * contra o goleiro). ~75% de conversão; se o batedor saiu, bate o melhor que sobrou.
+ */
+function kickPenalty(m: MatchState, side: Side, takerId: string, minute: number, rng: Rng) {
+  const att = m[side];
+  const def = m[other(side)];
+  const takers = outfield(att);
+  if (takers.length === 0) return;
+  const taker = takers.find((p) => p.id === takerId) ?? takers.reduce((best, p) => (penaltyPower(att, p) > penaltyPower(att, best) ? p : best));
+  const power = penaltyPower(att, taker);
+  const keeper = def.GK.attrs.goalkeeping;
+  const pGoal = Math.max(0.55, Math.min(0.9, 0.75 + (power - keeper) / 300));
+  att.stats.shots++;
+  const roll = rng.next();
+  if (roll < pGoal) {
+    att.stats.onTarget++;
+    att.goals++;
+    bump(att, taker.id, 0.8);
+    bump(def, def.GK.id, -0.2);
+    m.events.push({ minute, type: 'goal', side, playerId: taker.id, playerName: taker.name, penalty: true });
+    return;
+  }
+  const miss = (roll - pGoal) / (1 - pGoal);
+  if (miss < 0.65) {
+    att.stats.onTarget++;
+    bump(att, taker.id, -0.4);
+    bump(def, def.GK.id, 0.8);
+    m.events.push({ minute, type: 'save', side, playerId: taker.id, playerName: taker.name, keeperName: def.GK.name, penalty: true });
+  } else {
+    bump(att, taker.id, -0.6);
+    const type = miss < 0.75 ? 'post' : miss < 0.82 ? 'bar' : 'miss';
+    m.events.push({ minute, type, side, playerId: taker.id, playerName: taker.name, penalty: true });
+  }
+}
+
+const penaltyPower = (s: SideState, p: Player) => (p.attrs.finishing * 0.7 + p.attrs.concentration * 0.3) * conditionFactor(s.condition[p.id] ?? p.condition);
 
 /** Resolve uma finalização: gol, defesa, poste, barra ou fora (os 5 desfechos do Elifoot 98). */
 function shoot(m: MatchState, attacking: Side, keeper: number, minute: number, rng: Rng) {

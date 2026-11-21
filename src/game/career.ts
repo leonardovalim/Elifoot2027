@@ -720,6 +720,7 @@ function humanMatches(c: Career, fixtures: { home: string; away: string; div: nu
   const list = fixtures.map((f) => {
     const mrng = new Rng(rng.int(0, 2 ** 31));
     const match = createMatch(c.clubs[f.home]!, c.clubs[f.away]!, mrng);
+    if (f.div === -1) match.knockout = true; // copa: empate vai para a prorrogação
     for (const side of ['home', 'away'] as const) {
       const owner = managerOf(c, match[side].clubId);
       if (owner >= 0) match[side].autoSubs = managerState(c, owner).autoSubs;
@@ -884,6 +885,7 @@ function playAiCup(c: Career, t: CupTie, rng: Rng): PlayedMatch {
   const home = c.clubs[t.home]!, away = c.clubs[t.away]!;
   aiPrepare(home); aiPrepare(away);
   const m = createMatch(home, away, rng);
+  m.knockout = true;
   runToEnd(m, rng);
   const outcome = toOutcome(m);
   const pens = outcome.homeScore === outcome.awayScore ? shootout(m, rng) : undefined;
