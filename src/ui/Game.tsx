@@ -40,7 +40,7 @@ import { DecisionModal } from './panels/Decisions';
 import { CareerPanel, FinancePanel, MarketPanel, SquadPanel, TablePanel, type Act } from './panels/Panels';
 import { CtScene, type SceneGain } from './scene/CtScene';
 import { track } from './analytics';
-import { play, SoundToggle } from './sound';
+import { play, playJingle, SoundToggle, useMusic } from './sound';
 import { saveCareer } from './storage';
 import { openHelp } from './help';
 import { achieve, setAchievementColors, useUnlocked } from './achievements';
@@ -193,6 +193,8 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const bond = activeBond(c);
   // a miniatura da conquista sai nas cores do clube, como o objeto aparece no CT
   useEffect(() => { if (club) setAchievementColors(club.colors); }, [club?.colors[0], club?.colors[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  // trilha do CT; com o Dia de jogo aberto, quem decide é a partida
+  useMusic(prep ? undefined : 'hub');
 
   /** Fecha o balanço da vez; se faltar o de outro técnico, a vez passa para ele. */
   const nextSummary = () => {
@@ -476,6 +478,11 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
 
 function SeasonEndModal({ career, onClose }: { career: Career; onClose: () => void }) {
   const s = seasonSummary(career);
+  // vinheta do fim da temporada: título > acesso > rebaixamento (temporada comum: sem vinheta)
+  useEffect(() => {
+    const j = s.position === 1 ? 'title' : s.promoted ? 'promotion' : s.relegated ? 'relegation' : null;
+    if (j) playJingle(j, 0.4);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Modal title={`Fim da temporada ${career.season.year}`}>
       <SummaryView s={s} />
