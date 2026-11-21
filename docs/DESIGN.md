@@ -103,6 +103,11 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - **Renovação**: a partir de agosto, até 2 por mês (em novembro, todos os que faltam). O salário pedido sobe com a insatisfação (×1,05 / ×1,2 / ×1,45). Quem é liberado vai a leilão no fim da temporada e rende 25% a 45% do valor (sem lance, sai de graça); quem nunca foi consultado renova automaticamente.
 - **Satisfação** (0–100, padrão 70): +3 por jogo disputado, −5 para quem está entre os 13 melhores e fica de fora, −1 para os demais; −3 por mês se mal pago; volta 10% por mês para perto de 60. Por enquanto afeta só as negociações.
 - Medição (5 seeds × 3 desafios, recusando tudo): 0–15 propostas, 0–4 aumentos e 1–6 renovações por temporada.
+- **Suas compras são negociadas** (`makeOffer` / `offerTerms` em `game/career.ts`). Você propõe um valor ao clube e um salário ao atleta; o "pedido" da lista é só referência.
+  - Mínimo do clube: valor × 1,10, +0,25 se for titular do vendedor, +0,10 com 3+ anos de contrato (−0,15 no último ano), +0,10 se o vendedor for bem maior, −0,20 se estiver no vermelho; ruído de ±5% que muda a cada mês.
+  - Salário mínimo do atleta: salário de mercado × 1,10, +20% por divisão que desce, +20% se o seu clube for bem menor. Atleta de 60+ recusa descer duas divisões.
+  - Até 3 tentativas por atleta no mês. Abaixo de 80% do pedido, o clube (ou o atleta) encerra a conversa até o mês seguinte. Entre 80% e 100%, vem contraproposta com os valores exigidos.
+  - Evento `player_offer` (`result`, `fee_pct`) mede quanto se negocia e quanto se perde.
 
 ## Ajuda e selos
 
@@ -203,6 +208,7 @@ Antes, a 1ª temporada (~15 min) liberava 10 conquistas e as ações de mercado/
 | `offer_accepted` | `unemployed` | Mobilidade de carreira |
 | `lineup_changed` | `to` (xi/bench/out) | Quantos assumem a escalação em vez do auxiliar |
 | `player_bought` | `position`, `overall`, `price` | Uso do mercado depois da comparação |
+| `player_offer` | `result` (accepted/counter/refused), `fee_pct` | Negociação: quanto se pechincha e quantas compras se perdem |
 | `time_speed`, `menu_opened` | `speed`, `menu` | Ritmo preferido e menus mais usados |
 | `sport_interest_opened`, `sport_interest` | `sport`, `stars` | Ordem do roadmap de modalidades |
 

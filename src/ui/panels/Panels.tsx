@@ -3,7 +3,8 @@ import { OBJECTIVE_LABEL, netWorth } from '../../core/entrepreneur';
 import { divisionStandings } from '../../core/season';
 import {
   activeBond,
-  buyPlayer,
+  MAX_TRIES,
+  makeOffer,
   divisionOf,
   financialState,
   LOAN_TERMS,
@@ -19,6 +20,7 @@ import {
   sellPlayer,
   type Career,
   type Listing,
+  type OfferResult,
   ctQuote,
   stadiumQuote,
   stadiumUse,
@@ -26,7 +28,7 @@ import {
 } from '../../game/career';
 import { ATTR_SHORT } from '../../sports/football/development';
 import { football } from '../../sports/football/engine';
-import { playerValue } from '../../sports/football/generate';
+import { playerValue, wageFor } from '../../sports/football/generate';
 import { FORMATIONS, applyMove, overall, pickLineup, planMove, statusOf, type SquadStatus } from '../../sports/football/lineup';
 import type { AttrKey, Club, Formation, Player, Style } from '../../sports/football/types';
 import { expiresThisSeason } from '../../game/market';
@@ -331,11 +333,21 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
     if (narrow && sel) openRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [narrow, sel]);
 
-  const buy = (l: Listing) => act((c) => {
-    const err = buyPlayer(c, l.player.id, l.clubId);
-    if (!err) { setBought(l.player.name); setSel(null); track('player_bought', { position: l.player.position, overall: overall(l.player), price: l.price }); }
-    return err;
-  });
+  const offer = (l: Listing, fee: number, wage: number): OfferResult | undefined => {
+    let res: OfferResult | undefined;
+    act((c) => {
+      const r = makeOffer(c, l.player.id, l.clubId, fee, wage);
+      if (typeof r === 'string') return r;
+      res = r;
+      track('player_offer', { result: r.status, position: l.player.position, overall: overall(l.player), fee_pct: Math.round((fee / l.price) * 100) });
+      if (r.status === 'accepted') {
+        setBought(l.player.name); setSel(null);
+        track('player_bought', { position: l.player.position, overall: overall(l.player), price: fee });
+      }
+      return null;
+    });
+    return res;
+  };
 
   const emptyMsg = 'Nenhum atleta com esses filtros neste mês. Tente afrouxar algum filtro; o mercado muda todo mês.';
   const boughtMsg = bought && <p className="ok-msg"><b>{bought}</b> chegou. Ele aparece no elenco com o selo <Tag kind="novo">novo</Tag>.</p>;
@@ -396,7 +408,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
                   </button>
                   {open && (
                     <div className="mrow-detail">
-                      <CompareCard listing={l} club={club} career={career} onBuy={() => buy(l)} />
+                      <CompareCard listing={l} club={club} career={career} onOffer={(fee, wage) => offer(l, fee, wage)} />
                     </div>
                   )}
                 </li>
@@ -432,7 +444,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
         </div>
         <aside className="card" ref={cardRef}>
           {selected
-            ? <CompareCard key={selected.player.id} listing={selected} club={club} career={career} onBuy={() => buy(selected)} />
+            ? <CompareCard key={selected.player.id} listing={selected} club={club} career={career} onOffer={(fee, wage) => offer(selected, fee, wage)} />
             : boughtMsg || <p className="hint">Selecione um atleta para ver os atributos lado a lado com os seus.</p>}
         </aside>
       </div>
@@ -462,7 +474,7 @@ function AiMoves({ career }: { career: Career }) {
   );
 }
 
-function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; club: Club; career: Career; onBuy: () => void }) {
+function CompareCard({ listing: l, club, career, onOffer }: { listing: Listing; club: Club; career: Career; onOffer: (fee: number, wage: number) => OfferResult | undefined }) {
   const p = l.player;
   const mine = club.players.filter((x) => x.position === p.position).sort((a, b) => overall(b) - overall(a));
   const [otherId, setOtherId] = useState<string>('');
@@ -502,13 +514,57 @@ function CompareCard({ listing: l, club, career, onBuy }: { listing: Listing; cl
         );
       })}
       <dl className="kv">
-        <dt>Preço</dt><dd className={cantPay ? 'neg' : ''}>{money(l.price)}</dd>
-        <dt>Salário</dt><dd>{money(p.wage)}/mês {other && <span className="hint">(seu: {money(other.wage)})</span>}</dd>
-        <dt>Folha</dt><dd>{money(wagesNow)} → {money(wagesNow + p.wage)}</dd>
+        <dt>Pedido</dt><dd className={cantPay ? 'neg' : ''}>{money(l.price)}</dd>
+        <dt>Salário atual</dt><dd>{money(p.wage)}/mês {other && <span className="hint">(seu: {money(other.wage)})</span>}</dd>
         <dt>Contrato</dt><dd>até {p.contractUntil}</dd>
       </dl>
-      <button className="btn primary" disabled={cantPay || full} onClick={onBuy}>
-        {full ? 'Elenco cheio (28)' : cantPay ? 'Caixa insuficiente' : `Contratar por ${moneyShort(l.price)}`}
+      <Negotiation listing={l} club={club} career={career} full={full} wagesNow={wagesNow} onOffer={onOffer} />
+    </div>
+  );
+}
+
+const step = (v: number, pct: number, unit: number) => Math.max(unit, Math.round((v * (1 + pct)) / unit) * unit);
+
+/** Proposta: valor ao clube e salário ao atleta. O pedido é referência, não garantia. */
+function Negotiation({ listing: l, club, career, full, wagesNow, onOffer }: {
+  listing: Listing; club: Club; career: Career; full: boolean; wagesNow: number;
+  onOffer: (fee: number, wage: number) => OfferResult | undefined;
+}) {
+  const p = l.player;
+  const [fee, setFee] = useState(l.price);
+  const [wage, setWage] = useState(() => step(Math.max(p.wage, wageFor(p)), 0.1, 100));
+  const [reply, setReply] = useState<{ kind: string; text: string } | null>(null);
+  const talk = career.talks?.[p.id];
+  const thisMonth = talk?.month === career.date.slice(0, 7);
+  const closed = thisMonth && (talk!.closed || talk!.tries >= MAX_TRIES);
+  const left = MAX_TRIES - (thisMonth ? talk!.tries : 0);
+  const cantPay = club.budget < fee;
+  const send = () => {
+    const r = onOffer(fee, wage);
+    if (!r) return;
+    if (r.status === 'counter') { setFee(r.fee); setWage(r.wage); setReply({ kind: 'counter', text: r.text }); }
+    else if (r.status === 'refused') setReply({ kind: 'refused', text: r.text });
+  };
+  return (
+    <div className="nego">
+      <span className="attr-title">Sua proposta</span>
+      <div className="nego-row">
+        <span>Ao clube</span>
+        <button className="btn sm" onClick={() => setFee(step(fee, -0.05, 1000))} aria-label="Diminuir valor">−</button>
+        <b className={cantPay ? 'neg' : ''}>{money(fee)}</b>
+        <button className="btn sm" onClick={() => setFee(step(fee, 0.05, 1000))} aria-label="Aumentar valor">+</button>
+        <span className="hint">{Math.round((fee / l.price) * 100)}% do pedido</span>
+      </div>
+      <div className="nego-row">
+        <span>Salário</span>
+        <button className="btn sm" onClick={() => setWage(step(wage, -0.05, 100))} aria-label="Diminuir salário">−</button>
+        <b>{money(wage)}</b>
+        <button className="btn sm" onClick={() => setWage(step(wage, 0.05, 100))} aria-label="Aumentar salário">+</button>
+        <span className="hint">folha {moneyShort(wagesNow)} → {moneyShort(wagesNow + wage)}</span>
+      </div>
+      {reply && <p className={`nego-reply ${reply.kind}`}>{reply.text}</p>}
+      <button className="btn primary" disabled={cantPay || full || closed} onClick={send}>
+        {full ? 'Elenco cheio (28)' : closed ? 'Conversa encerrada este mês' : cantPay ? 'Caixa insuficiente' : `Fazer proposta${left < MAX_TRIES ? ` (${left} restante${left > 1 ? 's' : ''})` : ''}`}
       </button>
     </div>
   );

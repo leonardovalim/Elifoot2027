@@ -12,7 +12,7 @@ import { Rng } from '../core/rng';
 import { createSeason, divisionStandings, promoteAndRelegate, type Season } from '../core/season';
 import { ATTR_SHORT, applyMatch, dailyTraining, endOfSeason, type TrainingGain } from '../sports/football/development';
 import { createMatch, football, runToEnd, toOutcome, type FootballOutcome, type MatchState } from '../sports/football/engine';
-import { ANDRE_ELIAS_ID, DIVISIONS, NOVA_IGUACU_ID, andreElias, capStars, divisionLevel, generateClub, generateWorld, playerValue } from '../sports/football/generate';
+import { ANDRE_ELIAS_ID, DIVISIONS, NOVA_IGUACU_ID, andreElias, capStars, divisionLevel, generateClub, generateWorld, playerValue, wageFor } from '../sports/football/generate';
 import { available, overall, pickLineup, starters } from '../sports/football/lineup';
 import type { Club, Player, Work } from '../sports/football/types';
 import { CONTINENTAL_SPOTS, advanceCup, aliveInCup, createContinental, createCup, cupIn, cupKind, cupName, cupPrizes, cupStages, currentTies, isCupDate, settleTie, shootout, stageName, tieOf, type Cup, type CupKind, type CupTie, type Shootout } from './cup';
@@ -151,6 +151,8 @@ export interface Career {
   continental?: Cup;
   /** Últimas negociações entre clubes da IA (mais recente primeiro). */
   transfers?: AiTransfer[];
+  /** Suas propostas por atleta no mês (limite de tentativas e recusas). */
+  talks?: Record<string, { month: string; tries: number; closed?: boolean }>;
 }
 
 // ---------------------------------------------------------------- criação
@@ -1504,6 +1506,102 @@ export function marketListings(c: Career, limit = 50): Listing[] {
     for (const p of club.players) if (!p.clubLocked) all.push({ player: p, clubId: club.id, price: askingPrice(p) });
   }
   return rng.shuffle(all).slice(0, limit).sort((a, b) => overall(b.player) - overall(a.player));
+}
+
+// ---------------------------------------------------------------- proposta negociada
+
+export const MAX_TRIES = 3;
+
+export interface OfferTerms {
+  /** O mínimo que o clube vendedor aceita (escondido do jogador; usado na contraproposta). */
+  minFee: number;
+  /** O salário mínimo que o atleta aceita para vir. */
+  minWage: number;
+  /** O atleta se recusa a vir, por qualquer valor. */
+  refuses?: string;
+}
+
+/**
+ * Quanto o vendedor e o atleta pedem. Titular do vendedor, contrato longo e clube vendedor
+ * maior encarecem; vendedor no vermelho aceita menos. O atleta pede mais para descer de
+ * divisão ou ir para um clube bem menor, e recusa descer duas divisões.
+ */
+export function offerTerms(c: Career, playerId: string, fromClubId: string): OfferTerms | null {
+  const seller = c.clubs[fromClubId];
+  const p = seller?.players.find((x) => x.id === playerId);
+  if (!seller || !p) return null;
+  const me = c.clubs[myClubId(c)]!;
+  const starter = starters(pickLineup(seller)).some((x) => x.id === p.id);
+  const yearsLeft = p.contractUntil - c.season.year;
+  const noise = 0.95 + (hashStr(`${p.id}:${c.date.slice(0, 7)}`) % 100) / 1000; // 0,95–1,05, muda a cada mês
+  let mult = 1.1 + (starter ? 0.25 : 0) + (yearsLeft >= 3 ? 0.1 : yearsLeft <= 0 ? -0.15 : 0)
+    + (seller.reputation > me.reputation + 10 ? 0.1 : 0) - (seller.budget < 0 ? 0.2 : 0);
+  mult = Math.max(0.85, mult) * noise;
+  const myDiv = divisionOf(c, me.id), hisDiv = divisionOf(c, seller.id);
+  const down = hisDiv < 0 ? 0 : Math.max(0, myDiv - hisDiv); // estrangeiro: sem divisão
+  const smaller = seller.reputation - me.reputation > 15 ? 0.2 : 0;
+  const minWage = Math.round(Math.max(p.wage, wageFor(p)) * (1.1 + 0.2 * down + smaller) / 100) * 100;
+  const refuses = down >= 2 && overall(p) >= 60 ? `${p.name} não aceita jogar duas divisões abaixo.` : undefined;
+  return { minFee: Math.round((playerValue(p) * mult) / 1000) * 1000, minWage, refuses };
+}
+
+export type OfferResult =
+  | { status: 'accepted'; fee: number; wage: number }
+  | { status: 'counter'; fee: number; wage: number; text: string }
+  | { status: 'refused'; text: string };
+
+/**
+ * Faz uma proposta por um atleta de outro clube. Até 3 tentativas por atleta no mês;
+ * proposta muito baixa (abaixo de 80% do pedido) encerra a conversa até o mês seguinte.
+ */
+export function makeOffer(c: Career, playerId: string, fromClubId: string, fee: number, wage: number): OfferResult | string {
+  const me = c.clubs[myClubId(c)]!;
+  const seller = c.clubs[fromClubId];
+  const p = seller?.players.find((x) => x.id === playerId);
+  if (!seller || !p) return 'Atleta indisponível.';
+  if (isHumanClub(c, fromClubId)) return `O ${seller.name} é de outro técnico.`;
+  if (p.clubLocked) return `${p.name} não sai do ${seller.name} por dinheiro nenhum.`;
+  if (me.players.length >= 28) return 'Elenco cheio (máx. 28).';
+  if (seller.players.filter((x) => x.position === p.position).length <= (p.position === 'GK' ? 1 : 3))
+    return `${seller.name} não libera: está sem reposição nessa posição.`;
+  if (me.budget < fee) return 'Caixa insuficiente.';
+  const month = c.date.slice(0, 7);
+  c.talks ??= {};
+  const t = c.talks[playerId]?.month === month ? c.talks[playerId]! : { month, tries: 0 };
+  if (t.closed || t.tries >= MAX_TRIES) return `O ${seller.name} não quer mais conversar sobre ${p.name} este mês.`;
+  t.tries++;
+  c.talks[playerId] = t;
+
+  const terms = offerTerms(c, playerId, fromClubId)!;
+  if (terms.refuses) { t.closed = true; return { status: 'refused', text: terms.refuses }; }
+  const feeOk = fee >= terms.minFee, wageOk = wage >= terms.minWage;
+  if (feeOk && wageOk) {
+    me.budget -= fee;
+    seller.budget += fee;
+    c.ledger.purchases += fee;
+    seller.players = seller.players.filter((x) => x.id !== playerId);
+    if (seller.lineup) seller.lineup = { xi: seller.lineup.xi.filter((x) => x !== playerId), bench: seller.lineup.bench.filter((x) => x !== playerId) };
+    p.wage = wage;
+    p.contractUntil = Math.max(p.contractUntil, c.season.year + 3);
+    p.joinedOn = c.date;
+    delete p.morale; delete p.raiseAskedOn; delete p.renewalAsked;
+    me.players.push(p);
+    delete c.talks[playerId];
+    push(c, 'money', `Contratado: ${p.name} (${seller.name}) por ${fmtMoney(fee)}, salário de ${fmtMoney(wage)}/mês.`);
+    return { status: 'accepted', fee, wage };
+  }
+  if (fee < terms.minFee * 0.8 || wage < terms.minWage * 0.8) {
+    t.closed = true;
+    return { status: 'refused', text: fee < terms.minFee * 0.8 ? `O ${seller.name} achou a proposta ofensiva e encerrou a conversa este mês.` : `${p.name} achou o salário muito baixo e não quer mais conversar este mês.` };
+  }
+  const left = MAX_TRIES - t.tries;
+  if (left <= 0) {
+    t.closed = true;
+    return { status: 'refused', text: `Sem acordo por ${p.name}. Tente de novo no mês que vem.` };
+  }
+  const who = !feeOk && !wageOk ? `O ${seller.name} pede ${fmtMoney(terms.minFee)} e ${p.name} quer ${fmtMoney(terms.minWage)}/mês`
+    : !feeOk ? `O ${seller.name} pede ${fmtMoney(terms.minFee)}` : `${p.name} quer ${fmtMoney(terms.minWage)}/mês`;
+  return { status: 'counter', fee: Math.max(fee, terms.minFee), wage: Math.max(wage, terms.minWage), text: `${who}. ${left} tentativa${left > 1 ? 's' : ''} restante${left > 1 ? 's' : ''}.` };
 }
 
 export function buyPlayer(c: Career, playerId: string, fromClubId: string): string | null {
