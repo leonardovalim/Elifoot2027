@@ -236,6 +236,7 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .scene-wrap { position: relative; margin: var(--px); box-shadow: 0 0 0 var(--px) var(--ink); background: var(--grass); overflow: hidden; }
 .scene-shell { position: relative; }
 .scene { display: block; width: 100%; height: auto; aspect-ratio: 240 / 153; image-rendering: pixelated; image-rendering: crisp-edges; }
+.scene.art { aspect-ratio: 400 / 304; }
 /* fica embaixo da cena (não por cima): o pátio de entrada, com os objetos de conquista, ocupa a base do canvas */
 .scene-status { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; background: rgba(29, 35, 64, 0.96); color: var(--paper); font-size: 12px; line-height: 1.2; }
 .scene-status b { color: var(--mustard); white-space: nowrap; }
