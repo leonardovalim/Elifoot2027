@@ -1,0 +1,2 @@
+# Fixada de propósito: a 1.0 trocou o modo de ações por "o modelo escreve Python", que o gemma4 8B não consegue.
+browser-use==0.13.14

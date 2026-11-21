@@ -3,3 +3,4 @@ dist
 *.log
 .env*
 qa-report
+qa/ai-playtest/.venv
