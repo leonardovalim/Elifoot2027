@@ -103,6 +103,11 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - **Renovação**: a partir de agosto, até 2 por mês (em novembro, todos os que faltam). O salário pedido sobe com a insatisfação (×1,05 / ×1,2 / ×1,45). Quem é liberado vai a leilão no fim da temporada e rende 25% a 45% do valor (sem lance, sai de graça); quem nunca foi consultado renova automaticamente.
 - **Satisfação** (0–100, padrão 70): +3 por jogo disputado, −5 para quem está entre os 13 melhores e fica de fora, −1 para os demais; −3 por mês se mal pago; volta 10% por mês para perto de 60. Por enquanto afeta só as negociações.
 - Medição (5 seeds × 3 desafios, recusando tudo): 0–15 propostas, 0–4 aumentos e 1–6 renovações por temporada.
+- **Suas compras são negociadas** (`makeOffer` / `offerTerms` em `game/career.ts`). Você propõe um valor ao clube e um salário ao atleta; o "pedido" da lista é só referência.
+  - Mínimo do clube: valor × 1,10, +0,25 se for titular do vendedor, +0,10 com 3+ anos de contrato (−0,15 no último ano), +0,10 se o vendedor for bem maior, −0,20 se estiver no vermelho; ruído de ±5% que muda a cada mês.
+  - Salário mínimo do atleta: salário de mercado × 1,10, +20% por divisão que desce, +20% se o seu clube for bem menor. Atleta de 60+ recusa descer duas divisões.
+  - Até 3 tentativas por atleta no mês. Abaixo de 80% do pedido, o clube (ou o atleta) encerra a conversa até o mês seguinte. Entre 80% e 100%, vem contraproposta com os valores exigidos.
+  - Evento `player_offer` (`result`, `fee_pct`) mede quanto se negocia e quanto se perde.
 
 ## Ajuda e selos
 
@@ -126,6 +131,26 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 - Regras puras e testadas (`tests/achievements.test.ts`, `tests/legacy.test.ts`); os ganchos ficam no `Game.tsx` (partida, fim de temporada, ações/decisões, virada de mês) e na ajuda ("Lição de casa").
 - Atletas vindos da base ganharam `fromYouth` (para "Prata da casa").
 - "CT de primeiro mundo" exige **cumprir o objetivo** num clube 5 estrelas (no desafio "Administrar a pressão" o clube já começa com 5).
+
+### Ritmo das conquistas
+
+Antes, a 1ª temporada (~15 min) liberava 10 conquistas e as ações de mercado/escalação mais 5–6: quase um terço da coleção na primeira sessão. A meta agora é **metade em ~1 semana de 1 h/dia (7 h)** e **o resto em ~1 mês de 1 h/dia (30 h)**.
+
+- **Modelo de tempo:** ~15 min por temporada para um jogador típico (tempo correndo em ▶▶, 1 de cada 3 jogos assistido). Logo: 1 h ≈ 4 temporadas · 7 h ≈ 28 · 30 h ≈ 120. Medido numa carreira simulada de 40 temporadas: ~25 jogos, ~9 vitórias, ~3,5 vitórias sem sofrer gol, ~2 viradas e ~4,4 jogos sem cartão por temporada.
+- **Primeira hora (6):** Primeiro apito, Primeira vitória, Ouvido colado, Reforço, Prancheta, Lição de casa. São de onboarding: ensinam o jogo.
+- **Até ~1 semana (~22 a mais, ~55% acumulado):** contadores médios: 50 substituições, 50 vitórias sem sofrer gol, 30 viradas, 75 jogos sem cartão, 250 simuladas, 500 jogos, 10 objetivos, 3 acessos, 20 joias e 15 crias da base em campo, 15 casas cheias, 5 temporadas de cofre cheio, 5 temporadas no mesmo clube…
+- **Até ~1 mês (~17 a mais, ~90%):** 300 narradas, 1.000 substituições, 500 vitórias, 5 títulos, 5 artilharias, 15 jogos invicto, venda de 5 milhões, 10 milhões de patrimônio, 5 temporadas com reputação 90+, 10 temporadas no mesmo clube, título da Divisão 1…
+- **Cauda lendária:** Tetra, Temporada perfeita, Invencível na elite, Do pó ao topo, Laranja da Baixada, Colecionador.
+- **Validação (carreira passiva simulada, 120 temporadas, sem ações de mercado):** antes, 10 na 1ª temporada; agora 3 na 1ª, 5 até a 4ª (as de ação — Reforço, Prancheta, Lição de casa — completam a primeira hora), ~22 até a 28ª e ~35 até a 120ª. Um jogador ativo (compra, vende, escala, renova) chega a ~50% na semana e ~90% no mês.
+- As metas numéricas ficam numa tabela única (`COUNT` em `game/achievements.ts`), usada para destravar e para o bloco **"Perto de sair"** do painel Carreira: as 3 mais próximas revelam a meta e mostram a barra (efeito de gradiente de meta). As outras continuam secretas.
+- **Calibração com dados reais:** o jogo conta os **minutos ativos** (`playMinutes`, aba visível) e manda `play_minutes` em `achievement_unlocked` e `season_completed`. No PostHog: mediana de `play_minutes` por `total` de conquistas. Se a 25ª sair muito antes de 420 min, subir os contadores do bloco da semana.
+
+## Cobrança da diretoria e metas extras
+
+- **Cobrança (`Bond.pressure`, −1 a +2):** cumprir a meta sobe +1; título leva direto a +2 ("a torcida quer outro"); falhar desce −1; acesso ou queda zera (régua nova). A cobrança desloca a meta na escada *evitar a queda → meio → acesso → título* (`boardObjective(c, id, pressure)`).
+- Sob cobrança alta a diretoria tolera mais: demite só se terminar `4 + pressure` posições abaixo do esperado.
+- Medido antes da mudança: a diretoria aprovava **78%** das metas numa carreira passiva de 40 temporadas, e a reputação batia 100 na 15ª. A cobrança acumulada é o freio.
+- **Metas extras (`Bond.goals`):** 1 na primeira temporada no clube, 2 a partir da segunda. Sorteadas por clube e ano entre: caixa no fim da temporada, torcida +8%, 25 jogos para atletas até 21 anos, gols sofridos máximos (pela meta principal), arrecadação com vendas e artilheiro da divisão. Cada uma cumprida dá 1 salário de bônus e +2 de reputação. **Nunca demitem.**
 
 ## Referências e propriedade intelectual
 
@@ -178,10 +203,12 @@ Módulo `src/game/market.ts`. Cada evento vira uma decisão pendente e a interfa
 | `match_simulated` | `mode: auto` | Quem já joga no "piloto automático" |
 | `match_intervention` | `type`, `value`, `minute` | As intervenções são usadas? |
 | `match_finished` | `round`, `season`, `result`, `goals_for`, `goals_against`, `home` | Profundidade da sessão |
-| `season_completed` | `seasons_played`, `position`, `achieved`, `fired`, `promoted`… | Critério do MVP: 3 temporadas |
+| `season_completed` | `seasons_played`, `position`, `achieved`, `fired`, `promoted`, `pressure`, `side_goals_done`, `play_minutes`… | Critério do MVP: 3 temporadas; dificuldade da diretoria |
+| `achievement_unlocked` | `id`, `tier`, `total`, `play_minutes` | Ritmo real das conquistas (meta: metade em ~420 min) |
 | `offer_accepted` | `unemployed` | Mobilidade de carreira |
 | `lineup_changed` | `to` (xi/bench/out) | Quantos assumem a escalação em vez do auxiliar |
 | `player_bought` | `position`, `overall`, `price` | Uso do mercado depois da comparação |
+| `player_offer` | `result` (accepted/counter/refused), `fee_pct` | Negociação: quanto se pechincha e quantas compras se perdem |
 | `time_speed`, `menu_opened` | `speed`, `menu` | Ritmo preferido e menus mais usados |
 | `sport_interest_opened`, `sport_interest` | `sport`, `stars` | Ordem do roadmap de modalidades |
 
