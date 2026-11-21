@@ -43,7 +43,7 @@ import { track } from './analytics';
 import { play, SoundToggle } from './sound';
 import { saveCareer } from './storage';
 import { openHelp } from './help';
-import { achieve, useUnlocked } from './achievements';
+import { achieve, setAchievementColors, useUnlocked } from './achievements';
 import { checkState, onAction, onMatch, onMonth, onSeasonEnd, seasonFacts, snapshotForActions } from '../game/achievements';
 import type { RoundRecord } from '../game/career';
 import { Badge, Bar, Modal, money, moneyShort } from './util';
@@ -191,6 +191,8 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
   const me = myClubId(c);
   const club = me ? c.clubs[me] : undefined;
   const bond = activeBond(c);
+  // a miniatura da conquista sai nas cores do clube, como o objeto aparece no CT
+  useEffect(() => { if (club) setAchievementColors(club.colors); }, [club?.colors[0], club?.colors[1]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Fecha o balanço da vez; se faltar o de outro técnico, a vez passa para ele. */
   const nextSummary = () => {

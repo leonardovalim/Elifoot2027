@@ -1,6 +1,7 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_ID, TIER_LABEL, emptyAch, normalizeAch, type AchState } from '../game/achievements';
 import { track } from './analytics';
+import { drawLegacyThumb } from './scene/legacyThumb';
 
 /**
  * Conquistas do JOGADOR: salvas à parte da carreira, valem para sempre
@@ -45,9 +46,34 @@ export function useUnlocked(): Record<string, string> {
   return state.unlocked;
 }
 
+// ---------------------------------------------------------------- miniatura do objeto no CT
+
+/** Cores do clube do jogador (o Game avisa), para o objeto sair pintado como no CT. */
+let clubColors: [string, string] = ['#e4563c', '#f6ecd6'];
+export function setAchievementColors(colors: [string, string]) { clubColors = colors; }
+
+/** O objeto que a conquista colocou no CT, ampliado em pixel art. Sem a arte, mostra o troféu. */
+export function LegacyThumb({ id, size }: { id: string; size: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setOk(false);
+    const cv = ref.current;
+    if (cv) void drawLegacyThumb(cv, id, clubColors).then((drawn) => { if (alive) setOk(drawn); });
+    return () => { alive = false; };
+  }, [id]);
+  return (
+    <span className="ach-thumb" style={{ width: size, height: size }} aria-hidden>
+      <canvas ref={ref} width={size} height={size} hidden={!ok} />
+      {!ok && <span className="ach-thumb-fallback">🏆</span>}
+    </span>
+  );
+}
+
 // ---------------------------------------------------------------- banner
 
-const TOAST_MS = 4600;
+const TOAST_MS = 5600;
 
 export function AchievementToastHost() {
   const [queue, setQueue] = useState<string[]>([]);
@@ -73,11 +99,12 @@ export function AchievementToastHost() {
   return (
     <div className="ach-toast-wrap" aria-live="polite" data-qa-transient="">
       <div key={a.id} className={`ach-toast tier-${a.tier}`} role="status" aria-label={`Conquista desbloqueada: ${a.name}`}>
-        <span className="ach-medal" aria-hidden>🏆</span>
+        <span className="ach-medal"><LegacyThumb id={a.id} size={56} /></span>
         <span className="ach-text">
           <small>Conquista desbloqueada · {TIER_LABEL[a.tier]} · {total}/{ACHIEVEMENTS.length}</small>
           <b>{a.name}</b>
-          <span>{a.how}. Novo no CT: {a.element.toLowerCase()}.</span>
+          <span>{a.how}.</span>
+          <span className="ach-gift">Novo no seu CT: <strong>{a.element}</strong></span>
         </span>
         {queue.length > 1 && <span className="ach-more">+{queue.length - 1}</span>}
       </div>
@@ -101,8 +128,11 @@ export function AchievementsSection() {
           <ul className="ach-list">
             {got.map((a) => (
               <li key={a.id} className={`tier-${a.tier}`}>
-                <b>{a.name}</b> <span className="ach-tier">{TIER_LABEL[a.tier]}</span>
-                <span className="hint">{a.how} · no CT: {a.element.toLowerCase()}</span>
+                <LegacyThumb id={a.id} size={40} />
+                <span className="ach-li-text">
+                  <b>{a.name}</b> <span className="ach-tier">{TIER_LABEL[a.tier]}</span>
+                  <span className="hint">{a.how} · no CT: {a.element.toLowerCase()}</span>
+                </span>
               </li>
             ))}
           </ul>
