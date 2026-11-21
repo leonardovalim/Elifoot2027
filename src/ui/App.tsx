@@ -23,7 +23,6 @@ import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
 import { askConfirm } from './confirm';
-import { openHelp } from './help';
 
 const INTRO_KEY = 'mestres-do-esporte.intro-seen';
 function hasSeenIntro(): boolean {
@@ -102,7 +101,6 @@ export function App() {
         <button className="btn big" onClick={async () => {
           if (await confirmReplace(career)) setScreen('create-multi');
         }}>Multijogador local</button>
-        <button className="btn" onClick={() => openHelp()}>Como jogar</button>
       </div>
       <p className="hint foot">Versão de testes</p>
     </div>
@@ -125,6 +123,9 @@ async function confirmReplace(career: Career | null): Promise<boolean> {
 function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: Career) => void; multi: boolean }) {
   // multijogador: cada técnico passa pelo mesmo assistente; os escolhidos ficam aqui
   const [picked, setPicked] = useState<NewManager[]>([]);
+  /** Quantos técnicos vão jogar (escolhido antes de tudo; null = ainda não escolheu). */
+  const [total, setTotal] = useState<number | null>(null);
+  const choosingCount = multi && total === null;
   const [seed, setSeed] = useState(() => (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
   const [name, setName] = useState('');
   const [type, setType] = useState<ChallengeType | null>(null);
@@ -158,25 +159,45 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
   return (
     <div className="create">
       <header className="create-head">
-        <button className="btn ghost" onClick={step === 1 ? onBack : previousStep}>‹ {step === 1 ? 'Voltar' : 'Anterior'}</button>
+        <button className="btn ghost" onClick={step !== 1 ? previousStep : multi && !choosingCount && picked.length === 0 ? () => setTotal(null) : onBack}>‹ {step === 1 ? 'Voltar' : 'Anterior'}</button>
         <div>
-          <h2>{multi ? `Multijogador · técnico ${picked.length + 1}` : 'Nova carreira'}</h2>
+          <h2>{!multi ? 'Nova carreira' : choosingCount ? 'Multijogador local' : `Multijogador · técnico ${picked.length + 1} de ${total}`}</h2>
         </div>
-        <nav className="wizard-progress" aria-label="Etapas da nova carreira">
+        {!choosingCount && <nav className="wizard-progress" aria-label="Etapas da nova carreira">
           {(['Você', 'Desafio', 'Oportunidades'] as const).map((label, i) => {
             const target = (i + 1) as WizardStep;
             const available = target <= step || (target === 2 && !!name.trim()) || (target === 3 && !!name.trim() && !!type);
             return <button key={label} className={`wizard-step ${step === target ? 'on' : ''}`} aria-current={step === target ? 'step' : undefined} disabled={!available} onClick={() => setStep(target)}><b>{target}</b><span>{label}</span></button>;
           })}
-        </nav>
+        </nav>}
       </header>
 
-      {multi && (
+      {choosingCount && (
+        <section className="window wizard-card mp-count" aria-label="Quantos técnicos">
+          <header className="window-title"><span>Quantos técnicos vão jogar?</span></header>
+          <div className="window-body">
+            <p className="hint">Todos jogam no mesmo aparelho, revezando a vez: cada um escolhe nome, desafio e clube, cuida do próprio clube e joga a própria partida.</p>
+            <div className="mp-count-options" role="group" aria-label="Número de técnicos">
+              {Array.from({ length: MAX_MANAGERS - 1 }, (_, i) => i + 2).map((n) => (
+                <button key={n} className="challenge" onClick={() => { setTotal(n); setPicked((p) => p.slice(0, n)); }}>
+                  <b>{n} técnicos</b>
+                  <span>{n === 2 ? 'Um contra o outro.' : n === 3 ? 'Três clubes na disputa.' : 'O máximo: casa cheia.'}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {multi && !choosingCount && (
         <section className="window wizard-card mp-roster" aria-label="Técnicos escolhidos">
-          <header className="window-title"><span>Multijogador local · até {MAX_MANAGERS} técnicos no mesmo aparelho</span></header>
+          <header className="window-title">
+            <span>Técnicos · {picked.length} de {total}</span>
+            <button className="btn sm ghost" onClick={() => setTotal(null)}>Mudar quantidade</button>
+          </header>
           <div className="window-body">
             {picked.length === 0
-              ? <p className="hint">Cada técnico escolhe nome, desafio e clube. Depois vocês revezam a vez: cada um cuida do seu clube e joga a sua partida.</p>
+              ? <p className="hint">Comece pelo técnico 1. Depois do último, o jogo começa sozinho.</p>
               : (
                 <ul className="mp-list">
                   {picked.map((x, i) => (
@@ -188,14 +209,11 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
                   ))}
                 </ul>
               )}
-            {picked.length >= 2 && (
-              <div className="wizard-actions"><button className="btn primary" onClick={() => startAll(picked)}>Começar com {picked.length} técnicos ›</button></div>
-            )}
           </div>
         </section>
       )}
 
-      {step === 1 && <section className="window wizard-card">
+      {step === 1 && !choosingCount && <section className="window wizard-card">
         <header className="window-title"><span>1/3 · Seu perfil</span></header>
         <div className="window-body">
           <label className="field">{multi ? `Nome do técnico ${picked.length + 1}` : 'Seu nome'}
@@ -217,7 +235,7 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
         </div>
       </section>}
 
-      {step === 2 && <section className="window wizard-card">
+      {step === 2 && !choosingCount && <section className="window wizard-card">
         <header className="window-title"><span>2/3 · Escolha seu desafio</span></header>
         <div className="window-body">
           <div className="challenges">
@@ -233,7 +251,7 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
         </div>
       </section>}
 
-      {step === 3 && type && (
+      {step === 3 && type && !choosingCount && (
         <section className="window wizard-card offer-step">
           <header className="window-title">
             <span>3/3 · Oportunidades</span>
@@ -259,7 +277,7 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
                     if (!name.trim()) { setNameError(true); setStep(1); nameRef.current?.focus(); return; }
                     if (multi) {
                       const list = [...picked, { name: name.trim(), type, clubId: o.clubId }];
-                      if (list.length >= MAX_MANAGERS) { startAll(list); return; }
+                      if (list.length >= (total ?? MAX_MANAGERS)) { startAll(list); return; }
                       setPicked(list);
                       setName(''); setType(null); setStep(1);
                       return;
@@ -267,7 +285,7 @@ function Create({ onBack, onStart, multi }: { onBack: () => void; onStart: (c: C
                     track('career_created', { challenge: type, division: divisionOf(world, club.id) + 1, objective: o.objective, club_reputation: club.reputation });
                     onStart(startCareer(seed, name.trim(), type, o.clubId));
                   }}>
-                    {taken ? `Clube de ${taken}` : multi ? 'Escolher este clube' : 'Assumir o desafio'}
+                    {taken ? `Clube de ${taken}` : !multi ? 'Assumir o desafio' : picked.length + 1 >= (total ?? MAX_MANAGERS) ? 'Escolher e começar' : 'Escolher este clube'}
                   </button>
                 </div>
               );

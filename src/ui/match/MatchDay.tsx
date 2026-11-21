@@ -2,13 +2,13 @@ import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'rea
 import { formatDate } from '../../core/calendar';
 import type { Rng } from '../../core/rng';
 import { clubStrength, lastAttendance, liveRng, myClubId, myShootout, type Career, type PreparedRound } from '../../game/career';
-import { changeFormation, changeStyle, stepMinute, substitute, toOutcome, type FootballOutcome, type SideState } from '../../sports/football/engine';
+import { changeFormation, changeStyle, minuteLabel, stepMinute, substitute, toOutcome, type FootballOutcome, type SideState } from '../../sports/football/engine';
 import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
 import { track } from '../analytics';
 import { play, SoundToggle } from '../sound';
-import { RoundBoard } from './RoundBoard';
+import { RoundBoard, type Scope } from './RoundBoard';
 import { Flag } from '../flag';
 import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
 
@@ -29,6 +29,9 @@ export interface MatchPlayInfo {
 }
 
 type Stage = 'pre' | 'live' | 'post';
+type View = 'lances' | Scope;
+/** Aba lembrada entre partidas enquanto o jogo está aberto. */
+let lastView: View = 'lances';
 const SPEEDS = [{ label: '▶', ms: 380 }, { label: '▶▶', ms: 140 }, { label: '▶▶▶', ms: 40 }];
 
 /** Dia de jogo: pré-jogo → partida narrada com intervenções → pós-jogo (GDD 2.4). */
@@ -45,6 +48,8 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const [subOut, setSubOut] = useState('');
   const [subIn, setSubIn] = useState('');
   const [subErr, setSubErr] = useState('');
+  const [view, setViewState] = useState<View>(lastView);
+  const setView = (v: View) => { lastView = v; setViewState(v); };
   const outcome = useRef<FootballOutcome | null>(null);
   const playInfo = useRef<MatchPlayInfo>({ watched: false, simulated: false, subs: 0 });
 
@@ -59,11 +64,13 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         if (e.type === 'goal') play(e.side === side ? 'goalFor' : 'goalAgainst');
         else if (e.type === 'red') play('card');
         else if (e.type === 'injury' && e.side === side) play('injury');
-        else if (e.type === 'half') play('halfTime');
+        else if (e.type === 'half' || e.type === 'extra') play('halfTime');
+        else if (e.type === 'penalty') play('whistle');
       }
       if (m.finished) play('fullTime');
       // pausa em gol do adversário, expulsão ou lesão nossa: momento de decidir
-      if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || ((e.type === 'red' || e.type === 'injury') && e.side === side))) setRunning(false);
+      // pausa também em pênalti (a favor ou contra) e no começo da prorrogação
+      if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || ((e.type === 'red' || e.type === 'injury') && e.side === side) || e.type === 'penalty' || e.type === 'extra')) setRunning(false);
       if (m.minute === m.firstHalfEnd) setRunning(false);
       if (m.finished) { outcome.current = toOutcome(m); playInfo.current.watched = true; setRunning(false); setStage('post'); }
       tick();
@@ -146,7 +153,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
             <h4>Gols</h4>
             <ul className="list">
               {o.events.filter((e) => e.type === 'goal').map((e, i) => (
-                <li key={i}>⚽ {e.minute}' {e.type === 'goal' && <SideTag color={colors[e.side]} label={m[e.side].short} />} <b>{'playerName' in e ? e.playerName : ''}</b></li>
+                <li key={i}>⚽ {e.minute}' {e.type === 'goal' && <SideTag color={colors[e.side]} label={m[e.side].short} />} <b>{'playerName' in e ? e.playerName : ''}</b>{e.type === 'goal' && e.penalty && <span className="hint"> (pênalti)</span>}</li>
               ))}
               {o.homeScore + o.awayScore === 0 && <li className="hint">Sem gols.</li>}
             </ul>
@@ -175,12 +182,12 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const mine = m[side];
   const onPitch = [mine.GK, ...mine.DF, ...mine.MF, ...mine.FW];
   const feed = m.events.filter(isNarrated).slice().reverse();
-  const minuteLabel = m.minute > 90 ? `90+${m.minute - 90}` : m.minute > 45 && m.minute <= m.firstHalfEnd ? `45+${m.minute - 45}` : `${m.minute}`;
+  const clock = minuteLabel(m);
   return (
     <div className="match live">
       <div className="scoreboard">
         <TeamHead club={clubOf[L]} color={colors[L]} mine />
-        <div className="score">{m[L].goals} × {m[R].goals}<span className="clock">{minuteLabel}'</span></div>
+        <div className="score">{m[L].goals} × {m[R].goals}<span className="clock">{clock}'{m.extraStart !== undefined && m.minute > m.extraStart ? ' · prorrogação' : ''}</span></div>
         <TeamHead club={clubOf[R]} color={colors[R]} mine={false} right />
       </div>
       <div className="controls">
@@ -191,7 +198,17 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       </div>
       <div className="live-grid">
         <div className="live-main">
-        <section className="feed">
+        <div className="tabs" role="tablist" aria-label="O que acompanhar">
+          {(p.cup !== undefined
+            ? [['lances', 'Lance a lance', 'Lances'], ['div', 'Outros jogos', 'Outros jogos']] as const
+            : [['lances', 'Lance a lance', 'Lances'], ['div', 'Minha divisão', 'Divisão'], ['all', 'Todas as divisões', 'Todas']] as const
+          ).map(([id, label, short]) => (
+            <button key={id} role="tab" aria-selected={view === id} aria-label={label} className={`tab ${view === id ? 'on' : ''}`} onClick={() => setView(id)}>
+              <span className="tab-full">{label}</span><span className="tab-short" aria-hidden="true">{short}</span>
+            </button>
+          ))}
+        </div>
+        {view === 'lances' ? <section className="feed" role="tabpanel" aria-label="Lance a lance">
           {feed.length === 0 && <p className="hint">Bola rolando.</p>}
           {feed.map((e, i) => {
             const s = 'side' in e ? e.side : null;
@@ -203,36 +220,50 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
               </div>
             );
           })}
-        </section>
-        <RoundBoard career={career} prep={p} minute={m.minute} final={false} />
+        </section> : (
+          <div className="board-panel" role="tabpanel">
+            <RoundBoard career={career} prep={p} minute={m.minute} final={false} scope={view} />
+          </div>
+        )}
         </div>
-        <section>
+        <section className="side-panel">
+          <div className="iv card" aria-label="Intervenções">
+            <h4>Intervenções</h4>
+            <div className="iv-block">
+              <span className="iv-label">Postura</span>
+              <div className="seg" role="group" aria-label="Postura do time">
+                {(Object.keys(STYLE_LABEL) as Style[]).map((s) => (
+                  <button key={s} aria-pressed={mine.style === s} className={mine.style === s ? 'on' : ''} onClick={() => { if (mine.style !== s) track('match_intervention', { type: 'style', value: s, minute: m.minute }); changeStyle(m, side, s); tick(); }}>{STYLE_LABEL[s]}</button>
+                ))}
+              </div>
+            </div>
+            <label className="iv-block">
+              <span className="iv-label">Formação</span>
+              <select value={mine.formation} onChange={(e) => { track('match_intervention', { type: 'formation', value: e.target.value, minute: m.minute }); changeFormation(m, side, e.target.value as Formation); tick(); }}>
+                {Object.keys(FORMATIONS).map((f) => <option key={f}>{f}</option>)}
+              </select>
+            </label>
+            <div className="iv-block">
+              <span className="iv-label">Substituição <em>{mine.subsLeft} {mine.subsLeft === 1 ? 'restante' : 'restantes'}</em></span>
+              <div className="iv-sub">
+                <select aria-label="Quem sai" value={subOut} onChange={(e) => setSubOut(e.target.value)}>
+                  <option value="">Sai…</option>
+                  {onPitch.map((x) => <option key={x.id} value={x.id}>{POS_LABEL[x.position]} {x.name} ({Math.round(mine.condition[x.id]!)}%)</option>)}
+                </select>
+                <select aria-label="Quem entra" value={subIn} onChange={(e) => setSubIn(e.target.value)}>
+                  <option value="">Entra…</option>
+                  {mine.bench.map((x) => <option key={x.id} value={x.id}>{POS_LABEL[x.position]} {x.name} ({overall(x)})</option>)}
+                </select>
+              </div>
+              <button className="btn iv-go" disabled={!subOut || !subIn || mine.subsLeft <= 0} onClick={() => {
+                const err = substitute(m, side, subOut, subIn);
+                if (!err) { track('match_intervention', { type: 'substitution', minute: m.minute }); playInfo.current.subs++; }
+                if (!err) { setSubOut(''); setSubIn(''); setSubErr(''); tick(); } else setSubErr(err);
+              }}>⇄ Trocar</button>
+              {subErr && <p className="sub-error" role="alert">{subErr}</p>}
+            </div>
+          </div>
           <StatsBars style={barColors} a={m[L].stats} b={m[R].stats} possession={possessionOf(m[L].stats, m[R].stats)} />
-          <h4>Intervenções</h4>
-          <div className="chips">
-            {(Object.keys(STYLE_LABEL) as Style[]).map((s) => (
-              <button key={s} className={`chip ${mine.style === s ? 'on' : ''}`} onClick={() => { if (mine.style !== s) track('match_intervention', { type: 'style', value: s, minute: m.minute }); changeStyle(m, side, s); tick(); }}>{STYLE_LABEL[s]}</button>
-            ))}
-            <select value={mine.formation} onChange={(e) => { track('match_intervention', { type: 'formation', value: e.target.value, minute: m.minute }); changeFormation(m, side, e.target.value as Formation); tick(); }}>
-              {Object.keys(FORMATIONS).map((f) => <option key={f}>{f}</option>)}
-            </select>
-          </div>
-          <div className="sub-row">
-            <select value={subOut} onChange={(e) => setSubOut(e.target.value)}>
-              <option value="">Sai…</option>
-              {onPitch.map((x) => <option key={x.id} value={x.id}>{POS_LABEL[x.position]} {x.name} ({Math.round(mine.condition[x.id]!)}%)</option>)}
-            </select>
-            <select value={subIn} onChange={(e) => setSubIn(e.target.value)}>
-              <option value="">Entra…</option>
-              {mine.bench.map((x) => <option key={x.id} value={x.id}>{POS_LABEL[x.position]} {x.name} ({overall(x)})</option>)}
-            </select>
-            <button className="btn sm" disabled={!subOut || !subIn || mine.subsLeft <= 0} onClick={() => {
-              const err = substitute(m, side, subOut, subIn);
-              if (!err) { track('match_intervention', { type: 'substitution', minute: m.minute }); playInfo.current.subs++; }
-              if (!err) { setSubOut(''); setSubIn(''); setSubErr(''); tick(); } else setSubErr(err);
-            }}>Trocar ({mine.subsLeft})</button>
-          </div>
-          {subErr && <p className="sub-error" role="alert">{subErr}</p>}
           <h4>Condição física · {m[side].short}</h4>
           <div className="cond-list">
             {onPitch.map((x) => (

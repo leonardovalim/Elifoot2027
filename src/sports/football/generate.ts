@@ -118,7 +118,7 @@ export const NOVA_IGUACU_ID = 'c-nova-iguacu';
 /** O craque do jogo: o melhor e mais caro, e só joga no Nova Iguaçu. */
 export const ANDRE_ELIAS_ID = 'p-andre-elias';
 
-function andreElias(rng: Rng, contractYear: number): Player {
+export function andreElias(rng: Rng, contractYear: number): Player {
   const p = generatePlayer(rng, 'FW', 90, 26, contractYear);
   p.id = ANDRE_ELIAS_ID;
   p.name = 'André Elias';
@@ -179,6 +179,7 @@ export function capStars(players: Player[]) {
   }
 }
 
-const STAR_CAP = 95;
+/** Teto de habilidade de todo mundo menos o André Elias (vale na criação e na evolução). */
+export const STAR_CAP = 95;
 
 export const FIRST_NAMES = FIRST;

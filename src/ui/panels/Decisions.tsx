@@ -75,15 +75,19 @@ function AthleteCard({ club, p }: { club: Club; p: Player }) {
         {ctx.prospect && <Tag kind="joia">joia</Tag>}
         <TemperamentTag p={p} />
       </div>
-      <span className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential}</span>
+      <span className="hint">{POS_LABEL[p.position]} · {p.age} anos · habilidade <b>{overall(p)}</b> · potencial ~{p.potential} · <Morale p={p} compact /></span>
       <p className="ctx-read">{ctx.read}</p>
-      <dl className="ctx-grid">
-        <div><dt>Temporada</dt><dd>{plural(p.stats.apps, 'jogo', 'jogos')} · {plural(p.stats.goals, 'gol', 'gols')}{p.stats.apps ? ` · nota ${nf1(ctx.avg)}` : ''}</dd></div>
-        <div><dt>Na posição</dt><dd>{ORD(ctx.rank)} de {ctx.depth} {POS_LABEL[p.position]}</dd></div>
-        <div><dt>Salário</dt><dd>{money(p.wage)} · {ORD(ctx.wageRank)} maior ({Math.round(ctx.wageShare * 100)}% da folha)</dd></div>
-        <div><dt>Contrato</dt><dd>até {p.contractUntil}</dd></div>
-        <div className="wide"><dt>Satisfação</dt><dd><Morale p={p} /></dd></div>
-      </dl>
+      {/* o resto da ficha fica recolhido: quem quer detalhe abre */}
+      <details className="ctx-more">
+        <summary>Ver ficha completa</summary>
+        <dl className="ctx-grid">
+          <div><dt>Temporada</dt><dd>{plural(p.stats.apps, 'jogo', 'jogos')} · {plural(p.stats.goals, 'gol', 'gols')}{p.stats.apps ? ` · nota ${nf1(ctx.avg)}` : ''}</dd></div>
+          <div><dt>Na posição</dt><dd>{ORD(ctx.rank)} de {ctx.depth} {POS_LABEL[p.position]}</dd></div>
+          <div><dt>Salário</dt><dd>{money(p.wage)} · {ORD(ctx.wageRank)} maior ({Math.round(ctx.wageShare * 100)}% da folha)</dd></div>
+          <div><dt>Contrato</dt><dd>até {p.contractUntil}</dd></div>
+          <div className="wide"><dt>Satisfação</dt><dd><Morale p={p} /></dd></div>
+        </dl>
+      </details>
     </div>
   );
 }
@@ -115,17 +119,18 @@ export function DecisionModal({ career, decision: d, onChoose }: { career: Caree
             <p><b>{buyer.name}</b> oferece <b>{money(d.fee)}</b> por {p.name} e um salário de <b>{money(d.wage)}/mês</b> (hoje ele ganha {money(p.wage)}).</p>
           </div>
           {who}
-          <dl className="kv">
-            <dt>Valor de mercado</dt><dd>{money(value)}</dd>
-            <dt>Oferta</dt><dd className={d.fee >= value ? 'ok' : ''}>{money(d.fee)}{value > 0 && ` (${Math.round((d.fee / value) * 100)}% do valor)`}</dd>
-          </dl>
-          <p className="hint">Cobrir a oferta: ele fica e passa a ganhar o mesmo salário oferecido. Recusar uma proposta com salário bem maior deixa o atleta chateado.</p>
+          {value > 0 && <p className="offer-line">A oferta é <b className={d.fee >= value ? 'ok' : 'neg'}>{Math.round((d.fee / value) * 100)}%</b> do valor de mercado ({money(value)}).</p>}
           <div className="decision-actions">
             <button className="btn primary" onClick={() => onChoose('accept')}>Vender por {money(d.fee)}</button>
-            <button className="btn" onClick={() => onChoose('cover')}>Cobrir salário ({money(d.wage)}/mês)</button>
-            <button className="btn ghost" onClick={() => onChoose('refuse')}>Recusar</button>
+            <button className="btn with-sub" onClick={() => onChoose('cover')}>
+              Cobrir salário ({money(d.wage)}/mês)
+              <small>ele fica{extra > 0 ? ` · folha vai a ${money(payroll + extra)}` : ''}</small>
+            </button>
+            <button className="btn ghost with-sub" onClick={() => onChoose('refuse')}>
+              Recusar
+              {d.wage > p.wage * 1.2 && <small>ele fica chateado</small>}
+            </button>
           </div>
-          {extra > 0 && <p className="hint">Se cobrir, a folha mensal vai de {money(payroll)} para <b>{money(payroll + extra)}</b>.</p>}
         </div>
       </Modal>
     );

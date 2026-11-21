@@ -11,7 +11,7 @@ import { Rng } from '../core/rng';
 import { createSeason, divisionStandings, promoteAndRelegate, type Season } from '../core/season';
 import { ATTR_SHORT, applyMatch, dailyTraining, endOfSeason, type TrainingGain } from '../sports/football/development';
 import { createMatch, football, runToEnd, toOutcome, type FootballOutcome, type MatchState } from '../sports/football/engine';
-import { DIVISIONS, capStars, divisionLevel, generateClub, generateWorld, playerValue } from '../sports/football/generate';
+import { ANDRE_ELIAS_ID, DIVISIONS, NOVA_IGUACU_ID, andreElias, capStars, divisionLevel, generateClub, generateWorld, playerValue } from '../sports/football/generate';
 import { available, overall, pickLineup, starters } from '../sports/football/lineup';
 import type { Club, Player, Work } from '../sports/football/types';
 import { CONTINENTAL_SPOTS, advanceCup, aliveInCup, createContinental, createCup, cupIn, cupKind, cupName, cupPrizes, cupStages, currentTies, isCupDate, settleTie, shootout, stageName, tieOf, type Cup, type CupKind, type CupTie, type Shootout } from './cup';
@@ -308,6 +308,45 @@ export function startCareer(seed: number, name: string, type: ChallengeType, clu
   return c;
 }
 
+/**
+ * Toda carreira tem o Nova Iguaçu na elite com o André Elias. Saves criados antes
+ * dessa regra ganham os dois ao abrir: o clube mais forte da Divisão 1 que não é
+ * de um técnico humano vira o Nova Iguaçu (o id é trocado em todo o save) e recebe
+ * o André no lugar do atacante mais fraco. Devolve o próprio save quando nada muda.
+ */
+export function withNovaIguacu(c: Career): Career {
+  const hasClub = !!c.clubs[NOVA_IGUACU_ID];
+  const hasAndre = Object.values(c.clubs).some((cl) => cl.players.some((p) => p.id === ANDRE_ELIAS_ID));
+  if (hasClub && hasAndre) return c;
+  let out = c;
+  if (!hasClub) {
+    const humans = new Set(Array.from({ length: c.managers?.length ?? 1 }, (_, i) =>
+      (i === (c.active ?? 0) || !c.managers ? c.entrepreneur : c.managers[i]!.entrepreneur).bonds[0]?.orgId));
+    const elite = c.season.divisions[0]?.teamIds ?? [];
+    const target = elite.filter((id) => !humans.has(id)).sort((a, b) => clubStrength(c.clubs[b]!) - clubStrength(c.clubs[a]!))[0];
+    if (!target) return c;
+    // ids de clube são únicos no save inteiro: trocar o texto renomeia tabela, copas, prêmios e histórico de uma vez
+    out = JSON.parse(JSON.stringify(c).split(`"${target}"`).join(`"${NOVA_IGUACU_ID}"`)) as Career;
+    const ni = out.clubs[NOVA_IGUACU_ID]!;
+    ni.name = 'Nova Iguaçu';
+    ni.short = 'NIG';
+    ni.city = 'Nova Iguaçu';
+    ni.colors = ['#e5762a', '#ffb04d'];
+    ni.stadiumName = 'Estádio de Nova Iguaçu';
+    ni.reputation = Math.max(ni.reputation, 95);
+  }
+  if (!Object.values(out.clubs).some((cl) => cl.players.some((p) => p.id === ANDRE_ELIAS_ID))) {
+    const ni = out.clubs[NOVA_IGUACU_ID]!;
+    const andre = andreElias(new Rng((out.seed ^ 0xa11d) >>> 0), out.season.year);
+    andre.age = Math.max(26, andre.age);
+    const fws = ni.players.filter((p) => p.position === 'FW').sort((a, b) => overall(a) - overall(b));
+    const out1 = fws[0];
+    ni.players = out1 ? ni.players.map((p) => (p.id === out1.id ? andre : p)) : [...ni.players, andre];
+    if (ni.lineup && out1) ni.lineup = { xi: ni.lineup.xi.filter((x) => x !== out1.id), bench: ni.lineup.bench.filter((x) => x !== out1.id) };
+  }
+  return out;
+}
+
 export const activeBond = (c: Career): Bond | undefined => c.entrepreneur.bonds[0];
 export const myClubId = (c: Career): string => activeBond(c)?.orgId ?? '';
 
@@ -447,6 +486,7 @@ function marketCtx(c: Career): MarketCtx {
     clubs: c.clubs,
     me: myClubId(c),
     humans: managerClubs(c).filter(Boolean),
+    since: activeBond(c)?.since,
     decisions: c.decisions,
     push: (kind, text) => push(c, kind, text),
     addSale: (fee) => { c.ledger.sales += fee; },
@@ -720,6 +760,7 @@ function humanMatches(c: Career, fixtures: { home: string; away: string; div: nu
   const list = fixtures.map((f) => {
     const mrng = new Rng(rng.int(0, 2 ** 31));
     const match = createMatch(c.clubs[f.home]!, c.clubs[f.away]!, mrng);
+    if (f.div === -1) match.knockout = true; // copa: empate vai para a prorrogação
     for (const side of ['home', 'away'] as const) {
       const owner = managerOf(c, match[side].clubId);
       if (owner >= 0) match[side].autoSubs = managerState(c, owner).autoSubs;
@@ -884,6 +925,7 @@ function playAiCup(c: Career, t: CupTie, rng: Rng): PlayedMatch {
   const home = c.clubs[t.home]!, away = c.clubs[t.away]!;
   aiPrepare(home); aiPrepare(away);
   const m = createMatch(home, away, rng);
+  m.knockout = true;
   runToEnd(m, rng);
   const outcome = toOutcome(m);
   const pens = outcome.homeScore === outcome.awayScore ? shootout(m, rng) : undefined;

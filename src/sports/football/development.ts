@@ -1,6 +1,6 @@
 import type { Rng } from '../../core/rng';
 import { WEIGHTS, overall } from './lineup';
-import { generatePlayer, wageFor } from './generate';
+import { STAR_CAP, generatePlayer, wageFor } from './generate';
 import type { AttrKey, Club, Player } from './types';
 
 const clamp = (v: number) => Math.max(1, Math.min(99, v));
@@ -29,7 +29,8 @@ export function dailyTraining(club: Club, rng: Rng, recovery = 4): TrainingGain[
   for (const p of club.players) {
     p.condition = Math.min(100, p.condition + recovery * (0.7 + p.attrs.stamina / 200));
     const ovr = overall(p);
-    if (ovr < p.potential) {
+    // ninguém evolui até o nível do André Elias: o teto dos outros é 95
+    if (ovr < p.potential && (p.clubLocked || ovr < STAR_CAP)) {
       const youth = p.age <= 21 ? 1 : p.age <= 25 ? 0.6 : 0.25;
       if (rng.chance(0.012 * youth * ctBoost * growthFactor(p, ovr, level))) {
         const keys = Object.keys(WEIGHTS[p.position]) as AttrKey[];
@@ -38,7 +39,8 @@ export function dailyTraining(club: Club, rng: Rng, recovery = 4): TrainingGain[
         gains.push({ playerId: p.id, playerName: p.name, attr });
       }
     }
-    if (p.age >= 31 && rng.chance(0.004 + (p.age - 31) * 0.002)) {
+    // o ídolo não perde físico com a idade (segue o melhor do jogo)
+    if (p.age >= 31 && !p.clubLocked && rng.chance(0.004 + (p.age - 31) * 0.002)) {
       const attr = rng.pick<AttrKey>(['pace', 'stamina', 'strength']);
       p.attrs[attr] = clamp(p.attrs[attr] - 1);
     }
@@ -87,11 +89,11 @@ export function applyMatch(club: Club, played: string[], ratings: Record<string,
       const rating = ratings[p.id] ?? 6;
       const ovr = overall(p);
       const keys = Object.keys(WEIGHTS[p.position]) as AttrKey[];
-      if (rating >= 7.3 && ovr < p.potential + 3 && rng.chance(0.5 * growthFactor(p, ovr, level))) {
+      if (rating >= 7.3 && ovr < p.potential + 3 && (p.clubLocked || ovr < STAR_CAP) && rng.chance(0.5 * growthFactor(p, ovr, level))) {
         const attr = rng.weighted(keys, (k) => WEIGHTS[p.position][k]!);
         p.attrs[attr] = clamp(p.attrs[attr] + 1);
         gains.push({ playerId: p.id, playerName: p.name, attr });
-      } else if (rating <= 5 && ovr > level - 5 && rng.chance(0.15)) {
+      } else if (rating <= 5 && ovr > level - 5 && !p.clubLocked && rng.chance(0.15)) {
         const attr = rng.weighted(keys, (k) => WEIGHTS[p.position][k]!);
         p.attrs[attr] = clamp(p.attrs[attr] - 1);
       }
