@@ -386,7 +386,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
           <section className="window objective-window">
             <header className="window-title"><span>Objetivo</span></header>
             <div className="window-body">
-              <p className="objective">🎯 {OBJECTIVE_LABEL[bond.objective]}</p>
+              <p className="objective"><span className="obj-icon" aria-hidden="true">🎯</span><span className="obj-text">{OBJECTIVE_LABEL[bond.objective]}</span></p>
               <div className="objective-meta">
                 <span className="hint">Rodada {Math.min(c.season.round, c.roundDates.length)}/{c.roundDates.length}</span>
                 <b>{table[pos - 1]?.points ?? 0} pts</b>
@@ -457,7 +457,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
               }} />
             </>
           )}
-          <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>
+          <p className="objective long"><span className="obj-icon" aria-hidden="true">🎯</span><span className="obj-text">Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</span></p>
           <p className={`pressure p${activeBond(c)!.pressure ?? 0}`}>Cobrança da diretoria: <b>{PRESSURE_LABEL[activeBond(c)!.pressure ?? 0]}</b>{(activeBond(c)!.pressure ?? 0) > 0 ? ' · depois do que você entregou, a meta subiu' : ''}</p>
           <div className="modal-cta">
             <button className="btn primary" onClick={() => { ref.current.offers = []; nextSummary(); }}>
@@ -542,7 +542,7 @@ function MidSeasonModal({ career, onChoose }: { career: Career; onChoose: (clubI
               {/* o cartão de proposta é um grid de 4 linhas (cabeçalho, dados, objetivo, botão): o motivo fica no cabeçalho */}
               <div className="offer-head"><Badge club={club} /><div><span className="offer-name">{club.name}</span><span className="hint">Divisão {divisionOf(career, club.id) + 1} · {o.clubPosition}º</span><span className="mid-why">{o.reason === 'merito' ? '⭐' : '🚨'} {why(o)}</span></div></div>
               <dl className="kv"><dt>Reputação</dt><dd>{club.reputation}/100</dd><dt>Salário</dt><dd>{money(o.monthlySalary)}/mês</dd></dl>
-              <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
+              <div className="objective"><span className="obj-icon" aria-hidden="true">🎯</span><span className="obj-text">{OBJECTIVE_LABEL[o.objective]}</span></div>
               <button className="btn primary" onClick={() => onChoose(o.clubId)}>Aceitar</button>
             </div>
           );
@@ -563,7 +563,7 @@ function OfferList({ career, onAccept }: { career: Career; onAccept: (o: Career[
           <div key={o.clubId} className="offer">
             <div className="offer-head"><Badge club={club} /><div><span className="offer-name">{club.name}</span><span className="hint">Divisão {divisionOf(career, club.id) + 1}</span></div></div>
             <dl className="kv"><dt>Reputação</dt><dd>{club.reputation}/100</dd><dt>Salário</dt><dd>{money(o.monthlySalary)}/mês</dd></dl>
-            <div className="objective">🎯 {OBJECTIVE_LABEL[o.objective]}</div>
+            <div className="objective"><span className="obj-icon" aria-hidden="true">🎯</span><span className="obj-text">{OBJECTIVE_LABEL[o.objective]}</span></div>
             <button className="btn primary" onClick={() => onAccept(o)}>Aceitar</button>
           </div>
         );

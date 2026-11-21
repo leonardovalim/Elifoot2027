@@ -207,7 +207,16 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .offer-name { font-weight: 800; line-height: 1.25; }
 .offer-head { display: flex; gap: 10px; align-items: flex-start; }
 .offer-head div { display: flex; flex-direction: column; }
-.objective { background: var(--paper-2); padding: 6px 8px; font-weight: 600; margin: 0; }
+/*
+ * Objetivo numa linha só: o bloco mede a própria largura (container) e a fonte
+ * encolhe um pouco quando falta espaço (16px → 12,5px), em vez de quebrar e
+ * deixar uma palavra sozinha embaixo. Se nem assim couber, reticências.
+ */
+.objective { background: var(--paper-2); padding: 6px 8px; font-weight: 600; margin: 0; container-type: inline-size; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.objective .obj-icon { flex: none; }
+.objective .obj-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: clamp(12.5px, 6.8cqi, 16px); }
+/* texto mais longo ("Novo objetivo: ..."): proporção menor para caber no celular */
+.objective.long .obj-text { font-size: clamp(12.5px, 4cqi, 16px); }
 
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 6px 0; font-size: 14px; }
 .kv dt { color: var(--muted); }
