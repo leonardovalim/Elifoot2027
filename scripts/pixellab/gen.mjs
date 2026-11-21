@@ -5,7 +5,10 @@
  * Uso:
  *   node scripts/pixellab/gen.mjs <saida-dir> <nome> <largura> <altura> "<descrição>" [--transparent] [--style img.png]
  *
- * Auth: PIXELLAB_TOKEN no ambiente. No ambiente de nuvem, o proxy injeta a credencial salva.
+ * Auth: PIXELLAB_TOKEN no ambiente. No ambiente de nuvem, o proxy injeta a credencial salva; para o fetch
+ * do Node passar pelo proxy, rode com NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt.
+ *
+ * Custo observado (trial): 10 gerações por imagem no generate-image-v2 a 240x136.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
