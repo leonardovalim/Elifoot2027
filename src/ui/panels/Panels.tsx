@@ -31,6 +31,7 @@ import { FORMATIONS, applyMove, overall, pickLineup, planMove, statusOf, type Sq
 import type { AttrKey, Club, Formation, Player, Style } from '../../sports/football/types';
 import { expiresThisSeason } from '../../game/market';
 import { track } from '../analytics';
+import { play } from '../sound';
 import { Morale } from './Decisions';
 import { askConfirm } from '../confirm';
 import { Tag, TemperamentTag } from '../help';
@@ -118,7 +119,7 @@ export function SquadPanel({ career, act }: { career: Career; act: Act }) {
           body: <><p>Vender <b>{p.name}</b> por cerca de <b>{money(Math.round(playerValue(p) * 0.85))}</b>?</p><p className="hint">O clube que pagar mais leva na hora. Para negociar com calma, espere uma proposta chegar.</p></>,
           confirmLabel: 'Vender',
           danger: true,
-        }).then((ok) => { if (ok) { act((c) => sellPlayer(c, p.id)); setSel(null); } });
+        }).then((ok) => { if (ok) { act((c) => sellPlayer(c, p.id)); play('money'); setSel(null); } });
       }} />
     </>
   );
@@ -333,7 +334,7 @@ export function MarketPanel({ career, act }: { career: Career; act: Act }) {
 
   const buy = (l: Listing) => act((c) => {
     const err = buyPlayer(c, l.player.id, l.clubId);
-    if (!err) { setBought(l.player.name); setSel(null); track('player_bought', { position: l.player.position, overall: overall(l.player), price: l.price }); }
+    if (!err) { play('signing'); setBought(l.player.name); setSel(null); track('player_bought', { position: l.player.position, overall: overall(l.player), price: l.price }); }
     return err;
   });
 

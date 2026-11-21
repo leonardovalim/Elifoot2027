@@ -467,6 +467,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       {decision && !menu && !prep && !summary && !midOpen && handoff === null && c.phase !== 'encerramento' && (
         <DecisionModal career={c} decision={decision} onChoose={(choice) => {
           track('market_decision', { kind: decision.kind, choice });
+          if (decision.kind === 'bid' && choice === 'accept') play('money'); // vendeu o atleta
           doAct((career) => decide(career, decision.id, choice), { kind: decision.kind, choice });
         }} />
       )}
