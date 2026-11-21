@@ -23,6 +23,11 @@ import { loadVotes, saveVote } from './interest';
 import { nextWizardStep, previousWizardStep, type WizardStep } from './createWizard';
 import { Badge, Modal, Stars, money } from './util';
 import { askConfirm } from './confirm';
+import { installClickSound, isSoundOn, playIntro, prepareIntro, stopIntro, useMusic } from './sound';
+
+function prefersReducedMotion(): boolean {
+  try { return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false; } catch { return false; }
+}
 
 const INTRO_KEY = 'mestres-do-esporte.intro-seen';
 function hasSeenIntro(): boolean {
@@ -50,6 +55,19 @@ export function App() {
   const [screen, setScreen] = useState<Screen>('title');
   const [introSeen] = useState(hasSeenIntro);
   const [revealed, setRevealed] = useState(false);
+  // com som ligado, a abertura espera um "pressione para começar": o navegador
+  // só deixa tocar áudio depois de um gesto do jogador
+  const [started, setStarted] = useState(() => introSeen || !isSoundOn() || prefersReducedMotion());
+  const [starting, setStarting] = useState(false);
+  const begin = async () => {
+    if (starting) return;
+    setStarting(true);
+    const ready = await prepareIntro();
+    setStarted(true);
+    if (ready) playIntro();
+  };
+  useEffect(() => installClickSound(), []);
+  useMusic(screen !== 'game' && started && revealed ? 'menu' : null);
   useEffect(() => { track('$pageview', { screen }); }, [screen]);
   useEffect(() => { track('app_opened', { has_save: !!career }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -84,9 +102,19 @@ export function App() {
     );
   }
 
+  if (!started) {
+    return (
+      <div className="title-screen">
+        <button className="press-start" data-silent autoFocus disabled={starting} onClick={begin}>
+          <span>{starting ? 'Carregando…' : 'Pressione para começar'}</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`title-screen ${revealed ? 'revealed' : ''}`}>
-      <IntroScene skip={introSeen} onReveal={() => { setRevealed(true); markIntroSeen(); }} />
+      <IntroScene skip={introSeen} onReveal={() => { setRevealed(true); markIntroSeen(); }} onSkip={() => stopIntro()} />
       {!revealed && <p className="skip-hint">toque para pular</p>}
       <div className="logo">
         <img className="emblem" src={emblemUrl} alt="" width={96} height={96} />
