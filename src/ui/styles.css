@@ -129,6 +129,13 @@ input:focus, select:focus, .btn:focus-visible { outline: 2px dashed var(--tomato
 .title-screen.revealed .logo { animation: logo-drop 0.7s cubic-bezier(.2,1.6,.4,1) forwards; pointer-events: auto; }
 .title-screen.revealed .menu { animation: fade-up 0.5s 0.45s ease-out forwards; pointer-events: auto; }
 .title-screen.revealed .foot { animation: fade-up 0.5s 0.7s ease-out forwards; }
+.press-start { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; border: 0; padding: 16px; background: #0e1126; color: var(--paper); font-family: var(--font-pixel); font-size: clamp(14px, 3.4vw, 22px); letter-spacing: 2px; text-transform: uppercase; cursor: pointer; }
+.press-start span { animation: blink 1.1s steps(2, start) infinite; text-shadow: 2px 2px 0 var(--ink); }
+.press-start:disabled { cursor: progress; }
+.press-start:disabled span { animation: none; opacity: 0.6; }
+.press-start:focus-visible { outline: none; }
+.press-start:focus-visible span { outline: 2px dashed var(--paper); outline-offset: 8px; }
+@media (prefers-reduced-motion: reduce) { .press-start span { animation: none; } }
 .skip-hint { position: absolute; bottom: 16px; z-index: 2; margin: 0; font-size: 13px; color: rgba(246,236,214,0.6); letter-spacing: 1px; text-transform: uppercase; animation: blink 1.4s steps(2, start) infinite; }
 @media (orientation: portrait) {
   .title-screen { background: linear-gradient(#070816, #0e1126 42%); justify-content: flex-start; padding-top: 10vh; }

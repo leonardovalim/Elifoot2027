@@ -250,14 +250,18 @@ interface Props {
   /** Começa direto no estado final (já viu nesta sessão ou prefere menos movimento). */
   skip: boolean;
   onReveal: () => void;
+  /** O jogador pulou a cena antes do fim (toque ou tecla). */
+  onSkip?: () => void;
 }
 
-export function IntroScene({ skip, onReveal }: Props) {
+export function IntroScene({ skip, onReveal, onSkip }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const offset = useRef(skip ? INTRO_END : 0);
   const revealed = useRef(false);
   const reveal = useRef(onReveal);
   reveal.current = onReveal;
+  const skipped = useRef(onSkip);
+  skipped.current = onSkip;
 
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d');
@@ -274,7 +278,11 @@ export function IntroScene({ skip, onReveal }: Props) {
     };
     if (reduced) offset.current = INTRO_END;
     raf = requestAnimationFrame(tick);
-    const skipNow = () => { if (!revealed.current) offset.current = INTRO_END; };
+    const skipNow = () => {
+      if (revealed.current) return;
+      offset.current = INTRO_END;
+      skipped.current?.();
+    };
     window.addEventListener('pointerdown', skipNow);
     window.addEventListener('keydown', skipNow);
     return () => {

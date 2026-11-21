@@ -7,7 +7,8 @@ import { FORMATIONS, overall } from '../../sports/football/lineup';
 import { isNarrated, narrate } from '../../sports/football/narration';
 import type { Formation, Side, Style, TeamStats } from '../../sports/football/types';
 import { track } from '../analytics';
-import { play, SoundToggle } from '../sound';
+import { cheer, play, setCrowd, SoundToggle, startCrowd, stopCrowd, useSoundOn } from '../sound';
+import { crowdLevels, crowdReaction, CUE_PRIORITY, type CrowdCue } from '../crowd';
 import { RoundBoard, type Scope } from './RoundBoard';
 import { Flag } from '../flag';
 import { Badge, Bar, POS_LABEL, STYLE_LABEL, matchColors, type SideColor } from '../util';
@@ -41,6 +42,7 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
   const m = p.match;
   const me = myClubId(career);
   const side: Side = m.home.clubId === me ? 'home' : 'away';
+  const attendance = lastAttendance(career.clubs[m.home.clubId]!, career.clubs[m.away.clubId]!);
   const [stage, setStage] = useState<Stage>('pre');
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState(0);
@@ -68,6 +70,10 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
         else if (e.type === 'penalty') play('whistle');
       }
       if (m.finished) play('fullTime');
+      // torcida da casa: a reação mais forte do minuto e o volume das camadas
+      const cues = fresh.map((e) => crowdReaction(e, m)).filter((c): c is CrowdCue => c !== null);
+      if (cues.length) cheer(cues.reduce((a, b) => (CUE_PRIORITY[b] > CUE_PRIORITY[a] ? b : a)));
+      setCrowd(crowdLevels(m, attendance));
       // pausa em gol do adversário, expulsão ou lesão nossa: momento de decidir
       // pausa também em pênalti (a favor ou contra) e no começo da prorrogação
       if (fresh.some((e) => (e.type === 'goal' && e.side !== side) || ((e.type === 'red' || e.type === 'injury') && e.side === side) || e.type === 'penalty' || e.type === 'extra')) setRunning(false);
@@ -76,7 +82,15 @@ export function MatchDay({ career, prep: p, onDone }: Props) {
       tick();
     }, SPEEDS[speed]!.ms);
     return () => clearInterval(t);
-  }, [stage, running, speed, m, side]);
+  }, [stage, running, speed, m, side, attendance]);
+
+  // torcida só na partida assistida; no pós-jogo as camadas somem e a festa/vaia termina sozinha
+  const soundOn = useSoundOn();
+  useEffect(() => {
+    if (stage !== 'live' || !soundOn) return;
+    startCrowd(crowdLevels(m, attendance));
+    return () => stopCrowd();
+  }, [stage, soundOn, m, attendance]);
 
   const home = career.clubs[m.home.clubId]!;
   const away = career.clubs[m.away.clubId]!;
