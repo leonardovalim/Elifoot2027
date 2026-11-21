@@ -208,7 +208,7 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
       <p className="handoff-name">Vez de <b>{managerState(c, handoff).entrepreneur.name}</b></p>
       {club && <p className="hint center"><Badge club={club} size="lg" /> {club.name}</p>}
       <p className="hint center">Passe o aparelho. Quem estava jogando não precisa ver as decisões do outro.</p>
-      <div className="row center"><button className="btn primary big" autoFocus onClick={() => setHandoff(null)}>Sou eu, continuar ›</button></div>
+      <div className="modal-cta"><button className="btn primary big" autoFocus onClick={() => setHandoff(null)}>Sou eu, continuar ›</button></div>
     </Modal>
   );
 
@@ -268,13 +268,13 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             </p>
             <h4>Propostas recebidas</h4>
             <OfferList career={c} onAccept={accept} />
-            <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
+            <div className="modal-cta"><button className="btn ghost" onClick={onReset}>Encerrar carreira</button></div>
           </Modal>
         ) : (
           <Modal title={multi ? `${c.entrepreneur.name}, você está sem clube` : 'Você está sem clube'}>
             <h4>Propostas recebidas</h4>
             <OfferList career={c} onAccept={accept} />
-            <button className="btn ghost" onClick={onReset}>Encerrar carreira</button>
+            <div className="modal-cta"><button className="btn ghost" onClick={onReset}>Encerrar carreira</button></div>
           </Modal>
         )}
         {handoffModal}
@@ -445,9 +445,11 @@ export function Game({ initial, onReset }: { initial: Career; onReset: () => voi
             </>
           )}
           <p className="objective">🎯 Novo objetivo: {OBJECTIVE_LABEL[activeBond(c)!.objective]}</p>
-          <button className="btn primary" onClick={() => { ref.current.offers = []; nextSummary(); }}>
-            {c.offers.length ? 'Ficar no clube' : 'Seguir para a nova temporada'} ›
-          </button>
+          <div className="modal-cta">
+            <button className="btn primary" onClick={() => { ref.current.offers = []; nextSummary(); }}>
+              {c.offers.length ? 'Ficar no clube' : 'Seguir para a nova temporada'} ›
+            </button>
+          </div>
         </Modal>
       )}
 
@@ -477,7 +479,7 @@ function SeasonEndModal({ career, onClose }: { career: Career; onClose: () => vo
   return (
     <Modal title={`Fim da temporada ${career.season.year}`}>
       <SummaryView s={s} />
-      <button className="btn primary" onClick={onClose}>Ver premiação e balanço ›</button>
+      <div className="modal-cta"><button className="btn primary" onClick={onClose}>Ver premiação e balanço ›</button></div>
     </Modal>
   );
 }

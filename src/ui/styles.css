@@ -535,11 +535,19 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .ctx-grid > div.wide { grid-column: 1 / -1; }
 .ctx-grid dt { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
 .ctx-grid dd { margin: 0; font-size: 14px; }
-.decision-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/*
+ * Linha de botões dos modais: centralizada. Com vários botões, cada um cresce
+ * por igual; se não couberem e quebrarem de linha, os da linha de baixo
+ * esticam até as mesmas bordas (nada fica "sobrando" desalinhado num canto).
+ * Botão sozinho fica no tamanho natural, no centro.
+ */
+.modal-cta, .decision-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
+.modal-cta .btn, .decision-actions .btn { flex: 1 1 200px; margin: 0; }
+.modal-cta .btn:only-child, .decision-actions .btn:only-child { flex: 0 1 auto; }
 .decision .kv { margin: 0; }
 @media (max-width: 560px) {
   .ctx-grid { grid-template-columns: minmax(0, 1fr); }
-  .decision-actions .btn { flex: 1 1 100%; }
+  .modal-cta .btn, .decision-actions .btn { flex-basis: 100%; }
 }
 
 /* ---------- filtros do mercado ---------- */
@@ -563,6 +571,7 @@ input[aria-invalid="true"] { --b: var(--bad); }
 .window-title.danger { background: var(--bad); }
 .confirm-body p { margin: 0 0 8px; }
 .confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.confirm-actions .btn { margin: 0; }
 .sub-error { margin: 6px 0 0; color: var(--bad); font-weight: 700; font-size: 13px; }
 @media (max-width: 560px) { .confirm-actions .btn { flex: 1 1 100%; } }
 
